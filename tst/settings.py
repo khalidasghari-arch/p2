@@ -42,11 +42,11 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 
 # ALLOWED_HOSTS from environment, comma-separated
 # Example in production: "tst-app.onrender.com"
-ALLOWED_HOSTS = os.environ.get(
-    "DJANGO_ALLOWED_HOSTS",
-    "127.0.0.1,localhost"
-).split(",")
-
+ALLOWED_HOSTS = [
+    "quality-bz6n.onrender.com",
+    "127.0.0.1",
+    "localhost",
+]
 # -----------------------------
 # Applications
 # -----------------------------
@@ -55,7 +55,6 @@ INSTALLED_APPS = [
     'hiva',
     'dashboard',
     'product.apps.ProductConfig',
-
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
