@@ -10,6 +10,8 @@ from django.contrib.messages import constants as messages
 import dj_database_url
 from dotenv import load_dotenv
 
+ALLOWED_HOSTS = ["*"]
+
 # BASE_DIR
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -40,13 +42,7 @@ SECRET_KEY = os.environ.get(
 # DEBUG from environment (DJANGO_DEBUG="True" or "False")
 DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 
-# ALLOWED_HOSTS from environment, comma-separated
-# Example in production: "tst-app.onrender.com"
-ALLOWED_HOSTS = [
-    "quality-bz6n.onrender.com",
-    "127.0.0.1",
-    "localhost",
-]
+
 # -----------------------------
 # Applications
 # -----------------------------
