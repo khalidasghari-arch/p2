@@ -1,0 +1,45 @@
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    function updateStaffDropdown($facilityDropdown) {
+        var facilityId = $facilityDropdown.val();
+        var formIndex = $facilityDropdown.attr('id').match(/\d+/)[0];  // Get formset index
+
+        if (facilityId) {
+            console.log("Facility ID:", facilityId);  // Debugging log
+
+            $.ajax({
+                url: "{% url 'admin:get_staff' %}",
+                data: {'facility_id': facilityId},
+                success: function(data) {
+                    console.log("AJAX Response:", data);  // Debugging log
+
+                    var staffDropdown = $("#id_mentorshipdetails_set-" + formIndex + "-menteename");
+                    staffDropdown.empty();
+                    staffDropdown.append($("<option></option>").attr("value", "").text("Select Staff"));
+
+                    $.each(data, function(index, staff) {
+                        staffDropdown.append($("<option></option>").attr("value", staff.id).text(staff.name));
+                    });
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX Error:", xhr.responseText);
+                }
+            });
+        }
+    }
+
+    // Attach event listener to dynamically created inline fields
+    $(document).on('change', "select[id^='id_mentorshipdetails_set-'][id$='-mentorshipvistfk']", function() {
+        updateStaffDropdown($(this));
+    });
+
+    // Trigger dropdown update when a new inline form is added
+    $(document).on('formset:added', function(event, $row, formsetName) {
+        var $facilityDropdown = $row.find("select[id^='id_mentorshipdetails_set-'][id$='-mentorshipvistfk']");
+        if ($facilityDropdown.length) {
+            updateStaffDropdown($facilityDropdown);
+        }
+    });
+});
+</script>

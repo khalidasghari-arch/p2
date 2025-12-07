@@ -1,0 +1,29 @@
+<!-- display_joined_data.html -->
+<table>
+    <thead>
+        <tr>
+            <th>Assessor Tazkira Number</th>
+            <th>Assessor Name</th>
+            <th>Assessor Gender</th>
+            <th>Table2 Column 1</th>
+            <th>Table2 Column 2</th>
+            <th>Table2 Column 3</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in data %}
+        <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.shortname }}</td>
+            
+            {% for item in row.Section.all %}
+                <td>{{ item.id }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.shortname }}</td>
+            {% endfor %}
+
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

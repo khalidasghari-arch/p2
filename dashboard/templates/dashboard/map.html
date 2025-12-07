@@ -1,0 +1,113 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Maternal Deaths Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        #map {
+            height: 600px;
+        }
+        .legend {
+            background: white;
+            padding: 8px;
+            font-size: 14px;
+            line-height: 1.5em;
+        }
+        .legend i {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+
+<h2 style="text-align:center;">Maternal Deaths by Province (Afghanistan)</h2>
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+    const deathsData = {{ deaths_json|safe }};
+
+    const map = L.map('map').setView([33.9391, 67.7099], 6);  // Center Afghanistan
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    function getColor(d) {
+        return d > 20 ? '#800026' :
+               d > 10 ? '#BD0026' :
+               d > 5  ? '#E31A1C' :
+               d > 0  ? '#FED976' :
+                        '#FFEDA0';
+    }
+
+    function styleFeature(feature) {
+        const province = feature.properties.name.toLowerCase();  // use correct property!
+        const deaths = deathsData[province] || 0;
+        return {
+            fillColor: getColor(deaths),
+            weight: 1,
+            opacity: 1,
+            color: 'white',
+            dashArray: '3',
+            fillOpacity: 0.7
+        };
+    }
+
+    fetch("{% static 'geojson/afghanistan_provinces.geojson' %}")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("GeoJSON file not found.");
+            }
+            return response.json();
+        })
+        .then(data => {
+            L.geoJSON(data, {
+                style: styleFeature,
+                onEachFeature: function(feature, layer) {
+                    const name = feature.properties.name;
+                    const deaths = deathsData[name.toLowerCase()] || 0;
+                    layer.bindPopup(`<strong>${name}</strong><br>Maternal Deaths: ${deaths}`);
+                }
+            }).addTo(map);
+        })
+        .catch(error => {
+            console.error("Error loading GeoJSON:", error);
+        });
+
+    // Add legend
+    const legend = L.control({position: 'bottomright'});
+
+    legend.onAdd = function(map) {
+        const div = L.DomUtil.create('div', 'legend');
+        const grades = [0, 1, 6, 11, 21];
+        const labels = [];
+
+        for (let i = 0; i < grades.length; i++) {
+            const from = grades[i];
+            const to = grades[i + 1];
+
+            div.innerHTML +=
+                '<i style="background:' + getColor(from + 1) + '"></i> ' +
+                from + (to ? '&ndash;' + (to - 1) + '<br>' : '+');
+        }
+
+        return div;
+    };
+
+    legend.addTo(map);
+</script>
+
+</body>
+</html>
