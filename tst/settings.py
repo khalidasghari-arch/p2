@@ -42,7 +42,6 @@ SECRET_KEY = os.environ.get(
 # DEBUG from environment (DJANGO_DEBUG="True" or "False")
 DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 
-
 # -----------------------------
 # Applications
 # -----------------------------
@@ -68,7 +67,6 @@ MIDDLEWARE = [
 
     # WhiteNoise for static files (important for Render)
     'whitenoise.middleware.WhiteNoiseMiddleware',
-
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -108,7 +106,6 @@ import os  # you already have this at the bottom; it's okay to have it once at t
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-
         # Use environment variables if they exist (Render),
         # otherwise fall back to your current local settings.
         'NAME': os.environ.get('DB_NAME', 'pmp'),
