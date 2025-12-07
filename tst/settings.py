@@ -108,14 +108,20 @@ WSGI_APPLICATION = 'tst.wsgi.application'
 # Default: use DATABASE_URL if present (Render / .env)
 # Fallback: your local Postgres connection
 
+import os  # you already have this at the bottom; it's okay to have it once at the top
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get(
-            "DATABASE_URL",
-            "postgresql://postgres:12345@localhost:5432/pmp"  # local fallback
-        ),
-        conn_max_age=600,
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+
+        # Use environment variables if they exist (Render),
+        # otherwise fall back to your current local settings.
+        'NAME': os.environ.get('DB_NAME', 'pmp'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', '12345'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+    }
 }
 
 # -----------------------------
