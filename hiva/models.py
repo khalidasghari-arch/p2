@@ -535,5 +535,9 @@ class aimpee(models.Model):
     womenseen_BPANC = models.BigIntegerField(verbose_name="Number of ANC women who had their blood pressure taken")
     womenseenPRE_E_Diagnosed = models.BigIntegerField(verbose_name="Number of ANC women with Pre-E diagnosed (BP>140/90, 2+ proteinuria)")
 
+    class Meta:
+        verbose_name = "AIM-PEE"
+        verbose_name_plural = "AIM-PEE"
+
     def __str__(self):
         return self.shamsimonth
