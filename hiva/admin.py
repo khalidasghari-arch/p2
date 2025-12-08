@@ -6,7 +6,7 @@ from django.db import connection
 from django.utils.translation import gettext_lazy as _
 from .models import SkillLabtracker, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
 
-admin.site.site_header = "Improving Quality of Care for High Impact Value Added Maternal and Newborn Interventions (IQoC-MNH)"
+admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
 admin.site.site_title = "Health Admin Portal"
 admin.site.index_title = "M&E Data Management System"
 
