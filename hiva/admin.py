@@ -4,7 +4,7 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import SkillLabtracker, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
+from .models import aimpee, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
 
 admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
 admin.site.site_title = "Health Admin Portal"
@@ -449,7 +449,7 @@ admin.site.register(Mpdsr, mpdsrshow)
 admin.site.register(Gancohort, ganccohorts)
 admin.site.register(Gancenrollment, gancenrollment)
 admin.site.register(Gancfirstsession, gancfirstsession)
-admin.site.register(SkillLabtracker)
 admin.site.register(Gancsecondsession)
 admin.site.register(Gancthirdsession)
+admin.site.register(aimpee)
 

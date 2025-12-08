@@ -522,22 +522,18 @@ class Gancthirdsession(models.Model):
     def __str__(self):
         return self.sessiontype
     
-class SkillLabtracker(models.Model):
-    hfname = models.ForeignKey(Facility, on_delete=models.CASCADE)
-    skilllabname = models.CharField()
-    skilllabstatus = models.CharField()
-    skilllabround = models.IntegerField()
-    skilllabdate = models.DateField()
-    skilllabcheckin = models.TimeField()
-    skilllabcheckout = models.TimeField()
-    skilllabmenteename = models.ForeignKey(Staff, on_delete=models.CASCADE)
-    thematicname = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE) 
-    topicname = models.ForeignKey(MentorshipTopics, on_delete=models.CASCADE) 
-    mentor = models.ForeignKey(Assessor, on_delete=models.CASCADE)
-    ls = models.BooleanField()
-    mc = models.BooleanField()
-    mentororg = models.CharField()
-    ce_checklist_applied = models.BooleanField()
+class aimpee(models.Model):
+    shamsimonth = models.CharField()
+    shamsiyear = models.CharField()
+    period = models.CharField()
+    bl_progress = models.CharField()
+    aimfacilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+    gre_month =models.CharField()
+    gre_year= models.CharField()
+    afiat_flag = models.BooleanField()
+    womenseenANC = models.BigIntegerField(verbose_name="Pregnant women seen in ANC")
+    womenseen_BPANC = models.BigIntegerField(verbose_name="Number of ANC women who had their blood pressure taken")
+    womenseenPRE_E_Diagnosed = models.BigIntegerField(verbose_name="Number of ANC women with Pre-E diagnosed (BP>140/90, 2+ proteinuria)")
 
     def __str__(self):
-        return f"{self.skilllabdate} {self.skilllabname}" 
+        return self.shamsimonth
