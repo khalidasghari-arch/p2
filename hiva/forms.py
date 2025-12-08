@@ -58,8 +58,8 @@ class AimpeeAdminForm(forms.ModelForm):
     shamsimonth = forms.ChoiceField(label="Shamsi Month", choices=AFGHAN_MONTH_CHOICES)
     period = forms.ChoiceField(label="Period", choices=AFGHAN_PY_CHOICES)
     bl_progress = forms.ChoiceField(label="BL_and_Progress", choices=AFGHAN_BL_CHOICES)
-    gre_month = forms.ChoiceField(label="", choices=ENGLISH_MONTH_CHOICES)
-    gre_year = forms.ChoiceField(label="sd", choices=YEAR_CHOICES, 
+    gre_month = forms.ChoiceField(label="Calender Month", choices=ENGLISH_MONTH_CHOICES)
+    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES, 
     )                                  
     
     class Meta:
