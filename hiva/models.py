@@ -534,7 +534,16 @@ class aimpee(models.Model):
     womenseenANC = models.BigIntegerField(verbose_name="Pregnant women seen in ANC")
     womenseen_BPANC = models.BigIntegerField(verbose_name="Number of ANC women who had their blood pressure taken")
     womenseenPRE_E_Diagnosed = models.BigIntegerField(verbose_name="Number of ANC women with Pre-E diagnosed (BP>140/90, 2+ proteinuria)")
-
+    allbirths = models.BigIntegerField(null=True, verbose_name="Number of ALL births (log book) including births from PEE patients referred in")
+    vaginal_del = models.BigIntegerField(null=True, verbose_name="Number of Births - by Vaginal delivery")
+    c_section = models.BigIntegerField(null=True, verbose_name="Number of birth- by C-sections")
+    admitted_patients = models.BigIntegerField(null=True, verbose_name="Number of Patients with Pre-E diagnosed in ANC clinic who required admision (Admitted patients)")
+    severePre_E = models.BigIntegerField(null=True, verbose_name="Number of Patients with Severe Pre-E at birth (including referrals in)")
+    eclampsia = models.BigIntegerField(null=True, verbose_name="Number of Patients with Eclampsia coming from ANC, Labor ward or PNC or referred in")
+    hypertension = models.BigIntegerField(null=True, verbose_name="Number of patients with chronic hypertension* with superimposed pre-eclampsia")
+    gestational_hypertension = models.BigIntegerField(null=True, verbose_name="Gestational hypertension*BP greater than 140/90 after 20 weeks gestation with no proteinuria that is resolved after 42 days postpartum")
+    complications = models.BigIntegerField(null=True, verbose_name="Complications from Eclampsia and Severe Pre-Eclampsia (number of cases):")
+    
     class Meta:
         verbose_name = "AIM-PEE"
         verbose_name_plural = "AIM-PEE"

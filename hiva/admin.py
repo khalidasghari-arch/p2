@@ -11,9 +11,91 @@ admin.site.site_header = "Maternal and Newborn Information Management System (MN
 admin.site.site_title = "Health Admin Portal"
 admin.site.index_title = "M&E Data Management System"
 
+class ProvinceFilter(admin.SimpleListFilter):
+    title = "Province"
+    parameter_name = "province"
+
+    def lookups(self, request, model_admin):
+        qs = model_admin.get_queryset(request)
+        provinces = qs.values_list(
+            "aimfacilityname__districtfk__provincefk__id",
+            "aimfacilityname__districtfk__provincefk__name",
+        ).distinct()
+        return [
+            (pid, pname) for pid, pname in provinces if pid is not None
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(
+                aimfacilityname__districtfk__provincefk__id=self.value()
+            )
+        return queryset
+
+
+class DistrictFilter(admin.SimpleListFilter):
+    title = "District"
+    parameter_name = "district"
+
+    def lookups(self, request, model_admin):
+        qs = model_admin.get_queryset(request)
+        districts = qs.values_list(
+            "aimfacilityname__districtfk__id",
+            "aimfacilityname__districtfk__name",
+        ).distinct()
+        return [
+            (did, dname) for did, dname in districts if did is not None
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(
+                aimfacilityname__districtfk__id=self.value()
+            )
+        return queryset
+
 @admin.register(aimpee)
 class AimpeeAdmin(admin.ModelAdmin):
     form = AimpeeAdminForm
+    list_display = (
+        "id",
+        "get_province",
+        "get_facility_name",
+        "shamsiyear",
+        "shamsimonth",
+        "period",
+        "bl_progress",
+        "gre_year",
+        "gre_month",
+        "afiat_flag",
+        "womenseenANC",
+        "womenseen_BPANC",
+        "womenseenPRE_E_Diagnosed",
+        "admitted_patients",
+        "allbirths",
+        "c_section",
+        "complications",
+        "eclampsia",
+        "gestational_hypertension",
+        "hypertension",
+        "severePre_E",
+        "vaginal_del"
+    )
+
+      # 👇 Filters on the right side in admin
+    list_filter = (
+        ProvinceFilter,
+        DistrictFilter,
+        "aimfacilityname",   # Facility filter (built-in)
+    )
+
+    @admin.display(description="Facility Name")
+    def get_facility_name(self, obj):
+        return obj.aimfacilityname.name   # Adjust if your Facility model uses a different field
+
+    @admin.display(description="Province")
+    def get_province(self, obj):
+        return obj.aimfacilityname.districtfk.provincefk.name
 
 class QICMonthFilter(admin.SimpleListFilter):
     title = _('QI Committee Date (Month + Year)')
@@ -456,5 +538,4 @@ admin.site.register(Gancenrollment, gancenrollment)
 admin.site.register(Gancfirstsession, gancfirstsession)
 admin.site.register(Gancsecondsession)
 admin.site.register(Gancthirdsession)
-# admin.site.register(aimpee)
 
