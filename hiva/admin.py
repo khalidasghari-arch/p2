@@ -4,8 +4,8 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import aimpee, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
-from .forms import AimpeeAdminForm
+from .models import aimpee, aimpph, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
+from .forms import AimpeeAdminForm, AimpphAdminForm
 
 admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
 admin.site.site_title = "Health Admin Portal"
@@ -60,7 +60,7 @@ class AimpeeAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "get_province",
-        "get_facility_name",
+        "aimfacilityname",   # real field (dropdown)
         "shamsiyear",
         "shamsimonth",
         "period",
@@ -68,18 +68,87 @@ class AimpeeAdmin(admin.ModelAdmin):
         "gre_year",
         "gre_month",
         "afiat_flag",
-        "womenseenANC",
-        "womenseen_BPANC",
-        "womenseenPRE_E_Diagnosed",
-        "admitted_patients",
-        "allbirths",
-        "c_section",
-        "complications",
-        "eclampsia",
-        "gestational_hypertension",
-        "hypertension",
-        "severePre_E",
-        "vaginal_del"
+    )
+
+    fieldsets = (
+        # 🔹 TOP NON-COLLAPSIBLE
+        ("AIM-PEE Record Information", {
+            "classes": ("wide",),
+            "fields": (
+                "aimfacilityname", # dropdown from model (Facility FK)
+                "shamsiyear",
+                "shamsimonth",
+                "period",
+                "bl_progress",
+                "gre_year",
+                "gre_month",
+                "afiat_flag",
+            ),
+        }),
+
+        # 🔻 Collapsible groups (only if these fields exist on this model)
+        ("ANC / Pre-E core indicators", {
+            "classes": ("collapse",),
+            "fields": (
+                "num_anc_preg_seen",
+                "num_anc_bp_taken",
+                "num_anc_pree_dx",
+                "num_severe_pe_e_bp160",
+                "num_severe_pe_e_bp160_tx1h",
+                "num_anc_pree_admit",
+                "num_spe_admit_before_delivery",
+                "num_eclampsia_admit_before_delivery",
+                "num_spe_e_mgso4_1h",
+                "num_spe_at_birth",
+                "num_eclampsia_at_birth",
+                "num_chronic_htn_superimposed_pe",
+                "num_gest_htn",
+                "num_spe_deliv_24h",
+                "num_eclampsia_deliv_12h",
+                "num_spe_e_fu_3d",
+                "num_spe_e_pp_dx",
+            ),
+        }),
+        ("Complications due to SPE / Eclampsia", {
+            "classes": ("collapse",),
+            "fields": (
+                "comp_renal_failure",
+                "comp_pulmonary_edema",
+                "comp_eclamptic_seizure",
+                "comp_stroke",
+                "comp_thrombocytopenia",
+                "comp_hellp",
+                "comp_pres",
+                "comp_iufd",
+                "comp_placental_abruption",
+                "comp_eclamptic_coma",
+                "comp_total",
+                "maternal_death_spe_e",
+            ),
+        }),
+        ("Outpatient / OPD management", {
+            "classes": ("collapse",),
+            "fields": (
+                "num_opd_pree_dx_md",
+                "num_opd_pree_twice_week",
+                "num_opd_pree_weekly_labs",
+                "pct_opd_pree_weekly_labs",
+            ),
+        }),
+        ("Advanced interventions", {
+            "classes": ("collapse",),
+            "fields": (
+                "ai_aortic_compression",
+                "ai_ubt",
+                "ai_lac_repair",
+                "ai_blynch_ual",
+                "ai_nasg",
+                "ai_ruptured_uterus_repair",
+                "ai_pph_hysterectomy",
+                "ai_hysterectomy_other",
+                "ai_total",
+            ),
+        }),
     )
 
       # 👇 Filters on the right side in admin
@@ -96,6 +165,120 @@ class AimpeeAdmin(admin.ModelAdmin):
     @admin.display(description="Province")
     def get_province(self, obj):
         return obj.aimfacilityname.districtfk.provincefk.name
+    
+
+@admin.register(aimpph)
+class AimpphAdmin(admin.ModelAdmin):
+    form = AimpphAdminForm
+    list_display = (
+        "id",
+        "aimfacilityname",
+        "shamsiyear",
+        "shamsimonth",
+        "total_births",
+        "births_vaginal",
+        "births_csection",
+        "pph_vaginal_501_999",
+        "pph_cs_1000_plus",
+        "maternal_death_pph_transfer",
+        "ai_total",
+    )
+
+    fieldsets = (
+        # ⭐ TOP SECTION (always visible)
+        ("AIM-PPH Record Information", {
+            "classes": ("wide",),
+            "fields": (
+                "aimfacilityname",
+                "shamsiyear",
+                "shamsimonth",
+                "period",
+                "bl_progress",
+                "gre_year",
+                "gre_month",
+                "afiat_flag",
+            ),
+        }),
+
+        # 1️⃣ Births & early care
+        ("Births & Oxytocin", {
+            "classes": ("collapse",),
+            "fields": (
+                "total_births",
+                "births_vaginal",
+                "births_csection",
+                "oxytocin_immediate",
+                "antepartum_hemorrhage",
+            ),
+        }),
+
+        # 2️⃣ PPH categories + QBL breakdown
+        ("PPH Categories & QBL", {
+            "classes": ("collapse",),
+            "fields": (
+                "pph_vaginal_501_999",
+                "pph_cs_1000_plus",
+                "pph_referral_in_outside_aim",
+                "pph_referral_in_aim",
+
+                "qbl_0_500",
+                "qbl_501_999",
+                "qbl_1000_1499",
+                "qbl_1500_1999",
+                "qbl_2000_2499",
+                "qbl_2500_plus",
+                "qbl_unknown",
+                "qbl_total",
+
+                "transfers_out_pph",
+                "maternal_death_pph_transfer",
+                "maternal_death_other_transfer",
+                "maternal_death_total_transfer",
+            ),
+        }),
+
+        # 3️⃣ Causes of PPH
+        ("Causes of PPH", {
+            "classes": ("collapse",),
+            "fields": (
+                "cause_uterine_atony",
+                "cause_severe_lacerations",
+                "cause_retained_products",
+                "cause_dic",
+                "cause_ruptured_uterus",
+                "cause_abruption",
+                "cause_placenta_previa",
+                "cause_placenta_accreta",
+                "cause_other",
+                "cause_unknown",
+                "causes_total",
+            ),
+        }),
+
+        # 4️⃣ Advanced clinical interventions
+        ("Advanced Interventions", {
+            "classes": ("collapse",),
+            "fields": (
+                "ai_uterine_compression",
+                "ai_manual_placenta",
+                "ai_aortic_compression",
+                "ai_ubt",
+                "ai_lac_repair",
+                "ai_blynch_ual",
+                "ai_nasg",
+                "ai_ruptured_uterus_repair",
+                "ai_pph_hysterectomy",
+                "ai_hysterectomy_other",
+                "ai_total",
+            ),
+        }),
+    )
+      # 👇 Filters on the right side in admin
+    list_filter = (
+        ProvinceFilter,
+        DistrictFilter,
+        "aimfacilityname",   # Facility filter (built-in)
+    )
 
 class QICMonthFilter(admin.SimpleListFilter):
     title = _('QI Committee Date (Month + Year)')
