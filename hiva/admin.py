@@ -172,6 +172,7 @@ class AimpphAdmin(admin.ModelAdmin):
     form = AimpphAdminForm
     list_display = (
         "id",
+        "get_province",
         "aimfacilityname",
         "shamsiyear",
         "shamsimonth",
