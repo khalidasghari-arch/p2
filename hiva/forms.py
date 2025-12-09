@@ -1,5 +1,5 @@
 from django import forms
-from .models import aimpee
+from .models import aimpee, aimpph
 
 AFGHAN_MONTH_CHOICES = [
     ("01", "Hamal"),
@@ -54,6 +54,19 @@ ENGLISH_MONTH_CHOICES = [
 YEAR_CHOICES = [(str(y), str(y)) for y in range(2025, 2026)]
 
 class AimpeeAdminForm(forms.ModelForm):
+    shamsiyear = forms.ChoiceField(label="Shamsi Year", choices=AFGHAN_YEAR_CHOICES)
+    shamsimonth = forms.ChoiceField(label="Shamsi Month", choices=AFGHAN_MONTH_CHOICES)
+    period = forms.ChoiceField(label="Period", choices=AFGHAN_PY_CHOICES)
+    bl_progress = forms.ChoiceField(label="BL_and_Progress", choices=AFGHAN_BL_CHOICES)
+    gre_month = forms.ChoiceField(label="Calender Month", choices=ENGLISH_MONTH_CHOICES)
+    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES, 
+    )                                  
+    
+    class Meta:
+        model = aimpee
+        fields = "__all__"
+
+class AimpphAdminForm(forms.ModelForm):
     shamsiyear = forms.ChoiceField(label="Shamsi Year", choices=AFGHAN_YEAR_CHOICES)
     shamsimonth = forms.ChoiceField(label="Shamsi Month", choices=AFGHAN_MONTH_CHOICES)
     period = forms.ChoiceField(label="Period", choices=AFGHAN_PY_CHOICES)
