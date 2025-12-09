@@ -173,9 +173,14 @@ class AimpphAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "get_province",
-        "aimfacilityname",
+        "aimfacilityname",   # real field (dropdown)
         "shamsiyear",
         "shamsimonth",
+        "period",
+        "bl_progress",
+        "gre_year",
+        "gre_month",
+        "afiat_flag",
         "total_births",
         "births_vaginal",
         "births_csection",
