@@ -190,6 +190,13 @@ class AimpphAdmin(admin.ModelAdmin):
         "ai_total",
     )
 
+    readonly_fields = ("get_province",)
+
+    @admin.display(description="Province")
+    def get_province(self, obj):
+        # adjust field names if needed, but this matches your Facility → District → Province chain
+        return obj.aimfacilityname.districtfk.provincefk.name
+
     fieldsets = (
         # ⭐ TOP SECTION (always visible)
         ("AIM-PPH Record Information", {
