@@ -153,11 +153,6 @@ STATIC_URL = '/static/'
 # Folder where collectstatic will put files (for Render)
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Optional: if you have a local "static" folder in project root
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
-
 # WhiteNoise: compressed static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
