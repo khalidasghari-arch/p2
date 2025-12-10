@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h1>KMS Dashboard</h1>
+
+<h2>Knowledge Items Per Category</h2>
+<table class="admin-table">
+  <tr>
+    <th>Category</th>
+    <th>Count</th>
+  </tr>
+  {% for c in per_category %}
+  <tr>
+    <td>{{ c.name }}</td>
+    <td>{{ c.count }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="2">No categories yet.</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Recent Activity</h2>
+<p>Knowledge items created in last 30 days: <strong>{{ recent_items }}</strong></p>
+
+<h2>Most Commented Knowledge Items</h2>
+<table class="admin-table">
+  <tr>
+    <th>Title</th>
+    <th>Comments</th>
+  </tr>
+  {% for item in most_commented %}
+  <tr>
+    <td>{{ item.title }}</td>
+    <td>{{ item.comment_count }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="2">No comments yet.</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}

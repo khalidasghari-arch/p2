@@ -20,11 +20,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('dashboard/', include('product.urls')),  # Add this line
-    path('hiva/', include('hiva.urls')),  # Add this line
-    path('', include('authentication.urls')),  # Add this line
-    path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
+    path('', admin.site.urls),
+    # path('dashboard/', include('product.urls')),  # Add this line
+    # path('hiva/', include('hiva.urls')),  # Add this line
+    # path('', include('authentication.urls')),  # Add this line
+    # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
 ]
 
 if settings.DEBUG:
