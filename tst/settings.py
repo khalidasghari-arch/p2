@@ -1,6 +1,5 @@
 from pathlib import Path
 import os
-
 from django.contrib.messages import constants as messages
 import dj_database_url
 from dotenv import load_dotenv
