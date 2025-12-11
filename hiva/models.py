@@ -102,8 +102,8 @@ class Assessor(models.Model):
     note = models.TextField(blank=True, null=True)
 
     class Meta:
-        verbose_name = "CLINICAL MENTORS"
-        verbose_name_plural = "CLINICAL MENTORS"
+        verbose_name = "CLINICAL MENTOR"
+        verbose_name_plural = "CLINICAL MENTOR"
 
     def __str__(self):
         return self.name
@@ -175,7 +175,7 @@ class Criteria(models.Model):
 
     class Meta:
         verbose_name = "HQIP CRITERIA"
-        verbose_name_plural = "THHQIP CRITERIA"
+        verbose_name_plural = "HQIP CRITERIA"
 
     def __str__(self):
         return self.name
@@ -317,7 +317,7 @@ class Participanteducation(models.Model):
 
     class Meta:
         verbose_name = "PARTICIPANT EDUCATION"
-        verbose_name_plural = "DIPARTICIPANT EDUCATION"
+        verbose_name_plural = "PARTICIPANT EDUCATION"
 
     def __str__(self):
         return self.name
