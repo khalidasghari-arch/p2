@@ -4,8 +4,9 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import aimpee, aimpph, Gancenrollment, Gancfirstsession,Gancsecondsession, Gancthirdsession, Gancohort, Mpdsr, Qicdataset, Qiccriterialist, tpm, Qqmdomain, QqmdomainIndicator, Participantposition, Participanteducation, Trainingheader, Indicator, IndicatorType, ProjectGoal, ProjectObjective, ProjectOutput, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
+from .models import safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
 from .forms import AimpeeAdminForm, AimpphAdminForm
+from decimal import Decimal, InvalidOperation
 
 admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
 admin.site.site_title = "Health Admin Portal"
@@ -183,7 +184,6 @@ class AimpeeAdmin(admin.ModelAdmin):
     def get_province(self, obj):
         return obj.aimfacilityname.districtfk.provincefk.name
     
-
 @admin.register(aimpph)
 class AimpphAdmin(admin.ModelAdmin):
     form = AimpphAdminForm
@@ -307,6 +307,176 @@ class AimpphAdmin(admin.ModelAdmin):
         DistrictFilter,
         "aimfacilityname",   # Facility filter (built-in)
     )
+
+@admin.register(safesurgeryclinical)
+class CSectionSafeSurgeryAdmin(admin.ModelAdmin):
+    form = AimpeeAdminForm
+    list_display = (
+        "id",
+        "get_province",
+        "aimfacilityname",
+        "shamsiyear",
+        "shamsimonth",
+        "period",
+        "total_cs",
+        "total_deliv",
+        "cs_rate",
+        "who_ssc_rate",
+        "safe_tracker_rate",
+        "pph_cs_rate",
+        "qbl_cs_rate",
+        "postop_fever_rate",
+        "hyst_rate",
+        "mat_death_total",
+    )
+
+    # ⭐ Make all rate fields readonly (auto-calculated)
+    readonly_fields = (
+        "cs_rate",
+        "who_ssc_rate",
+        "safe_tracker_rate",
+        "pph_cs_rate",
+        "qbl_cs_rate",
+        "postop_fever_rate",
+        "bladder_injury_rate",
+        "bowel_injury_rate",
+        "hyst_rate",
+        "vag_clean_rate",
+        "foley_after_anes_rate",
+        "abx_proph_rate",
+        "skin_prep_rate",
+    )
+
+    # Grouped, collapsible fieldsets
+    fieldsets = (
+        # ⭐ TOP SECTION (always visible, context)
+        (
+            "AIM-PPH Record Information",
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "aimfacilityname",
+                    "shamsiyear",
+                    "shamsimonth",
+                    "period",
+                    "bl_progress",
+                    "gre_year",
+                    "gre_month",
+                    "afiat_flag",
+                ),
+            },
+        ),
+        (
+            "Core Volumes",
+            {
+                "fields": (
+                    "total_cs",
+                    "total_deliv",
+                    "cs_rate",
+                ),
+            },
+        ),
+        (
+            "Process Indicators – Checklists & Trackers",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "who_ssc_completed",
+                    "who_ssc_rate",
+                    "safe_tracker_complete",
+                    "safe_tracker_rate",
+                ),
+            },
+        ),
+        (
+            "Process Indicators – Perioperative Practices",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "vag_clean_num",
+                    "vag_clean_rate",
+                    "foley_after_anes_num",
+                    "foley_after_anes_rate",
+                    "abx_proph_num",
+                    "abx_proph_rate",
+                    "skin_prep_num",
+                    "skin_prep_rate",
+                ),
+            },
+        ),
+        (
+            "Complications During / After C-Section",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "pph_cs_num",
+                    "pph_cs_rate",
+                    "qbl_cs_num",
+                    "qbl_cs_rate",
+                    "postop_fever_num",
+                    "postop_fever_rate",
+                    "bladder_injury_num",
+                    "bladder_injury_rate",
+                    "bowel_injury_num",
+                    "bowel_injury_rate",
+                    "hyst_num",
+                    "hyst_rate",
+                ),
+            },
+        ),
+        (
+            "Maternal Deaths (CS-related and other)",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "mat_death_pph_cs",
+                    "mat_death_other_cs",
+                    "mat_death_total",
+                ),
+            },
+        ),
+    )
+
+    # 🔢 Helper to safely compute percentages
+    def _pct(self, num, den):
+        try:
+            if num is None or den in (None, 0):
+                return None
+            return (Decimal(num) / Decimal(den)) * Decimal("100.0")
+        except (InvalidOperation, ZeroDivisionError):
+            return None
+
+    # 💾 Auto-calculate all rate fields before saving
+    def save_model(self, request, obj, form, change):
+        # Core CS rate
+        obj.cs_rate = self._pct(obj.total_cs, obj.total_deliv)
+
+        # Checklists & trackers – denominator: total_cs
+        obj.who_ssc_rate = self._pct(obj.who_ssc_completed, obj.total_cs)
+        obj.safe_tracker_rate = self._pct(obj.safe_tracker_complete, obj.total_cs)
+
+        # Complications – denominator: total_cs
+        obj.pph_cs_rate = self._pct(obj.pph_cs_num, obj.total_cs)
+        obj.qbl_cs_rate = self._pct(obj.qbl_cs_num, obj.total_cs)
+        obj.postop_fever_rate = self._pct(obj.postop_fever_num, obj.total_cs)
+        obj.bladder_injury_rate = self._pct(obj.bladder_injury_num, obj.total_cs)
+        obj.bowel_injury_rate = self._pct(obj.bowel_injury_num, obj.total_cs)
+        obj.hyst_rate = self._pct(obj.hyst_num, obj.total_cs)
+
+        # Perioperative practices – denominator: total_cs
+        obj.vag_clean_rate = self._pct(obj.vag_clean_num, obj.total_cs)
+        obj.foley_after_anes_rate = self._pct(obj.foley_after_anes_num, obj.total_cs)
+        obj.abx_proph_rate = self._pct(obj.abx_proph_num, obj.total_cs)
+        obj.skin_prep_rate = self._pct(obj.skin_prep_num, obj.total_cs)
+
+        super().save_model(request, obj, form, change)
+
+        readonly_fields = ("get_province",)
+
+    @admin.display(description="Province")
+    def get_province(self, obj):
+        # adjust field names if needed, but this matches your Facility → District → Province chain
+        return obj.aimfacilityname.districtfk.provincefk.name
 
 class QICMonthFilter(admin.SimpleListFilter):
     title = _('QI Committee Date (Month + Year)')
@@ -731,22 +901,9 @@ admin.site.register(ThematicMentorship)
 admin.site.register(MentorshipTopics, MyModelMentorshiptopics)
 admin.site.register(Position)
 admin.site.register(Staff, MyModelHfstaff)
-admin.site.register(ProjectGoal)
-admin.site.register(ProjectObjective)
-admin.site.register(ProjectOutput)
-admin.site.register(IndicatorType)
-admin.site.register(Indicator, MyModelIndicator)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
-admin.site.register(Qqmdomain)
-admin.site.register(QqmdomainIndicator)
-admin.site.register(tpm, MyModeltpm)
 admin.site.register(Qicdataset, MyModelqicdataset)
-admin.site.register(Qiccriterialist)
 admin.site.register(Mpdsr, mpdsrshow)
-admin.site.register(Gancohort, ganccohorts)
-admin.site.register(Gancenrollment, gancenrollment)
-admin.site.register(Gancfirstsession, gancfirstsession)
-admin.site.register(Gancsecondsession)
-admin.site.register(Gancthirdsession)
+
 

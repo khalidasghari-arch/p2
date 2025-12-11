@@ -11,6 +11,10 @@ class Province(models.Model):
     provincePashto = models.CharField(blank=True, null=True)
     phase = models.IntegerField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "PROVINCE"
+        verbose_name_plural = "PROVINCE"
+
     def __str__(self):
         return self.name
     
@@ -23,6 +27,10 @@ class District(models.Model):
     districtdari = models.CharField(blank=True, null=True)
     districtpashto = models.CharField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "DISTRICT"
+        verbose_name_plural = "DISTRICT"
+
     def __str__(self):
         return self.name
 
@@ -31,6 +39,10 @@ class Facilitytype(models.Model):
     shortname = models.TextField(blank=True)
     namedari = models.CharField(blank=True, null=True)
     namepashto = models.CharField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "HEALTH FACILITY TYPE"
+        verbose_name_plural = "HEALTH FACILITY TYPE"
 
     def __str__(self):
         return self.name
@@ -56,7 +68,11 @@ class Facility(models.Model):
     ganc = models.BooleanField(blank=True, null=True, verbose_name='G-ANC/G-PNC')
     afiat = models.BooleanField(blank=True, null=True, verbose_name='AFIAT')
     skilllab = models.BooleanField(blank=True, default=False)
-    aimphase = models.IntegerField(blank=True, null=True)  
+    aimphase = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "HEALTH FACILITY"
+        verbose_name_plural = "HEALTH FACILITY"  
 
     def __str__(self):
         return self.name
@@ -64,6 +80,10 @@ class Facility(models.Model):
 class Implementor(models.Model):
     name = models.CharField(max_length=200)
     shortname = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "IMPLEMENTER"
+        verbose_name_plural = "IMPLEMENTER"
 
     def __str__(self):
         return self.name
@@ -81,6 +101,10 @@ class Assessor(models.Model):
     continuetophase2 = models.BooleanField(blank=True, null=True)
     note = models.TextField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "CLINICAL MENTORS"
+        verbose_name_plural = "CLINICAL MENTORS"
+
     def __str__(self):
         return self.name
 
@@ -88,12 +112,20 @@ class Assessmenttype(models.Model):
     name = models.CharField(max_length=200)
     shortname = models.TextField(blank=True)
 
+    class Meta:
+        verbose_name = "ASSESSMENT TYPE"
+        verbose_name_plural = "ASSESSMENT TYPE"
+
     def __str__(self):
         return self.name
     
 class Area(models.Model):
     name = models.TextField(max_length=200)
     shortname = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "THEMATIC AREA"
+        verbose_name_plural = "THEMATIC AREA"
 
     def __str__(self):
         return self.name
@@ -103,6 +135,10 @@ class Section(models.Model):
     name = models.TextField()
     shortname = models.TextField(blank=True)
 
+    class Meta:
+        verbose_name = "HQIP SECTION"
+        verbose_name_plural = "HQIP SECTION"
+
     def __str__(self):
         return self.name
 
@@ -111,12 +147,20 @@ class Standards(models.Model):
     name = models.TextField()
     shortname = models.TextField(blank=True)
 
+    class Meta:
+        verbose_name = "HQIP STANDARD"
+        verbose_name_plural = "HQIP STANDARD"
+
     def __str__(self):
         return self.name
     
 class Score(models.Model):
     name = models.TextField()
     shorname = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "HQIP SCORE"
+        verbose_name_plural = "HQIP SCORE"
 
     def __str__(self):
         return self.name
@@ -129,12 +173,20 @@ class Criteria(models.Model):
     namedari = models.TextField(blank=True)
     createdby = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        verbose_name = "HQIP CRITERIA"
+        verbose_name_plural = "THHQIP CRITERIA"
+
     def __str__(self):
         return self.name
     
 class ThematicMentorship(models.Model):
     name = models.CharField()
     shortname = models.CharField
+
+    class Meta:
+        verbose_name = "MENTORSHIP THEMATIC AREA"
+        verbose_name_plural = "MENTORSHIP THEMATIC AREA"
 
     def __str__(self):
         return self.name
@@ -147,6 +199,10 @@ class MentorshipTopics(models.Model):
     namepashto = models.TextField(null=True, blank=True)
     nameeng= models.TextField(null=True, blank=True)
 
+    class Meta:
+        verbose_name = "MENTORSHIP TOPIC"
+        verbose_name_plural = "MENTORSHIP TOPIC"
+
     def __str__(self):
         return self.name
 
@@ -157,11 +213,19 @@ class Mentorshipvisit(models.Model):
     mentorshipstarttime = models.TimeField()
     mentorshipendtime = models.TimeField()
 
+    class Meta:
+        verbose_name = "MENTORSHIP VISIT"
+        verbose_name_plural = "MENTORSHIP VISIT"
+
     def __str__(self):
         return f"Mentorship Visit Date {self.visitdate}"
     
 class Position(models.Model):
     name = models.CharField()
+
+    class Meta:
+        verbose_name = "STAFF PROFESSION"
+        verbose_name_plural = "STAFF PROFESSION"
 
     def __str__(self):
         return self.name
@@ -174,6 +238,10 @@ class Staff(models.Model):
     tazkiranumber = models.CharField(blank=True, null=True)
     gender = models.CharField()
     status = models.CharField()
+
+    class Meta:
+        verbose_name = "STAFF JOB TITLE"
+        verbose_name_plural = "STAFF JOB TITLE"
 
     def __str__(self):
         return self.firstname
@@ -189,6 +257,10 @@ class Mentorshipdetails(models.Model):
     mc = models.BooleanField()
     image = models.ImageField(upload_to='images/', null=True, blank=True)  # Files are stored in the media directory by default
     uploaded_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "MENTORSHIP DETAIL"
+        verbose_name_plural = "MENTORSHIP DETAIL"
 
     def __int__(self):
         return self.id
@@ -206,11 +278,19 @@ class Assessment(models.Model):
     assessmentdate = models.DateField()
     remarks = models.TextField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "HQIP ASSESSMENT"
+        verbose_name_plural = "HQIP ASSESSMENT"
+
     def __str__(self):
         return self.remarks
     
 class Participationtype(models.Model):
     name = models.TextField()
+
+    class Meta:
+        verbose_name = "PARTICIPANT TYPE"
+        verbose_name_plural = "PARTICIPANT TYPE"
 
     def __str__(self):
         return self.name
@@ -224,6 +304,10 @@ class Trainingheader(models.Model):
     traingfocalpoint = models.CharField(max_length=200, blank=True, null=True)
     remarks = models.TextField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "TRAINING TITLE"
+        verbose_name_plural = "TRAINING TITLE"
+
     def __str__(self):
         return self.trainingname
 
@@ -231,12 +315,20 @@ class Participanteducation(models.Model):
     name = models.TextField()
     remarks = models.TextField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "PARTICIPANT EDUCATION"
+        verbose_name_plural = "DIPARTICIPANT EDUCATION"
+
     def __str__(self):
         return self.name
     
 class Participantposition(models.Model):
     name = models.TextField()
     remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "PARTICIPANT POSITION"
+        verbose_name_plural = "PARTICIPANT POSITION"
 
     def __str__(self):
         return self.name
@@ -263,81 +355,12 @@ class Training(models.Model):
     thematicarea = models.ForeignKey(Area, on_delete=models.CASCADE)
     observation = models.TextField(blank=True, null=True)
 
+    class Meta:
+        verbose_name = "TRAINING"
+        verbose_name_plural = "TRAINING"
+
     def __str__(self):
         return self.firstname
-    
-class ProjectGoal(models.Model):
-    name = models.TextField()
-
-    def __str__(self):
-        return self.name
-    
-class ProjectObjective(models.Model):
-    ProjectGoal = models.ForeignKey(ProjectGoal, on_delete=models.CASCADE)
-    name = models.TextField()
-
-    def __str__(self):
-        return self.name
-
-class ProjectOutput(models.Model):
-    ProjectObjective = models.ForeignKey(ProjectObjective, on_delete=models.CASCADE)
-    name = models.TextField()
-
-    def __str__(self):
-        return self.name
-    
-class IndicatorType(models.Model):
-    name = models.TextField()
-
-    def __str__(self):
-        return self.name
-    
-class Indicator(models.Model):
-    indicatortype = models.ForeignKey(IndicatorType, on_delete=models.CASCADE)
-    indicatoroutput = models.ForeignKey(ProjectObjective, on_delete=models.CASCADE)
-    name = models.TextField()
-    datasource = models.TextField()
-    baseline = models.CharField(max_length=200)
-    target = models.CharField(max_length=200)
-    achivement = models.CharField()
-    indicatormodality = models.CharField(blank=True, null=True)
-    remarks = models.CharField(max_length=200)
-
-    def __str__(self):
-        return self.name
-
-class Qqmdomain(models.Model):
-    name = models.TextField()
-    remarks = models.TextField(blank=True, null=True)
-
-    def __str__(self):
-        return self.name
-
-class QqmdomainIndicator(models.Model):
-    domain = models.ForeignKey(Qqmdomain, on_delete=models.CASCADE, blank=True, null=True)
-    name = models.TextField(blank=True, null=True)
-    remarks = models.TextField(blank=True, null=True)
-
-    def __str__(self):
-        return self.name
-    
-class tpm(models.Model):
-    auditdate = models.DateField(blank=True, null=True)
-    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, blank=True, null=True)
-    domainindicator = models.ForeignKey(QqmdomainIndicator, on_delete=models.CASCADE, blank=True, null=True)
-    score = models.DecimalField(max_digits = 5, decimal_places = 2, null=True)
-    remarks = models.TextField(blank=True, null=True)
-
-    def __str__(self):
-        return f"TPM Date {self.auditdate}"
-    
-class Qiccriterialist(models.Model):
-    qiccriteriadate = models.DateField()
-    qiccriterianame = models.CharField(max_length=200)
-    remarks = models.TextField(blank=True, null=True)
-
-    def __str__(self):
-        return f"Criteria Date {self.qiccriteriadate}"
     
 class Qicdataset(models.Model):
     qiccommdate = models.DateField()
@@ -363,6 +386,10 @@ class Qicdataset(models.Model):
     image = models.FileField(upload_to='qic-minutes/', null=True, blank=True)  # Files are stored in the media directory by default
     uploaded_at = models.DateField(auto_now_add=True, null=True, blank=True)
 
+    class Meta:
+        verbose_name = "QIC"
+        verbose_name_plural = "QIC"
+
     def __str__(self):
         return f"{self.qicfacility} {self.qiccommdate}" 
     
@@ -387,140 +414,144 @@ class Mpdsr(models.Model):
     image = models.FileField(upload_to='mpdsr-docs/', null=True, blank=True)  # Files are stored in the media directory by default
     uploaded_at = models.DateField(auto_now_add=True, null=True, blank=True)
 
+    class Meta:
+        verbose_name = "MPDSR"
+        verbose_name_plural = "MPDSR"
+
     def __str__(self):
         return f"{self.facilityname} {self.monthmpdsr}" 
     
-class Gancohort(models.Model):
-    facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
-    cohortname = models.TextField()
-    cohortnumber = models.IntegerField()
-    cohortstatus = models.TextField()
-    cohortchecklist = models.TextField()
-    cohortcreatedby = models.TextField()
-    remarks = models.TextField(blank=True, null=True)
+# class Gancohort(models.Model):
+#     facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+#     cohortname = models.TextField()
+#     cohortnumber = models.IntegerField()
+#     cohortstatus = models.TextField()
+#     cohortchecklist = models.TextField()
+#     cohortcreatedby = models.TextField()
+#     remarks = models.TextField(blank=True, null=True)
 
-    def __str__(self):
-        return self.cohortname
+#     def __str__(self):
+#         return self.cohortname
     
-class Gancenrollment(models.Model):
-    cohortname = models.ForeignKey(Gancohort, on_delete=models.CASCADE, verbose_name="Cohort Name")
-    enrollmentid= models.IntegerField(blank=True, null=True)
-    name = models.TextField()
-    fathername = models.TextField()
-    contactnumber = models.TextField()
-    address = models.TextField()
-    gafirstanc = models.IntegerField()
-    edd = models.DateField()
-    remarks = models.TextField(blank=True, null=True)
+# class Gancenrollment(models.Model):
+#     cohortname = models.ForeignKey(Gancohort, on_delete=models.CASCADE, verbose_name="Cohort Name")
+#     enrollmentid= models.IntegerField(blank=True, null=True)
+#     name = models.TextField()
+#     fathername = models.TextField()
+#     contactnumber = models.TextField()
+#     address = models.TextField()
+#     gafirstanc = models.IntegerField()
+#     edd = models.DateField()
+#     remarks = models.TextField(blank=True, null=True)
 
-    def __str__(self):
-        return self.name
+#     def __str__(self):
+#         return self.name
     
-class Gancfirstsession(models.Model):
-    registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
-    sessiontype = models.TextField()
-    sessionround = models.IntegerField()
-    sessiondate = models.DateField()
-    attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
-    presentga = models.IntegerField(verbose_name="Present_GA")
-    bp = models.TextField()
-    dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
-    weight = models.IntegerField(verbose_name="Weight")
-    anemia = models.TextField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
-    pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
-    muac = models.TextField(verbose_name="MUAC")
-    dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
-    clabexm = models.TextField(verbose_name="Completing Laboratory Exam (Y/N)")
-    hemoglobin = models.TextField(verbose_name="Hemoglobin")
-    urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
-    rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
-    coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
-    rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
-    ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
-    dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
-    typeofdangersign = models.TextField(verbose_name="Type of Danger sign")
-    remarks = models.TextField(blank=True, null=True)
+# class Gancfirstsession(models.Model):
+#     registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
+#     sessiontype = models.TextField()
+#     sessionround = models.IntegerField()
+#     sessiondate = models.DateField()
+#     attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
+#     presentga = models.IntegerField(verbose_name="Present_GA")
+#     bp = models.TextField()
+#     dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
+#     rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
+#     weight = models.IntegerField(verbose_name="Weight")
+#     anemia = models.TextField(verbose_name="Anemia (Y/N)")
+#     ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
+#     ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
+#     pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
+#     acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
+#     muac = models.TextField(verbose_name="MUAC")
+#     dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
+#     rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
+#     dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
+#     rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
+#     clabexm = models.TextField(verbose_name="Completing Laboratory Exam (Y/N)")
+#     hemoglobin = models.TextField(verbose_name="Hemoglobin")
+#     urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
+#     rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
+#     coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
+#     rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
+#     ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
+#     dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
+#     typeofdangersign = models.TextField(verbose_name="Type of Danger sign")
+#     remarks = models.TextField(blank=True, null=True)
 
-    def __str__(self):
-        return self.sessiontype
+#     def __str__(self):
+#         return self.sessiontype
     
-class Gancsecondsession(models.Model):
-    registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
-    sessiontype = models.TextField()
-    sessionround = models.IntegerField()
-    sessiondate = models.DateField()
-    attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
-    presentga = models.IntegerField(verbose_name="Present_GA")
-    bp = models.TextField()
-    dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
-    weight = models.IntegerField(verbose_name="Weight")
-    anemia = models.TextField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
-    pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
-    mebendazole = models.TextField(verbose_name="Mebendazole (Y/N)") 
-    muac = models.TextField(verbose_name="MUAC")
-    dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
-    urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
-    rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
-    coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
-    rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
-    ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
-    dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
-    typeofdangersign = models.TextField(verbose_name="Type of Danger sign")   
-    remarks = models.TextField(blank=True, null=True)
+# class Gancsecondsession(models.Model):
+#     registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
+#     sessiontype = models.TextField()
+#     sessionround = models.IntegerField()
+#     sessiondate = models.DateField()
+#     attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
+#     presentga = models.IntegerField(verbose_name="Present_GA")
+#     bp = models.TextField()
+#     dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
+#     rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
+#     weight = models.IntegerField(verbose_name="Weight")
+#     anemia = models.TextField(verbose_name="Anemia (Y/N)")
+#     ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
+#     ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
+#     pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
+#     acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
+#     mebendazole = models.TextField(verbose_name="Mebendazole (Y/N)") 
+#     muac = models.TextField(verbose_name="MUAC")
+#     dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
+#     rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
+#     dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
+#     rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
+#     urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
+#     rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
+#     coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
+#     rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
+#     ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
+#     dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
+#     typeofdangersign = models.TextField(verbose_name="Type of Danger sign")   
+#     remarks = models.TextField(blank=True, null=True)
 
-    def __str__(self):
-        return self.sessiontype
+#     def __str__(self):
+#         return self.sessiontype
     
-class Gancthirdsession(models.Model):
-    registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
-    sessiontype = models.TextField()
-    sessionround = models.IntegerField()
-    sessiondate = models.DateField()
-    attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
-    presentga = models.IntegerField(verbose_name="Present_GA")
-    bp = models.TextField()
-    dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
-    weight = models.IntegerField(verbose_name="Weight")
-    anemia = models.TextField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
-    pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
-    muac = models.TextField(verbose_name="MUAC")
-    dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
-    antedepressionscreening = models.TextField( verbose_name="Antenatal Depression Screening (Y/N)")
-    antedepressiondiagnosed = models.TextField( verbose_name="Antenatal Depression Diagnosed (Y/N)")
-    rpsychosocialcounselor = models.TextField( verbose_name="Refer to the psychosocial counselor (Y/N)")
-    urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
-    rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
-    coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
-    rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
-    ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
-    dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
-    typeofdangersign = models.TextField(verbose_name="Type of Danger sign") 
-    birthplanningcounseling = models.TextField(verbose_name="Birth Planning Counseling (Y/N) ") 
-    remarks = models.TextField(blank=True, null=True)
+# class Gancthirdsession(models.Model):
+#     registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
+#     sessiontype = models.TextField()
+#     sessionround = models.IntegerField()
+#     sessiondate = models.DateField()
+#     attendance = models.TextField(verbose_name="Attendance (Group/Individual/No)")
+#     presentga = models.IntegerField(verbose_name="Present_GA")
+#     bp = models.TextField()
+#     dhypertension = models.TextField(verbose_name="Diagnosed with hypertension (Y/N)")
+#     rhypertensiontoMD = models.TextField(verbose_name="Referred  hypertension to MD (Y/N)")
+#     weight = models.IntegerField(verbose_name="Weight")
+#     anemia = models.TextField(verbose_name="Anemia (Y/N)")
+#     ironfolate = models.TextField(verbose_name="Iron Folate/routine Dose(Y/N)")
+#     ironfolatepluswomen = models.TextField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
+#     pcalcium = models.TextField(verbose_name="Prescribe-Calcium(Y/N)")
+#     acalcium = models.TextField(verbose_name="absorbed calcium in the last month(Y/N)")
+#     muac = models.TextField(verbose_name="MUAC")
+#     dmam = models.TextField(verbose_name="Diagnosed with MAM (Y/N)")
+#     rmam = models.TextField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
+#     dsam = models.TextField(verbose_name="Diagnosed with SAM (Y/N)")
+#     rsam = models.TextField(verbose_name="Refer SAM to higher level (Y/N)")
+#     antedepressionscreening = models.TextField( verbose_name="Antenatal Depression Screening (Y/N)")
+#     antedepressiondiagnosed = models.TextField( verbose_name="Antenatal Depression Diagnosed (Y/N)")
+#     rpsychosocialcounselor = models.TextField( verbose_name="Refer to the psychosocial counselor (Y/N)")
+#     urinexam = models.TextField(verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
+#     rpositivepuriatomd = models.TextField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
+#     coughmorethantwoweeks= models.TextField(verbose_name="cough for more than two weeks(Y/N)")
+#     rcough = models.TextField(verbose_name="Referred cough for more than two week to DOTS Room")
+#     ttvaccine = models.TextField(verbose_name="TT vaccine (Y/N)")
+#     dangersign = models.TextField(verbose_name="Danger signs during pregnancy (Y/N) ")
+#     typeofdangersign = models.TextField(verbose_name="Type of Danger sign") 
+#     birthplanningcounseling = models.TextField(verbose_name="Birth Planning Counseling (Y/N) ") 
+#     remarks = models.TextField(blank=True, null=True)
 
-    def __str__(self):
-        return self.sessiontype
+#     def __str__(self):
+#         return self.sessiontype
     
 class aimpee(models.Model):
     shamsimonth = models.CharField()
@@ -590,14 +621,14 @@ class aimpee(models.Model):
         return f"AIM-PEE Indicators #{self.id}"
     
 class aimpph(models.Model):
-    shamsimonth = models.CharField()
-    shamsiyear = models.CharField()
-    period = models.CharField()
-    bl_progress = models.CharField()
+    shamsimonth = models.CharField(verbose_name="Afghanistan Month")
+    shamsiyear = models.CharField(verbose_name="Afghanistan Year")
+    period = models.CharField(verbose_name="Period")
+    bl_progress = models.CharField(verbose_name="Baseline and Progress")
     aimfacilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
-    gre_month =models.CharField()
-    gre_year= models.CharField()
-    afiat_flag = models.BooleanField()
+    gre_month =models.CharField(verbose_name="Calender Month")
+    gre_year= models.CharField(verbose_name="Calender Year")
+    afiat_flag = models.BooleanField(verbose_name="AFIAT")
 
     # Births and oxytocin
     total_births = models.BigIntegerField(
@@ -789,3 +820,197 @@ class aimpph(models.Model):
 
     def __str__(self):
         return f"AIM-PPH #{self.id}"
+
+class safesurgeryclinical(models.Model):
+
+    shamsimonth = models.CharField(verbose_name="Afghanistan Month")
+    shamsiyear = models.CharField(verbose_name="Afghanistan Year")
+    period = models.CharField(verbose_name="Period")
+    bl_progress = models.CharField(verbose_name="Baseline and Progress")
+    aimfacilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+    gre_month =models.CharField(verbose_name="Calender Month")
+    gre_year= models.CharField(verbose_name="Calender Year")
+    afiat_flag = models.BooleanField(verbose_name="AFIAT")
+
+    # Core volumes
+    total_cs = models.BigIntegerField(default=0,
+        verbose_name="Total Number of Cesarean Section",
+        null=True, blank=True
+    )
+    total_deliv = models.BigIntegerField(default=0,
+        verbose_name="Total Number of Deliveries",
+        null=True, blank=True
+    )
+    cs_rate = models.DecimalField(default=0,
+        verbose_name="Cesarean Section Rate",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # WHO Surgical Safety Checklist
+    who_ssc_completed = models.BigIntegerField(default=0,
+        verbose_name="Number of WHO Surgical Safety Checklists completed",
+        null=True, blank=True
+    )
+    who_ssc_rate = models.DecimalField(default=0,
+        verbose_name="Surgical Safety Checklist completion rate",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Safe Surgery Tracker
+    safe_tracker_complete = models.BigIntegerField(default=0,
+        verbose_name="Number of Safe Surgery Tracker with all fields completed",
+        null=True, blank=True
+    )
+    safe_tracker_rate = models.DecimalField(default=0,
+        verbose_name="Safe Surgery Tracker completion rate",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # PPH during/after CS
+    pph_cs_num = models.BigIntegerField(default=0,
+        verbose_name="Number of Post-Partum Hemorrhage cases during or after CS",
+        null=True, blank=True
+    )
+    pph_cs_rate = models.DecimalField(default=0,
+        verbose_name="Cesarean PPH Rate (>500 ml)",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # QBL
+    qbl_cs_num = models.BigIntegerField(default=0,
+        verbose_name="Number of C-Section cases with QBL performed & recorded",
+        null=True, blank=True
+    )
+    qbl_cs_rate = models.DecimalField(default=0,
+        verbose_name="QBL performance rate during C-sections",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Post-op fever
+    postop_fever_num = models.BigIntegerField(default=0,
+        verbose_name="Number of CS with post-operation fever (>38℃) requiring antibiotics",
+        null=True, blank=True
+    )
+    postop_fever_rate = models.DecimalField(default=0,
+        verbose_name="Post operation fever (>38℃) rate requiring antibiotics",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Injuries
+    bladder_injury_num = models.BigIntegerField(default=0,
+        verbose_name="Number of cases of injury to bladder due to CS",
+        null=True, blank=True
+    )
+    bladder_injury_rate = models.DecimalField(default=0,
+        verbose_name="Injury to bladder rate due to CS",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    bowel_injury_num = models.BigIntegerField(default=0,
+        verbose_name="Number of injury to bowel due to CS",
+        null=True, blank=True
+    )
+    bowel_injury_rate = models.DecimalField(default=0,
+        verbose_name="Injury to bowel rate due to CS",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Hysterectomy
+    hyst_num = models.BigIntegerField(default=0,
+        verbose_name="Number of hysterectomy during or after CS",
+        null=True, blank=True
+    )
+    hyst_rate = models.DecimalField(default=0,
+        verbose_name="Hysterectomy rate during or after CS",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Vaginal cleansing
+    vag_clean_num = models.BigIntegerField(default=0,
+        verbose_name="Number of vaginal cleansing before CS",
+        null=True, blank=True
+    )
+    vag_clean_rate = models.DecimalField(default=0,
+        verbose_name="Vaginal cleansing rate",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Foley catheter
+    foley_after_anes_num = models.BigIntegerField(default=0,
+        verbose_name="Number of Foley catheter applied after induction of anesthesia",
+        null=True, blank=True
+    )
+    foley_after_anes_rate = models.DecimalField(default=0,
+        verbose_name="CS rate with Foley catheter after anesthesia induction",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Antibiotic prophylaxis
+    abx_proph_num = models.BigIntegerField(default=0,
+        verbose_name="Number of CS with IV prophylactic antibiotic provided prior to CS",
+        null=True, blank=True
+    )
+    abx_proph_rate = models.DecimalField(default=0,
+        verbose_name=(
+            "Antibiotic prophylaxis rate (15–60 minutes prior to incision) – "
+            "Cefazolin or other cephalosporin according to availability"
+        ),
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Incision skin prep
+    skin_prep_num = models.BigIntegerField(default=0,
+        verbose_name="Number of CS with incision skin preparation performed",
+        null=True, blank=True
+    )
+    skin_prep_rate = models.DecimalField(default=0,
+        verbose_name="Rate of incision site skin preparation",
+        max_digits=5, decimal_places=2,
+        null=True, blank=True,
+        help_text="Percentage (%)"
+    )
+
+    # Maternal deaths
+    mat_death_pph_cs = models.BigIntegerField(default=0,
+        verbose_name="Number of maternal deaths due to PPH related to CS",
+        null=True, blank=True
+    )
+    mat_death_other_cs = models.BigIntegerField(default=0,
+        verbose_name="Number of maternal deaths due to other causes related to CS",
+        null=True, blank=True
+    )
+    mat_death_total = models.BigIntegerField(default=0,
+        verbose_name="Total number of maternal deaths related or not to CS",
+        null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = "SAFE SURGERY"
+        verbose_name_plural = "SAFE SURGERY"
+
+    def __str__(self):
+        return f"SAFE SURGERY #{self.pk or ''}"
