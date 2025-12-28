@@ -1,0 +1,118 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <h1>{{ title }}</h1>
+
+  <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+    <h2 style="margin-top:0;">Assessment Information</h2>
+    <table>
+      <tr><th style="width:240px;">Facility</th><td>{{ header.facility }}</td></tr>
+      <tr><th>Province</th><td>{{ header.facility.districtfk.provincefk.name }}</td></tr>
+      <tr><th>District</th><td>{{ header.facility.districtfk.name }}</td></tr>
+      <tr><th>Survey Month/Year</th><td>{{ header.surveymonth }} - {{ header.surveyyear }}</td></tr>
+      <tr><th>Assessor</th><td>{{ header.assessor }}</td></tr>
+      <tr><th>Staff Profession</th><td>{{ header.staff_profession }}</td></tr>
+      <tr><th>Key Intervention</th><td>{{ header.key_intervention_name|default:"-" }}</td></tr>
+      <tr><th>Created</th><td>{{ header.created_at }}</td></tr>
+      <tr><th>Updated</th><td>{{ header.updated_at }}</td></tr>
+    </table>
+  </div>
+
+  {% if not details %}
+    <div class="module" style="padding:16px;border-radius:12px;">
+      <p><b>No details record exists for this header yet.</b></p>
+      <p>Please open this assessment in admin and complete the questionnaire in the inline form.</p>
+    </div>
+  {% else %}
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Work Area</h2>
+      <p><b>Unit/Work Area:</b> {{ details.work_area }}</p>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section A (A1–A14)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("a1").verbose_name }}<br><b>Answer:</b> {{ details.get_a1_display|default:details.a1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a2").verbose_name }}<br><b>Answer:</b> {{ details.get_a2_display|default:details.a2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a3").verbose_name }}<br><b>Answer:</b> {{ details.get_a3_display|default:details.a3|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a4").verbose_name }}<br><b>Answer:</b> {{ details.get_a4_display|default:details.a4|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a5").verbose_name }}<br><b>Answer:</b> {{ details.get_a5_display|default:details.a5|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a6").verbose_name }}<br><b>Answer:</b> {{ details.get_a6_display|default:details.a6|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a7").verbose_name }}<br><b>Answer:</b> {{ details.get_a7_display|default:details.a7|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a8").verbose_name }}<br><b>Answer:</b> {{ details.get_a8_display|default:details.a8|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a9").verbose_name }}<br><b>Answer:</b> {{ details.get_a9_display|default:details.a9|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a10").verbose_name }}<br><b>Answer:</b> {{ details.get_a10_display|default:details.a10|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a11").verbose_name }}<br><b>Answer:</b> {{ details.get_a11_display|default:details.a11|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a12").verbose_name }}<br><b>Answer:</b> {{ details.get_a12_display|default:details.a12|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a13").verbose_name }}<br><b>Answer:</b> {{ details.get_a13_display|default:details.a13|default:"-" }}</li>
+        <li>{{ details._meta.get_field("a14").verbose_name }}<br><b>Answer:</b> {{ details.get_a14_display|default:details.a14|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section B (B1–B3)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("b1").verbose_name }}<br><b>Answer:</b> {{ details.get_b1_display|default:details.b1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("b2").verbose_name }}<br><b>Answer:</b> {{ details.get_b2_display|default:details.b2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("b3").verbose_name }}<br><b>Answer:</b> {{ details.get_b3_display|default:details.b3|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section C (C1–C7)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("c1").verbose_name }}<br><b>Answer:</b> {{ details.get_c1_display|default:details.c1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c2").verbose_name }}<br><b>Answer:</b> {{ details.get_c2_display|default:details.c2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c3").verbose_name }}<br><b>Answer:</b> {{ details.get_c3_display|default:details.c3|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c4").verbose_name }}<br><b>Answer:</b> {{ details.get_c4_display|default:details.c4|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c5").verbose_name }}<br><b>Answer:</b> {{ details.get_c5_display|default:details.c5|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c6").verbose_name }}<br><b>Answer:</b> {{ details.get_c6_display|default:details.c6|default:"-" }}</li>
+        <li>{{ details._meta.get_field("c7").verbose_name }}<br><b>Answer:</b> {{ details.get_c7_display|default:details.c7|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section D (D1–D3)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("d1").verbose_name }}<br><b>Answer:</b> {{ details.get_d1_display|default:details.d1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("d2").verbose_name }}<br><b>Answer:</b> {{ details.get_d2_display|default:details.d2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("d3").verbose_name }}<br><b>Answer:</b> {{ details.get_d3_display|default:details.d3|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section E (E1)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("e1").verbose_name }}<br><b>Answer:</b> {{ details.get_e1_display|default:details.e1|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section F (F1–F6)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("f1").verbose_name }}<br><b>Answer:</b> {{ details.get_f1_display|default:details.f1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("f2").verbose_name }}<br><b>Answer:</b> {{ details.get_f2_display|default:details.f2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("f3").verbose_name }}<br><b>Answer:</b> {{ details.get_f3_display|default:details.f3|default:"-" }}</li>
+        <li>{{ details._meta.get_field("f4").verbose_name }}<br><b>Answer:</b> {{ details.get_f4_display|default:details.f4|default:"-" }}</li>
+        <li>{{ details._meta.get_field("f5").verbose_name }}<br><b>Answer:</b> {{ details.get_f5_display|default:details.f5|default:"-" }}</li>
+        <li>{{ details._meta.get_field("f6").verbose_name }}<br><b>Answer:</b> {{ details.get_f6_display|default:details.f6|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin-top:0;">Section G (G1–G4)</h2>
+      <ol>
+        <li>{{ details._meta.get_field("g1").verbose_name }}<br><b>Answer:</b> {{ details.get_g1_display|default:details.g1|default:"-" }}</li>
+        <li>{{ details._meta.get_field("g2").verbose_name }}<br><b>Answer:</b> {{ details.get_g2_display|default:details.g2|default:"-" }}</li>
+        <li>{{ details._meta.get_field("g3").verbose_name }}<br><b>Answer:</b> {{ details.get_g3_display|default:details.g3|default:"-" }}</li>
+        <li>{{ details._meta.get_field("g4").verbose_name }}<br><b>Answer:</b> {{ details.get_g4_display|default:details.g4|default:"-" }}</li>
+      </ol>
+    </div>
+
+    <div class="module" style="padding:16px;border-radius:12px;">
+      <h2 style="margin-top:0;">Comments</h2>
+      <p>{{ details.comment|default:"-" }}</p>
+    </div>
+
+  {% endif %}
+{% endblock %}

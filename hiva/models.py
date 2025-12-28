@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.db import models
-# Create your models here.
+from django.contrib.auth import get_user_model
 
 class Province(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     provinceshortname = models.CharField(max_length=200, null=True, blank=True)
     description = models.TextField(blank=True)
     provincecode = models.IntegerField(blank=True, null=True)
@@ -17,6 +18,13 @@ class Province(models.Model):
 
     def __str__(self):
         return self.name
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    province = models.ForeignKey(Province, on_delete=models.PROTECT, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.province or 'No province'}"
     
 class District(models.Model):
     provincefk = models.ForeignKey(Province, on_delete=models.CASCADE, default=1)
@@ -612,7 +620,13 @@ class aimpee(models.Model):
     ai_pph_hysterectomy = models.BigIntegerField(default=0, verbose_name="Postpartum hysterectomy for hemorrhage")
     ai_hysterectomy_other = models.BigIntegerField(default=0, verbose_name="Postpartum hysterectomy (other causes)")
     ai_total = models.BigIntegerField(default=0, verbose_name="Total number of advanced interventions conducted")
-        
+    
+    status = models.CharField(
+    max_length=20,
+    choices=[("draft","Draft"), ("submitted","Submitted"), ("approved","Approved")],
+    default="draft"
+)
+
     class Meta:
         verbose_name = "AIM-PEE"
         verbose_name_plural = "AIM-PEE"
@@ -814,6 +828,11 @@ class aimpph(models.Model):
         verbose_name="Total number of advanced interventions conducted"
     )
 
+    status = models.CharField(
+    max_length=20,
+    choices=[("draft","Draft"), ("submitted","Submitted"), ("approved","Approved")],
+    default="draft")
+
     class Meta:
         verbose_name = "AIM-PPH"
         verbose_name_plural = "AIM-PPH"
@@ -1008,9 +1027,16 @@ class safesurgeryclinical(models.Model):
         null=True, blank=True
     )
 
+    status = models.CharField(
+    max_length=20,
+    choices=[("draft","Draft"), ("submitted","Submitted"), ("approved","Approved")],
+    default="draft")
+
     class Meta:
         verbose_name = "SAFE SURGERY"
         verbose_name_plural = "SAFE SURGERY"
 
     def __str__(self):
         return f"SAFE SURGERY #{self.pk or ''}"
+
+
