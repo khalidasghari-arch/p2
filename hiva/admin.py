@@ -264,8 +264,7 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         DistrictFilter,
         AimpeeFacilityFilter,   # Facility filter (built-in)
     )
-
-
+    
     @admin.display(description="Facility Name")
     def get_facility_name(self, obj):
         return obj.aimfacilityname.name   # Adjust if your Facility model uses a different field
@@ -946,14 +945,21 @@ class MentorshipvisitAdmin(admin.ModelAdmin):
     search_fields = ("visitdate",)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Dynamically filter the menteename field based on the selected facility"""
+        # 1) Restrict facility dropdown by user's province
+        if db_field.name == "facilityfk" and not request.user.is_superuser:
+            prov = user_province(request)
+            if prov:
+                kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov)
+
+        # 2) Restrict mentee dropdown by selected facility (works mainly on EDIT page)
         if db_field.name == "menteename":
             obj_id = request.resolver_match.kwargs.get("object_id")
             if obj_id:
-                mentorship_visit = Mentorshipvisit.objects.get(id=obj_id)
+                mentorship_visit = Mentorshipvisit.objects.select_related("facilityfk").get(id=obj_id)
                 kwargs["queryset"] = Staff.objects.filter(hfname=mentorship_visit.facilityfk)
             else:
-                kwargs["queryset"] = Staff.objects.none()  # Empty when adding a new record
+                kwargs["queryset"] = Staff.objects.none()
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def export_mentorship_to_excel(modeladmin, request, queryset):
@@ -1076,6 +1082,5 @@ admin.site.register(Staff, MyModelHfstaff)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
 admin.site.register(Qicdataset, MyModelqicdataset)
-#admin.site.register(Mpdsr, mpdsrshow)
 
 
