@@ -248,8 +248,8 @@ class Staff(models.Model):
     status = models.CharField()
 
     class Meta:
-        verbose_name = "STAFF JOB TITLE"
-        verbose_name_plural = "STAFF JOB TITLE"
+        verbose_name = "MENTEE"
+        verbose_name_plural = "MENTEE"
 
     def __str__(self):
         return self.firstname

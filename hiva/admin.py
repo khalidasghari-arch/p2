@@ -4,13 +4,15 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipvisit, Mentorshipdetails  
+from .models import safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipdetails  
 from .forms import AimpeeAdminForm, AimpphAdminForm
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import UserProfile
 from hiva.admin_utils import user_province
+from django.urls import path
+from django.http import JsonResponse
 
 class ProvinceRestrictedAdminMixin:
     """
@@ -734,11 +736,18 @@ class MyModelAssesors(admin.ModelAdmin):
     search_fields = ['name']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
 
-class MyModelHfstaff(admin.ModelAdmin):
-    list_display = ['id', 'firstname','lastname', 'tazkiranumber','gender', 'status', 'hfname'
-                     , 'position']
-    list_filter = ['hfname_id']  # Add filter for parent
+class ModelMentees(admin.ModelAdmin):
+    list_display = ['id', 'hfname','firstname', 'lastname','position', 'tazkiranumber', 'gender', 
+                    'status']
+    list_filter = ['hfname']  # Add filter for parent
     search_fields = ['firstname']  # Search child name and parent name
+    list_per_page = 10  # Set pagination (10 rows per page)
+
+class ModelMentorshipdetails(admin.ModelAdmin):
+    list_display = ['id', 'mentorshipvistfk','menteename', 'thematicname','topicname', 'mentor', 'ls', 
+                    'pc', 'mc', 'image', 'uploaded_at']
+    list_filter = ['mentorshipvistfk']  # Add filter for parent
+    search_fields = ['menteename']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
 
 class ProvinceFilter(admin.SimpleListFilter):
@@ -904,64 +913,37 @@ class gancfirstsession(admin.ModelAdmin):
     # search_fields = ['criteriafk']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
     #list_filter = ['facilityname']  # Add filter for parent
-
-class MentorshipdetailsInlineForm(forms.ModelForm):
-    class Meta:
-        model = Mentorshipdetails
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)  # Initialize the form first
-
-        if self.instance.pk:  # Editing existing record
-            self.fields['menteename'].queryset = Staff.objects.filter(hfname=self.instance.mentorshipvistfk.facilityfk)
-        else:  # Adding new record
-            self.fields['menteename'].queryset = Staff.objects.none()  # Show empty dropdown initially
-
-class MentorshipdetailsInline(admin.TabularInline):  # Display mentees in a table
-    model = Mentorshipdetails
-    form = MentorshipdetailsInlineForm
-    extra = 0  # No extra blank rows
-
-    def get_extra(self, request, obj=None, **kwargs):
-        """Ensure correct number of mentees appear when editing"""
-        if obj:
-            return max(1, Staff.objects.filter(hfname=obj.facilityfk).count())  # At least one row
-        return 0  # Show nothing when adding a new record
-
-    def get_queryset(self, request):
-        """Ensure mentee filtering works correctly"""
-        queryset = super().get_queryset(request)
-        if request.resolver_match.kwargs.get("object_id"):  # Editing an existing visit
-            mentorship_visit = Mentorshipvisit.objects.get(id=request.resolver_match.kwargs["object_id"])
-            return queryset.filter(mentorshipvistfk=mentorship_visit)
-        return queryset.none()  # When adding a new visit, show nothing
-    
+   
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(admin.ModelAdmin):
-    inlines = [MentorshipdetailsInline]
-    list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", "mentorshipendtime")
-    list_filter = ['facilityfk__districtfk__provincefk__name']
-    search_fields = ("visitdate",)
+    list_display = ("id", "facilityfk", "visitdate", "visitround")
+    list_filter = ("facilityfk__districtfk__provincefk__name",)
+
+    def mentees_for_facility(self, request):
+        facility_id = request.GET.get("facility_id")
+
+        if not facility_id:
+            return JsonResponse({"results": []})
+
+        # province restriction
+        if not request.user.is_superuser:
+            prov = user_province(request)
+            if prov:
+                if not Facility.objects.filter(
+                    id=facility_id,
+                    districtfk__provincefk=prov
+                ).exists():
+                    return JsonResponse({"results": []})
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        # 1) Restrict facility dropdown by user's province
         if db_field.name == "facilityfk" and not request.user.is_superuser:
             prov = user_province(request)
             if prov:
-                kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov)
-
-        # 2) Restrict mentee dropdown by selected facility (works mainly on EDIT page)
-        if db_field.name == "menteename":
-            obj_id = request.resolver_match.kwargs.get("object_id")
-            if obj_id:
-                mentorship_visit = Mentorshipvisit.objects.select_related("facilityfk").get(id=obj_id)
-                kwargs["queryset"] = Staff.objects.filter(hfname=mentorship_visit.facilityfk)
-            else:
-                kwargs["queryset"] = Staff.objects.none()
-
+                kwargs["queryset"] = Facility.objects.filter(
+                    districtfk__provincefk=prov
+                )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
+
     def export_mentorship_to_excel(modeladmin, request, queryset):
         # Extract the filtered Mentorshipvisit IDs from the queryset
         visit_ids = queryset.values_list('id', flat=True)
@@ -1078,9 +1060,10 @@ admin.site.register(Participationtype)
 admin.site.register(ThematicMentorship)
 admin.site.register(MentorshipTopics, MyModelMentorshiptopics)
 admin.site.register(Position)
-admin.site.register(Staff, MyModelHfstaff)
+admin.site.register(Staff, ModelMentees)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
 admin.site.register(Qicdataset, MyModelqicdataset)
+admin.site.register(Mentorshipdetails, ModelMentorshipdetails)
 
 
