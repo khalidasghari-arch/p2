@@ -823,7 +823,7 @@ class AssessmentLineInline(admin.TabularInline):
     formset = RequiredScoreInlineFormSet
     
      # show read-only context + editable score
-    fields = ("get_section", "get_standard", "get_criteria", "scorefk", "remarks")
+    fields = ("get_section", "get_standard", "get_criteria", "scorefk")
     readonly_fields = ("get_section", "get_standard", "get_criteria")
 
     def get_queryset(self, request):
@@ -904,8 +904,7 @@ class AssessmentHeaderAdmin(admin.ModelAdmin):
             to_create.append(HQIPAssessment(
                 header=obj,
                 criteriafk=c,
-                scorefk=None,
-                remarks=""
+                scorefk=None
             ))
 
         with transaction.atomic():

@@ -282,7 +282,7 @@ class HQIPAssessmentHeader(models.Model):
     assessmentdate = models.DateField()
     assessmentend_date = models.DateField()
     areafk = models.ForeignKey(Area, on_delete=models.CASCADE)
-    remarks = models.TextField(blank=True, null=True)
+    #remarks = models.TextField(max_length=10, blank=True, null=True)
 
     class Meta:
         verbose_name = "HQIP ASSESSMENT"
@@ -301,7 +301,7 @@ class HQIPAssessment(models.Model):
     header = models.ForeignKey(HQIPAssessmentHeader, on_delete=models.CASCADE, related_name="lines", null=True, blank=True)
     criteriafk = models.ForeignKey(Criteria, on_delete=models.CASCADE)
     scorefk = models.ForeignKey(Score, on_delete=models.PROTECT, null=True, blank=True)
-    remarks = models.TextField(blank=True, null=True)
+    #remarks = models.TextField(max_length=10, blank=True, null=True)
 
     class Meta:
         verbose_name = "HQIP ASSESSMENT DETAILS"

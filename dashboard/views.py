@@ -44,7 +44,6 @@ def hqip_start(request):
                 "implementorfk": cd["implementorfk"].id,
                 "assessmenttype": cd["assessmenttype"].id,
                 "assessmentdate": str(cd["assessmentdate"]),
-                "remarks": cd["remarks"] or "",
             }
             return redirect("hqip_area_list")
     else:
@@ -100,7 +99,7 @@ def hqip_area_entry(request, area_id):
         areafk_id=area.id,
     )
 
-    existing = Assessment.objects.filter(**base_filter)
+    existing = HQIPAssessment.objects.filter(**base_filter)
     existing_criteria_ids = set(existing.values_list("criteriafk_id", flat=True))
 
     # ✅ create missing Assessment rows (1 row per Criteria)
@@ -108,7 +107,7 @@ def hqip_area_entry(request, area_id):
     for c in criteria_qs:
         if c.id in existing_criteria_ids:
             continue
-        to_create.append(Assessment(
+        to_create.append(HQIPAssessment(
             areafk_id=area.id,
             sectionfk_id=c.standardfk.sectionfk_id if c.standardfk_id else None,
             standardfk_id=c.standardfk_id,
@@ -119,14 +118,13 @@ def hqip_area_entry(request, area_id):
             implementorfk_id=header["implementorfk"],
             assessmenttype_id=header["assessmenttype"],
             assessmentdate=header["assessmentdate"],
-            remarks=header.get("remarks", ""),
         ))
 
     with transaction.atomic():
         if to_create:
-            Assessment.objects.bulk_create(to_create)
+            HQIPAssessment.objects.bulk_create(to_create)
 
-    rows_qs = Assessment.objects.filter(**base_filter).select_related(
+    rows_qs = HQIPAssessment.objects.filter(**base_filter).select_related(
         "sectionfk", "standardfk", "criteriafk", "scorefk"
     ).order_by(
         "sectionfk__id", "standardfk__id", "criteriafk__id"

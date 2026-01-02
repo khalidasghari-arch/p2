@@ -42,7 +42,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 
 INSTALLED_APPS = [
     'hiva',
-    'dashboard',
+    #'dashboard',
     'product.apps.ProductConfig',
     'django.contrib.admin',
     'django.contrib.auth',

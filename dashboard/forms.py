@@ -9,7 +9,6 @@ class AssessmentHeaderForm(forms.Form):
     implementorfk = forms.ModelChoiceField(queryset=Implementor.objects.all(), label="Implementor")
     assessmenttype = forms.ModelChoiceField(queryset=Assessmenttype.objects.all(), label="Assessment type")
     assessmentdate = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-    remarks = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
 
     def __init__(self, *args, facility_qs=None, **kwargs):
         super().__init__(*args, **kwargs)
