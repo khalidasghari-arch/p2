@@ -4,7 +4,7 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, Assessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipdetails  
+from .models import HQIPAssessmentHeader, safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, HQIPAssessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipdetails  
 from .forms import AimpeeAdminForm, AimpphAdminForm
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
@@ -13,6 +13,9 @@ from .models import UserProfile
 from hiva.admin_utils import user_province
 from django.urls import path
 from django.http import JsonResponse
+from django.db import transaction
+from django import forms
+from django.forms.models import BaseInlineFormSet
 
 class ProvinceRestrictedAdminMixin:
     """
@@ -788,57 +791,178 @@ class MyModelAdmin(admin.ModelAdmin):
     def get_phase(self, obj):
         return obj.districtfk.provincefk.phase
 
-class MyModelAdminHqip(admin.ModelAdmin):
-    list_display = ['id', 'assessmentdate','areafk', 'sectionfk', 'standardfk',
-                    'assesorfk','assessmenttype', 
-                    'criteriafk', 'scorefk',
-                    'facilityfk',
-                     'implementorfk']
-    list_filter = ['areafk', 'facilityfk']  # Add filter for parent
-    # search_fields = ['criteriafk']  # Search child name and parent name
-    list_per_page = 15  # Set pagination (10 rows per page)
+class AssessmentLineForm(forms.ModelForm):
+    class Meta:
+        model = HQIPAssessment
+        fields = "__all__"
 
-    # Custom action to export to Excel
-    def export_to_excel(self, request, queryset):
-        # Create an Excel workbook
-        workbook = openpyxl.Workbook()
-        sheet = workbook.active
-        sheet.title = "Exported Data"
-        
-        # Write the header row
-        headers = ['id', 'assessment date','area fk', 'assesor fk','assessment type', 'criteria fk', 'facility fk'
-                     , 'implementor fk', 'score fk', 'section fk', 'standard fk']
-        sheet.append(headers)
-        
-        # Write data rows
-        for obj in queryset:
-            row = [
-                str(obj.id) if obj.id is not None else '', 
-                str(obj.assessmentdate) if obj.assessmentdate is not None else '', 
-                str(obj.areafk) if obj.areafk is not None else '', 
-                str(obj.assesorfk) if obj.assesorfk is not None else '',
-                str(obj.assessmenttype) if obj.assessmenttype is not None else '', 
-                str(obj.criteriafk) if obj.criteriafk is not None else '', 
-                str(obj.facilityfk) if obj.facilityfk is not None else '',
-                str(obj.implementorfk) if obj.implementorfk is not None else '', 
-                str(obj.scorefk) if obj.areafk is not None else '', 
-                str(obj.sectionfk) if obj.sectionfk is not None else '', 
-                str(obj.standardfk) if obj.standardfk is not None else ''
-                ]
-            sheet.append(row)
-        
-        # Create a response to download the Excel file
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("scorefk"):
+            raise forms.ValidationError("Score is required for every criterion.")
+        return cleaned
+
+class RequiredScoreInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data"):
+                continue
+            if form.cleaned_data.get("DELETE"):
+                continue
+            if not form.cleaned_data.get("scorefk"):
+                raise forms.ValidationError("Please fill score for all criteria before saving.")
+
+class AssessmentLineInline(admin.TabularInline):
+    model = HQIPAssessment
+    extra = 0
+    min_num = 0
+    can_delete = False
+    show_change_link = False
+    form = AssessmentLineForm
+    formset = RequiredScoreInlineFormSet
+    
+     # show read-only context + editable score
+    fields = ("get_section", "get_standard", "get_criteria", "scorefk", "remarks")
+    readonly_fields = ("get_section", "get_standard", "get_criteria")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "criteriafk",
+            "criteriafk__standardfk",
+            "criteriafk__standardfk__sectionfk",
+            "scorefk",
+        ).order_by(
+            "criteriafk__standardfk__sectionfk__id",
+            "criteriafk__standardfk__id",
+            "criteriafk__id",
         )
-        response['Content-Disposition'] = 'attachment; filename="exported_data.xlsx"'
-        workbook.save(response)
-        return response
+
+    def get_section(self, obj):
+        try:
+            return obj.criteriafk.standardfk.sectionfk.name
+        except Exception:
+            return "-"
+    get_section.short_description = "Section"
+
+    def get_standard(self, obj):
+        try:
+            return obj.criteriafk.standardfk.name
+        except Exception:
+            return "-"
+    get_standard.short_description = "Standard"
+
+    def get_criteria(self, obj):
+        return obj.criteriafk.name if obj.criteriafk_id else "-"
+    get_criteria.short_description = "Criteria"
+
+    def has_add_permission(self, request, obj=None):
+        return False
     
-    export_to_excel.short_description = "Export to Excel"  # Name of the action
+    class Media:
+        js = ("admin/hqip_inline_group.js",)
+        css = {"all": ("admin/hqip_inline_group.css",)}
+     
+@admin.register(HQIPAssessmentHeader)
+class AssessmentHeaderAdmin(admin.ModelAdmin):
+    inlines = [AssessmentLineInline]
+    list_display = ("facilityfk", "assessmenttype", "assessmentdate", "areafk")
+    list_filter = ("assessmenttype", "areafk", "facilityfk__districtfk__provincefk")
+    search_fields = ("facilityfk__name", "facilityfk__hfcode")
+    inlines = [AssessmentLineInline]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Province-based facility restriction
+        if not request.user.is_superuser:
+            prov = getattr(getattr(request.user, "profile", None), "province", None)
+            if prov:
+                form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.filter(
+                    districtfk__provincefk=prov
+                )
+            else:
+                form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.none()
+        return form
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        # After header is saved, ensure all criteria lines exist for that area
+        criteria_qs = Criteria.objects.filter(
+            standardfk__sectionfk__areafk=obj.areafk
+        ).select_related("standardfk", "standardfk__sectionfk").order_by(
+            "standardfk__sectionfk__id", "standardfk__id", "id"
+        )
+
+        existing_ids = set(obj.lines.values_list("criteriafk_id", flat=True))
+        to_create = []
+
+        for c in criteria_qs:
+            if c.id in existing_ids:
+                continue
+            to_create.append(HQIPAssessment(
+                header=obj,
+                criteriafk=c,
+                scorefk=None,
+                remarks=""
+            ))
+
+        with transaction.atomic():
+            if to_create:
+                HQIPAssessment.objects.bulk_create(to_create)
+
+# class MyModelAdminHqip(admin.ModelAdmin):
+#     list_display = ['id', 'assessmentdate','areafk', 'sectionfk', 'standardfk',
+#                     'assesorfk','assessmenttype', 
+#                     'criteriafk', 'scorefk',
+#                     'facilityfk',
+#                      'implementorfk']
+#     list_filter = ['areafk', 'facilityfk']  # Add filter for parent
+#     # search_fields = ['criteriafk']  # Search child name and parent name
+#     list_per_page = 15  # Set pagination (10 rows per page)
+
+#     # Custom action to export to Excel
+#     def export_to_excel(self, request, queryset):
+#         # Create an Excel workbook
+#         workbook = openpyxl.Workbook()
+#         sheet = workbook.active
+#         sheet.title = "Exported Data"
+        
+#         # Write the header row
+#         headers = ['id', 'assessment date','area fk', 'assesor fk','assessment type', 'criteria fk', 'facility fk'
+#                      , 'implementor fk', 'score fk', 'section fk', 'standard fk']
+#         sheet.append(headers)
+        
+#         # Write data rows
+#         for obj in queryset:
+#             row = [
+#                 str(obj.id) if obj.id is not None else '', 
+#                 str(obj.assessmentdate) if obj.assessmentdate is not None else '', 
+#                 str(obj.areafk) if obj.areafk is not None else '', 
+#                 str(obj.assesorfk) if obj.assesorfk is not None else '',
+#                 str(obj.assessmenttype) if obj.assessmenttype is not None else '', 
+#                 str(obj.criteriafk) if obj.criteriafk is not None else '', 
+#                 str(obj.facilityfk) if obj.facilityfk is not None else '',
+#                 str(obj.implementorfk) if obj.implementorfk is not None else '', 
+#                 str(obj.scorefk) if obj.areafk is not None else '', 
+#                 str(obj.sectionfk) if obj.sectionfk is not None else '', 
+#                 str(obj.standardfk) if obj.standardfk is not None else ''
+#                 ]
+#             sheet.append(row)
+        
+#         # Create a response to download the Excel file
+#         response = HttpResponse(
+#             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+#         )
+#         response['Content-Disposition'] = 'attachment; filename="exported_data.xlsx"'
+#         workbook.save(response)
+#         return response
     
-    # Register the action
-    actions = [export_to_excel]
+#     export_to_excel.short_description = "Export to Excel"  # Name of the action
+    
+#     # Register the action
+#     actions = [export_to_excel]
 
 class Trainingdetails(admin.StackedInline):  # Use StackedInline for a different layout
     model = Training
@@ -1054,7 +1178,7 @@ admin.site.register(Facility, MyModelAdmin)
 admin.site.register(Facilitytype)
 admin.site.register(Implementor)
 admin.site.register(Assessor, MyModelAssesors)
-admin.site.register(Assessment, MyModelAdminHqip)
+admin.site.register(HQIPAssessment)
 admin.site.register(Training)
 admin.site.register(Participationtype)
 admin.site.register(ThematicMentorship)

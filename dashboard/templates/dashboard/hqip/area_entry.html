@@ -1,0 +1,38 @@
+<h2>{{ area.name }} – Data Entry</h2>
+
+<form method="post">
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  {% regroup formset.forms by instance.sectionfk as section_groups %}
+
+  {% for section_group in section_groups %}
+    <h3 style="margin-top:18px;">Section: {{ section_group.grouper.name }}</h3>
+
+    {% regroup section_group.list by instance.standardfk as standard_groups %}
+    {% for std_group in standard_groups %}
+      <h4 style="margin-top:10px;">Standard: {{ std_group.grouper.name }}</h4>
+
+      <table border="1" cellpadding="6" cellspacing="0" width="100%">
+        <tr>
+          <th width="55%">Criteria</th>
+          <th width="15%">Score</th>
+          <th width="30%">Remarks</th>
+        </tr>
+
+        {% for form in std_group.list %}
+          <tr>
+            <td>{{ form.instance.criteriafk.name }}</td>
+            <td>{{ form.scorefk }}</td>
+            <td>{{ form.remarks }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% endfor %}
+  {% endfor %}
+
+  <div style="margin-top:14px;">
+    <button type="submit">Save</button>
+    <a href="{% url 'hqip_area_list' %}">Back to areas</a>
+  </div>
+</form>

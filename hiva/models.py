@@ -165,6 +165,7 @@ class Standards(models.Model):
 class Score(models.Model):
     name = models.TextField()
     shorname = models.TextField(blank=True)
+    value = models.IntegerField(default=0)
 
     class Meta:
         verbose_name = "HQIP SCORE"
@@ -272,27 +273,52 @@ class Mentorshipdetails(models.Model):
 
     def __int__(self):
         return self.id
-
-class Assessment(models.Model):
-    areafk = models.ForeignKey(Area, on_delete=models.CASCADE)
-    sectionfk = models.ForeignKey(Section, on_delete=models.CASCADE)
-    standardfk = models.ForeignKey(Standards, on_delete=models.CASCADE)
-    criteriafk = models.ForeignKey(Criteria, on_delete=models.CASCADE)
-    scorefk = models.ForeignKey(Score, on_delete=models.CASCADE)
-    assesorfk = models.ForeignKey(Assessor, on_delete=models.CASCADE)
+    
+class HQIPAssessmentHeader(models.Model):
     facilityfk = models.ForeignKey(Facility, on_delete=models.CASCADE)
+    assesorfk = models.ForeignKey(Assessor, on_delete=models.CASCADE)
     implementorfk = models.ForeignKey(Implementor, on_delete=models.CASCADE)
     assessmenttype = models.ForeignKey(Assessmenttype, on_delete=models.CASCADE)
     assessmentdate = models.DateField()
+    assessmentend_date = models.DateField()
+    areafk = models.ForeignKey(Area, on_delete=models.CASCADE)
     remarks = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "HQIP ASSESSMENT"
         verbose_name_plural = "HQIP ASSESSMENT"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["facilityfk", "assessmenttype", "assessmentdate", "areafk"],
+                name="uniq_hdr_fac_type_date_area"
+            )
+        ]
 
     def __str__(self):
-        return self.remarks
-    
+        return f"{self.facilityfk} | {self.assessmenttype} | {self.assessmentdate} | {self.areafk}"
+
+class HQIPAssessment(models.Model):
+    header = models.ForeignKey(HQIPAssessmentHeader, on_delete=models.CASCADE, related_name="lines", null=True, blank=True)
+    criteriafk = models.ForeignKey(Criteria, on_delete=models.CASCADE)
+    scorefk = models.ForeignKey(Score, on_delete=models.PROTECT, null=True, blank=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "HQIP ASSESSMENT DETAILS"
+        verbose_name_plural = "HQIP ASSESSMENT DETAILS"
+        constraints = [
+            models.UniqueConstraint(fields=["header", "criteriafk"], name="uniq_line_per_criteria")
+        ]
+
+    def __str__(self):
+        try:
+            sec = self.criteriafk.standardfk.sectionfk.shortname or self.criteriafk.standardfk.sectionfk.name
+            std = self.criteriafk.standardfk.shortname or self.criteriafk.standardfk.name
+            cri = self.criteriafk.shortname or self.criteriafk.name
+            return f"{sec} > {std} > {cri}"
+        except Exception:
+            return f"Assessment #{self.pk}"
+   
 class Participationtype(models.Model):
     name = models.TextField()
 

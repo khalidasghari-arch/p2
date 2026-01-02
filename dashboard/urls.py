@@ -1,6 +1,8 @@
 from django.urls import path
-from .views import map_dashboard
+from . import views
 
 urlpatterns = [
-    path('maternal-map/', map_dashboard, name='maternal-map'),
+    path("hqip/start/", views.hqip_start, name="hqip_start"),
+    path("hqip/areas/", views.hqip_area_list, name="hqip_area_list"),
+    path("hqip/areas/<int:area_id>/entry/", views.hqip_area_entry, name="hqip_area_entry"),
 ]

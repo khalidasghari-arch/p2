@@ -23,6 +23,7 @@ from django.shortcuts import redirect
 urlpatterns = [
     path("", lambda request: redirect("admin/")),
     path("admin/", admin.site.urls),
+    path("dashboard/", include("dashboard.urls")),
     #path("", include("hiva.urls")),   # if you have app urls
     # path("", include("survey.urls")), # if you have
     # path('dashboard/', include('product.urls')),  # Add this line
