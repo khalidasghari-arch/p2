@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>KM Dashboard (MNH/QoC)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; min-width: 220px; }
+    .kpi { font-size: 26px; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px;}
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { text-align: left; background: #f7f7f7; }
+    .small { color: #666; font-size: 12px; }
+    .badge { padding: 3px 8px; border-radius: 999px; background: #eee; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<h2>KM Dashboard — MNH/QoC</h2>
+
+{% if is_restricted %}
+  <p class="small">Access: Province-restricted ({{ restricted_province.name }})</p>
+{% else %}
+  <p class="small">Access: All provinces (admin)</p>
+{% endif %}
+
+<!-- Filters -->
+<form method="get" class="card" style="margin-bottom:14px;">
+  <div class="row">
+    <div>
+      <label>Year</label><br>
+      <input type="number" name="year" value="{{ filters.year }}" style="width:120px;">
+    </div>
+    <div>
+      <label>Month</label><br>
+      <input type="number" name="month" value="{{ filters.month }}" min="1" max="12" style="width:120px;">
+    </div>
+    <div>
+      <label>Theme</label><br>
+      <select name="theme" style="width:170px;">
+        <option value="">All</option>
+        {% for k,v in themes %}
+          <option value="{{ k }}" {% if filters.theme == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Optional: If you want province/district/facility dropdowns,
+         wire them in later (AJAX or server-populated). -->
+    <div style="align-self:end;">
+      <button type="submit">Apply</button>
+      <a href="/km/" style="margin-left:10px;">Reset</a>
+    </div>
+  </div>
+</form>
+
+<!-- KPI Cards -->
+<div class="row">
+  <div class="card">
+    <div class="small">KM Products (docs)</div>
+    <div class="kpi">{{ kpis.total_docs }}</div>
+    <div class="small">Learning briefs, SOPs, AARs, etc.</div>
+  </div>
+
+  <div class="card">
+    <div class="small">Recommendations</div>
+    <div class="kpi">{{ kpis.total_recs }}</div>
+    <div class="small">From mentorship/supervision/QI</div>
+  </div>
+
+  <div class="card">
+    <div class="small">Implemented</div>
+    <div class="kpi">{{ kpis.implemented }}</div>
+    <div class="small">Status = Done</div>
+  </div>
+
+  <div class="card">
+    <div class="small">Implementation rate</div>
+    <div class="kpi">{{ kpis.impl_rate }}%</div>
+    <div class="small">Implemented / total</div>
+  </div>
+
+  <div class="card">
+    <div class="small">Pending</div>
+    <div class="kpi">{{ kpis.pending }}</div>
+    <div class="small">Pending + In progress + Blocked</div>
+  </div>
+</div>
+
+<!-- Trends -->
+<div class="row" style="margin-top:14px;">
+  <div class="card" style="flex:1; min-width: 320px;">
+    <h3 style="margin:0 0 8px 0;">Monthly KM Products</h3>
+    <div class="small">Docs count by month (selected year)</div>
+    <table>
+      <tr><th>Month</th><th># Docs</th></tr>
+      {% for r in docs_trend %}
+        <tr><td>{{ r.month }}</td><td>{{ r.n }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">No data</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card" style="flex:1; min-width: 320px;">
+    <h3 style="margin:0 0 8px 0;">Recommendations Implementation Trend</h3>
+    <div class="small">Total vs Done (selected year)</div>
+    <table>
+      <tr><th>Month</th><th>Total</th><th>Done</th></tr>
+      {% for r in recs_impl_trend %}
+        <tr><td>{{ r.month }}</td><td>{{ r.total }}</td><td>{{ r.done }}</td></tr>
+      {% empty %}
+        <tr><td colspan="3">No data</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<!-- Facility Snapshot -->
+<div class="card" style="margin-top:14px;">
+  <h3 style="margin:0 0 8px 0;">Facility Action Snapshot</h3>
+  <div class="small">Sorted by pending actions (highest first)</div>
+  <table>
+    <tr>
+      <th>Facility</th>
+      <th>Total</th>
+      <th>Done</th>
+      <th>Pending</th>
+      <th>Implementation %</th>
+    </tr>
+    {% for r in facility_table %}
+      <tr>
+        <td>{{ r.facility_name }}</td>
+        <td>{{ r.total }}</td>
+        <td>{{ r.done }}</td>
+        <td><span class="badge">{{ r.pending }}</span></td>
+        <td>{{ r.rate }}%</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5">No recommendations found for selected filters.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<div>
+  <label>Province</label><br>
+  <select name="province" id="provinceSelect" style="width:170px;">
+    <option value="">All</option>
+    {% if not is_restricted %}
+      {% for p in provinces %}
+        <option value="{{ p.id }}" {% if filters.province_id == p.id %}selected{% endif %}>
+          {{ p.name }}
+        </option>
+      {% endfor %}
+    {% else %}
+      <option value="{{ restricted_province.id }}" selected>{{ restricted_province.name }}</option>
+    {% endif %}
+  </select>
+</div>
+
+<div>
+  <label>District</label><br>
+  <select name="district" id="districtSelect" style="width:170px;">
+    <option value="">All</option>
+  </select>
+</div>
+
+<div>
+  <label>Facility</label><br>
+  <select name="facility" id="facilitySelect" style="width:220px;">
+    <option value="">All</option>
+  </select>
+</div>
+<script>
+(async function () {
+  const provinceSel = document.getElementById("provinceSelect");
+  const districtSel = document.getElementById("districtSelect");
+  const facilitySel = document.getElementById("facilitySelect");
+
+  const selectedDistrict = "{{ filters.district_id|default:'' }}";
+  const selectedFacility = "{{ filters.facility_id|default:'' }}";
+
+  async function loadDistricts() {
+    districtSel.innerHTML = '<option value="">All</option>';
+    facilitySel.innerHTML = '<option value="">All</option>';
+
+    const provinceId = provinceSel.value;
+    if (!provinceId) return;
+
+    const res = await fetch(`/km/api/districts/?province_id=${provinceId}`);
+    const data = await res.json();
+
+    data.results.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.name;
+      if (String(d.id) === String(selectedDistrict)) opt.selected = true;
+      districtSel.appendChild(opt);
+    });
+
+    if (selectedDistrict) await loadFacilities();
+  }
+
+  async function loadFacilities() {
+    facilitySel.innerHTML = '<option value="">All</option>';
+
+    const districtId = districtSel.value;
+    if (!districtId) return;
+
+    const res = await fetch(`/km/api/facilities/?district_id=${districtId}`);
+    const data = await res.json();
+
+    data.results.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (String(f.id) === String(selectedFacility)) opt.selected = true;
+      facilitySel.appendChild(opt);
+    });
+  }
+
+  provinceSel.addEventListener("change", loadDistricts);
+  districtSel.addEventListener("change", loadFacilities);
+
+  // initial load
+  if (provinceSel.value) await loadDistricts();
+})();
+</script>
+
+</body>
+</html>
