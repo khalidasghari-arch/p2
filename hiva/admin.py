@@ -14,48 +14,8 @@ from hiva.admin_utils import user_province
 from django.urls import path
 from django.http import JsonResponse
 from django.db import transaction
-from django import forms
 from django.forms.models import BaseInlineFormSet
-
-class ProvinceRestrictedAdminMixin:
-    """
-    Restrict queryset to user's province (unless superuser).
-    Requires subclasses to implement:
-      - province_filter_kwargs(request): returns dict for queryset.filter(...)
-    """
-
-    def province_filter_kwargs(self, request):
-        """
-        Example return:
-          {"aimfacilityname__districtfk__provincefk": request.user.profile.province}
-        """
-        raise NotImplementedError
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        prov = user_province(request)
-        if prov is None:
-            return qs
-        return qs.filter(**self.province_filter_kwargs(request))
-
-    def has_view_permission(self, request, obj=None):
-        if obj is None or request.user.is_superuser:
-            return True
-        prov = user_province(request)
-        if prov is None:
-            return True
-        # If object not in province => no permission
-        return self.get_queryset(request).filter(pk=obj.pk).exists()
-
-    def has_change_permission(self, request, obj=None):
-        if request.user.is_superuser or obj is None:
-            return True
-        if obj.status == "approved":
-            return False
-        return self.get_queryset(request).filter(pk=obj.pk).exists()
-
-    def has_delete_permission(self, request, obj=None):
-        return self.has_view_permission(request, obj)
+from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 
 admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
 admin.site.site_title = "Health Admin Portal"
@@ -766,28 +726,24 @@ class ProvinceFilter(admin.SimpleListFilter):
             return queryset.filter(districtfk__provincefk__id=self.value())
         return queryset
 
-class MyModelAdmin(admin.ModelAdmin):
+@admin.register(Facility)
+class FacilityAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
-        'id', 'get_province', 'get_phase', 'districtfk', 'name', 'hfcode', 
-        'facilitytypefk', 'skilllab', 'aim', 'aimphase', 'safesurgery', 
-        'ganc', 'afiat'
+        'id', 'get_province', 'get_phase', 'districtfk', 'name', 'hfcode',
+        'facilitytypefk', 'skilllab', 'aim', 'aimphase', 'safesurgery', 'ganc', 'afiat'
     ]
-    
-    list_filter = [
-        'districtfk__provincefk__phase',   # Phase first
-        ProvinceFilter,                    # Province second (custom filter)
-        'facilitytypefk'                   # Facility type third
-    ]
-    
+    list_filter = ['districtfk__provincefk__phase', 'districtfk__provincefk', 'facilitytypefk']
     search_fields = ['name', 'districtfk__name', 'districtfk__provincefk__name']
     list_per_page = 15
-    ordering = ['districtfk__provincefk__name', 'districtfk__name']
 
-    @admin.display(description='Province')
+    def province_filter_kwargs(self, request):
+        return {"districtfk__provincefk": request.user.profile.province}
+    
+    @admin.display(description="Province")
     def get_province(self, obj):
         return obj.districtfk.provincefk.name
 
-    @admin.display(description='Phase')
+    @admin.display(description="Phase")
     def get_phase(self, obj):
         return obj.districtfk.provincefk.phase
 
@@ -816,19 +772,19 @@ class RequiredScoreInlineFormSet(BaseInlineFormSet):
 class AssessmentLineInline(admin.TabularInline):
     model = HQIPAssessment
     extra = 0
-    min_num = 0
     can_delete = False
     show_change_link = False
     form = AssessmentLineForm
     formset = RequiredScoreInlineFormSet
-    
-     # show read-only context + editable score
+
+    # show read-only context + editable score
     fields = ("get_section", "get_standard", "get_criteria", "scorefk")
     readonly_fields = ("get_section", "get_standard", "get_criteria")
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related(
+        qs = super().get_queryset(request).select_related(
+            "header",
+            "header__facilityfk__districtfk__provincefk",
             "criteriafk",
             "criteriafk__standardfk",
             "criteriafk__standardfk__sectionfk",
@@ -839,56 +795,84 @@ class AssessmentLineInline(admin.TabularInline):
             "criteriafk__id",
         )
 
+        # Province restriction (optional but safe)
+        if request.user.is_superuser:
+            return qs
+
+        prov = user_province(request)
+        if not prov:
+            return qs.none()
+
+        return qs.filter(header__facilityfk__districtfk__provincefk=prov)
+
+    @admin.display(description="Section")
     def get_section(self, obj):
-        try:
+        if obj.criteriafk_id:
             return obj.criteriafk.standardfk.sectionfk.name
-        except Exception:
-            return "-"
-    get_section.short_description = "Section"
+        return "-"
 
+    @admin.display(description="Standard")
     def get_standard(self, obj):
-        try:
+        if obj.criteriafk_id:
             return obj.criteriafk.standardfk.name
-        except Exception:
-            return "-"
-    get_standard.short_description = "Standard"
+        return "-"
 
+    @admin.display(description="Criteria")
     def get_criteria(self, obj):
         return obj.criteriafk.name if obj.criteriafk_id else "-"
-    get_criteria.short_description = "Criteria"
 
     def has_add_permission(self, request, obj=None):
         return False
-    
-    class Media:
-        js = ("admin/hqip_inline_group.js",)
-        css = {"all": ("admin/hqip_inline_group.css",)}
      
 @admin.register(HQIPAssessmentHeader)
-class AssessmentHeaderAdmin(admin.ModelAdmin):
+class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
     list_display = ("facilityfk", "assessmenttype", "assessmentdate", "areafk")
     list_filter = ("assessmenttype", "areafk", "facilityfk__districtfk__provincefk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
-    inlines = [AssessmentLineInline]
+
+    def province_filter_kwargs(self, request):
+        return {"facilityfk__districtfk__provincefk": request.user.profile.province}
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        # Province-based facility restriction
+
+        # Facility dropdown restriction
         if not request.user.is_superuser:
-            prov = getattr(getattr(request.user, "profile", None), "province", None)
+            prov = user_province(request)
             if prov:
                 form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.filter(
                     districtfk__provincefk=prov
                 )
             else:
                 form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.none()
+
         return form
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+        Extra safety: restrict assessor/implementor dropdowns too (if you want)
+        """
+        prov = user_province(request)
+        if request.user.is_superuser or not prov:
+            return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+        if db_field.name == "facilityfk":
+            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov)
+
+        # If Assessor has province FK field named "province"
+        if db_field.name == "assesorfk" and hasattr(Assessor, "province"):
+            kwargs["queryset"] = Assessor.objects.filter(province=prov)
+
+        # If Implementor has province FK field named "province"
+        if db_field.name == "implementorfk" and hasattr(Implementor, "province"):
+            kwargs["queryset"] = Implementor.objects.filter(province=prov)
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
-        # After header is saved, ensure all criteria lines exist for that area
         criteria_qs = Criteria.objects.filter(
             standardfk__sectionfk__areafk=obj.areafk
         ).select_related("standardfk", "standardfk__sectionfk").order_by(
@@ -910,6 +894,15 @@ class AssessmentHeaderAdmin(admin.ModelAdmin):
         with transaction.atomic():
             if to_create:
                 HQIPAssessment.objects.bulk_create(to_create)
+
+@admin.register(HQIPAssessment)
+class HQIPAssessmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "header", "criteriafk", "scorefk")
+    search_fields = ("criteriafk__name", "header__facilityfk__name")
+    list_select_related = ("header", "header__facilityfk__districtfk__provincefk", "criteriafk", "scorefk")
+
+    def province_filter_kwargs(self, request):
+        return {"header__facilityfk__districtfk__provincefk": request.user.profile.province}
 
 # class MyModelAdminHqip(admin.ModelAdmin):
 #     list_display = ['id', 'assessmentdate','areafk', 'sectionfk', 'standardfk',
@@ -1173,11 +1166,9 @@ admin.site.register(Area, MyModelArea)
 admin.site.register(Assessmenttype)
 admin.site.register(Province, MyModelProvince)
 admin.site.register(District, MyModelDistricts)
-admin.site.register(Facility, MyModelAdmin)
 admin.site.register(Facilitytype)
 admin.site.register(Implementor)
 admin.site.register(Assessor, MyModelAssesors)
-admin.site.register(HQIPAssessment)
 admin.site.register(Training)
 admin.site.register(Participationtype)
 admin.site.register(ThematicMentorship)
