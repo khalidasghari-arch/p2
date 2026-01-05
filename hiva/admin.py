@@ -729,10 +729,10 @@ class ProvinceFilter(admin.SimpleListFilter):
 @admin.register(Facility)
 class FacilityAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
-        'id', 'get_province', 'get_phase', 'districtfk', 'name', 'hfcode',
+        'id', 'get_province', 'districtfk', 'name', 'hfcode',
         'facilitytypefk', 'skilllab', 'aim', 'aimphase', 'safesurgery', 'ganc', 'afiat'
     ]
-    list_filter = ['districtfk__provincefk__phase', 'districtfk__provincefk', 'facilitytypefk']
+    list_filter = ['districtfk__provincefk', 'facilitytypefk']
     search_fields = ['name', 'districtfk__name', 'districtfk__provincefk__name']
     list_per_page = 15
 
@@ -828,7 +828,7 @@ class AssessmentLineInline(admin.TabularInline):
 class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
     list_display = ("facilityfk", "assessmenttype", "assessmentdate", "areafk")
-    list_filter = ("assessmenttype", "areafk", "facilityfk__districtfk__provincefk")
+    list_filter = ("assessmenttype", "areafk", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
     def province_filter_kwargs(self, request):

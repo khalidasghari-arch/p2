@@ -275,13 +275,13 @@ class Mentorshipdetails(models.Model):
         return self.id
     
 class HQIPAssessmentHeader(models.Model):
-    facilityfk = models.ForeignKey(Facility, on_delete=models.CASCADE)
-    assesorfk = models.ForeignKey(Assessor, on_delete=models.CASCADE)
-    implementorfk = models.ForeignKey(Implementor, on_delete=models.CASCADE)
-    assessmenttype = models.ForeignKey(Assessmenttype, on_delete=models.CASCADE)
-    assessmentdate = models.DateField()
-    assessmentend_date = models.DateField()
-    areafk = models.ForeignKey(Area, on_delete=models.CASCADE)
+    facilityfk = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility")
+    assesorfk = models.ForeignKey(Assessor, on_delete=models.CASCADE, verbose_name="Assessor")
+    implementorfk = models.ForeignKey(Implementor, on_delete=models.CASCADE, verbose_name="Implementor")
+    assessmenttype = models.ForeignKey(Assessmenttype, on_delete=models.CASCADE, verbose_name="Assessment Type")
+    assessmentdate = models.DateField(verbose_name="Assessment Start Date")
+    assessmentend_date = models.DateField(verbose_name="Assessment End Date")
+    areafk = models.ForeignKey(Area, on_delete=models.CASCADE, verbose_name="Thematic Area")
     #remarks = models.TextField(max_length=10, blank=True, null=True)
 
     class Meta:
