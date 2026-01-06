@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 class Province(models.Model):
     name = models.CharField(max_length=200, unique=True)
@@ -88,6 +89,9 @@ class Facility(models.Model):
 class Implementor(models.Model):
     name = models.CharField(max_length=200)
     shortname = models.TextField(blank=True)
+    provinceimplementor = models.ForeignKey(
+        Province, on_delete=models.CASCADE, 
+        null=True, blank=True)
 
     class Meta:
         verbose_name = "IMPLEMENTER"
@@ -282,7 +286,26 @@ class HQIPAssessmentHeader(models.Model):
     assessmentdate = models.DateField(verbose_name="Assessment Start Date")
     assessmentend_date = models.DateField(verbose_name="Assessment End Date")
     areafk = models.ForeignKey(Area, on_delete=models.CASCADE, verbose_name="Thematic Area")
-    #remarks = models.TextField(max_length=10, blank=True, null=True)
+    assessmentteam = models.TextField(
+        max_length=80, blank=True, null=True,
+        verbose_name="Assessment Team")
+    is_RCAduringtheassessment = models.BooleanField(
+        choices=[
+            (True, "Yes"),
+            (False, "No"),
+        ],
+        default=False,
+        verbose_name="Root Cause Assessment (RCA) conducted during the assessment", 
+        blank=True, null=True)
+    
+    def clean(self):
+        super().clean()
+
+        if self.assessmentdate and self.assessmentend_date:
+            if self.assessmentend_date < self.assessmentdate:
+                raise ValidationError({
+                    "assessmentend_date": "Assessment End Date cannot be earlier than Assessment Start Date."
+                })
 
     class Meta:
         verbose_name = "HQIP ASSESSMENT"
