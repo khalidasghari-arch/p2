@@ -16,7 +16,7 @@ class PatientSafetyHeader(models.Model):
     facility = models.ForeignKey("hiva.Facility", on_delete=models.PROTECT, related_name="patientsafety_headers")
     assessor = models.ForeignKey("hiva.Assessor", on_delete=models.PROTECT, related_name="patientsafety_assessments")
     staff_profession = models.ForeignKey(
-        'mentorship.Position',
+        'hiva.Position',
         on_delete=models.PROTECT,   # or your existing on_delete
         null=True,
         blank=True,

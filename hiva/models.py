@@ -103,7 +103,17 @@ class Implementor(models.Model):
 
     def __str__(self):
         return self.name
+    
+class Position(models.Model):
+    name = models.CharField(verbose_name="Position")
 
+    class Meta:
+        verbose_name = "STAFF PROFESSION"
+        verbose_name_plural = "STAFF PROFESSION"
+
+    def __str__(self):
+        return self.name
+    
 class Assessor(models.Model):
     name = models.CharField(max_length=200, verbose_name="Assessor Name")
     contact = models.TextField(blank=True)

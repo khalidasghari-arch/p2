@@ -39,22 +39,12 @@ class Mentorshipvisit(models.Model):
 
     def __str__(self):
         return f"Mentorship Visit Date {self.visitdate}"
-    
-class Position(models.Model):
-    name = models.CharField(verbose_name="Position")
-
-    class Meta:
-        verbose_name = "STAFF PROFESSION"
-        verbose_name_plural = "STAFF PROFESSION"
-
-    def __str__(self):
-        return self.name
 
 class Staff(models.Model):
     hfname = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE)
     firstname = models.CharField()
     lastname = models.CharField(blank=True, null=True)
-    position = models.ForeignKey(Position, on_delete=models.CASCADE)
+    position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE)
     tazkiranumber = models.CharField(blank=True, null=True)
     gender = models.BooleanField(
         choices=[
