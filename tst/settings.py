@@ -43,6 +43,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 INSTALLED_APPS = [
     'hiva',
     'km_dashboard',
+    'mentorship',
     'product.apps.ProductConfig',
     'django.contrib.admin',
     'django.contrib.auth',
