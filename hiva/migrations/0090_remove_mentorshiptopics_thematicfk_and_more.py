@@ -117,11 +117,11 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name='Mentorshipvisit',
         ),
-        migrations.SeparateDatabaseAndState(
-            database_operations=[],
-            state_operations=[
-            migrations.DeleteModel(name='Position'),],
-        ),
+        # migrations.SeparateDatabaseAndState(
+        #     database_operations=[],
+        #     state_operations=[
+        #     migrations.DeleteModel(name='Position'),],
+        # ),
         migrations.DeleteModel(
             name='Staff',
         ),
