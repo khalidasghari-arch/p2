@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class Province(models.Model):
     name = models.CharField(max_length=200, unique=True)
@@ -29,7 +30,7 @@ class UserProfile(models.Model):
     
 class District(models.Model):
     provincefk = models.ForeignKey(Province, on_delete=models.CASCADE, default=1)
-    name = models.TextField(max_length=200)
+    name = models.TextField(max_length=200, unique=True, verbose_name="District Name")
     description = models.TextField(blank=True)
     districtcode = models.IntegerField(blank=True, null=True)
     district = models.CharField(blank=True, null=True)
@@ -44,7 +45,7 @@ class District(models.Model):
         return self.name
 
 class Facilitytype(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     shortname = models.TextField(blank=True)
     namedari = models.CharField(blank=True, null=True)
     namepashto = models.CharField(blank=True, null=True)
@@ -59,7 +60,7 @@ class Facilitytype(models.Model):
 class Facility(models.Model):
     districtfk = models.ForeignKey(District, on_delete=models.CASCADE, default=1, verbose_name='District')
     facilitytypefk = models.ForeignKey(Facilitytype, on_delete=models.CASCADE, default=1, verbose_name='Facility Type')
-    name = models.TextField(max_length=200, verbose_name='Facility Name')
+    name = models.TextField(max_length=200, unique=True, verbose_name='Facility Name')
     description = models.TextField(blank=True)
     hfcode = models.IntegerField(blank=True, null=True)
     namedari = models.CharField(blank=True, null=True)
@@ -76,8 +77,11 @@ class Facility(models.Model):
     safesurgery = models.BooleanField(blank=True, null=True, verbose_name='Safe Surgery')
     ganc = models.BooleanField(blank=True, null=True, verbose_name='G-ANC/G-PNC')
     afiat = models.BooleanField(blank=True, null=True, verbose_name='AFIAT')
-    skilllab = models.BooleanField(blank=True, default=False)
-    aimphase = models.IntegerField(blank=True, null=True)
+    skilllab = models.BooleanField(blank=True, default=False, verbose_name="Skill Lab")
+    aimphase = models.IntegerField(blank=True, null=True, verbose_name="AIM Phase")
+    nbcc = models.BooleanField(blank=True, null=True)
+    sncu = models.BooleanField(blank=True, null=True)
+    kmc = models.BooleanField(blank=True, null=True)
 
     class Meta:
         verbose_name = "HEALTH FACILITY"
@@ -87,7 +91,7 @@ class Facility(models.Model):
         return self.name
 
 class Implementor(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True, verbose_name="Service Provider(NGO)")
     shortname = models.TextField(blank=True)
     provinceimplementor = models.ForeignKey(
         Province, on_delete=models.CASCADE, 
@@ -101,16 +105,34 @@ class Implementor(models.Model):
         return self.name
 
 class Assessor(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, verbose_name="Assessor Name")
     contact = models.TextField(blank=True)
     email = models.CharField(blank=True, null=True)
     tazkira = models.CharField(blank=True, null=True)
-    gender = models.CharField(blank=True, null=True)
+    gender = models.BooleanField(choices=[
+            (True, "Female"),
+            (False, "Male"),
+        ],
+        default=True,
+        verbose_name="Gender", 
+        blank=True, null=True)
     implementer = models.ForeignKey(Implementor, on_delete=models.CASCADE, null=True, blank=True)
     province = models.ForeignKey(Province, on_delete=models.CASCADE, null=True, blank=True)
-    Status = models.CharField(blank=True, null=True)
+    status = models.BooleanField(choices=[
+            (True, "Active"),
+            (False, "Inactive"),
+        ],
+        default=True,
+        verbose_name="Status", 
+        blank=True, null=True)
     phaseonecloseout = models.DateField(blank=True, null=True)
-    continuetophase2 = models.BooleanField(blank=True, null=True)
+    continuetophase2 = models.BooleanField(  choices=[
+            (True, "Yes"),
+            (False, "No"),
+        ],
+        default=False,
+        verbose_name="Continued to Phase Two", 
+        blank=True, null=True)
     note = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -121,7 +143,7 @@ class Assessor(models.Model):
         return self.name
 
 class Assessmenttype(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True, verbose_name="Assessment Type")
     shortname = models.TextField(blank=True)
 
     class Meta:
@@ -132,7 +154,7 @@ class Assessmenttype(models.Model):
         return self.name
     
 class Area(models.Model):
-    name = models.TextField(max_length=200)
+    name = models.TextField(max_length=200, verbose_name="Thematic Area")
     shortname = models.TextField(blank=True)
 
     class Meta:
@@ -144,7 +166,7 @@ class Area(models.Model):
     
 class Section(models.Model):
     areafk = models.ForeignKey(Area, on_delete=models.CASCADE, null=True, blank=True)
-    name = models.TextField()
+    name = models.TextField(verbose_name="Section")
     shortname = models.TextField(blank=True)
 
     class Meta:
@@ -156,7 +178,7 @@ class Section(models.Model):
 
 class Standards(models.Model):
     sectionfk = models.ForeignKey(Section, on_delete=models.CASCADE, null=True, blank=True)
-    name = models.TextField()
+    name = models.TextField(verbose_name="Standard")
     shortname = models.TextField(blank=True)
 
     class Meta:
@@ -167,7 +189,7 @@ class Standards(models.Model):
         return self.name
     
 class Score(models.Model):
-    name = models.TextField()
+    name = models.TextField(verbose_name="Score")
     shorname = models.TextField(blank=True)
     value = models.IntegerField(default=0)
 
@@ -181,7 +203,7 @@ class Score(models.Model):
 class Criteria(models.Model):
     standardfk = models.ForeignKey(Standards, on_delete=models.CASCADE, null=True, blank=True)
     scorefk = models.ForeignKey(Score, on_delete=models.CASCADE)
-    name = models.TextField()
+    name = models.TextField(verbose_name="Verification Criteria")
     shortname = models.TextField(blank=True)
     namedari = models.TextField(blank=True)
     createdby = models.DateTimeField(null=True, blank=True)
@@ -192,91 +214,6 @@ class Criteria(models.Model):
 
     def __str__(self):
         return self.name
-    
-class ThematicMentorship(models.Model):
-    name = models.CharField()
-    shortname = models.CharField
-
-    class Meta:
-        verbose_name = "MENTORSHIP THEMATIC AREA"
-        verbose_name_plural = "MENTORSHIP THEMATIC AREA"
-
-    def __str__(self):
-        return self.name
-    
-class MentorshipTopics(models.Model):
-    thematicfk = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE, null=True, blank=True)
-    shortname = models.CharField(null=True, blank=True)
-    name = models.TextField()
-    namedari = models.TextField(null=True, blank=True)
-    namepashto = models.TextField(null=True, blank=True)
-    nameeng= models.TextField(null=True, blank=True)
-
-    class Meta:
-        verbose_name = "MENTORSHIP TOPIC"
-        verbose_name_plural = "MENTORSHIP TOPIC"
-
-    def __str__(self):
-        return self.name
-
-class Mentorshipvisit(models.Model):
-    facilityfk = models.ForeignKey(Facility, on_delete=models.CASCADE)
-    visitdate = models.DateField()
-    visitround = models.IntegerField(null=True, blank=True)
-    mentorshipstarttime = models.TimeField()
-    mentorshipendtime = models.TimeField()
-
-    class Meta:
-        verbose_name = "MENTORSHIP VISIT"
-        verbose_name_plural = "MENTORSHIP VISIT"
-
-    def __str__(self):
-        return f"Mentorship Visit Date {self.visitdate}"
-    
-class Position(models.Model):
-    name = models.CharField()
-
-    class Meta:
-        verbose_name = "STAFF PROFESSION"
-        verbose_name_plural = "STAFF PROFESSION"
-
-    def __str__(self):
-        return self.name
-
-class Staff(models.Model):
-    hfname = models.ForeignKey(Facility, on_delete=models.CASCADE)
-    firstname = models.CharField()
-    lastname = models.CharField(blank=True, null=True)
-    position = models.ForeignKey(Position, on_delete=models.CASCADE)
-    tazkiranumber = models.CharField(blank=True, null=True)
-    gender = models.CharField()
-    status = models.CharField()
-
-    class Meta:
-        verbose_name = "MENTEE"
-        verbose_name_plural = "MENTEE"
-
-    def __str__(self):
-        return self.firstname
-
-class Mentorshipdetails(models.Model):
-    mentorshipvistfk = models.ForeignKey(Mentorshipvisit, on_delete=models.CASCADE, related_name="items", null=True, blank=True)
-    menteename = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True)
-    thematicname = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE, null=True, blank=True) 
-    topicname = models.ForeignKey(MentorshipTopics, on_delete=models.CASCADE, null=True, blank=True, verbose_name="shortname") 
-    mentor = models.ForeignKey(Assessor, on_delete=models.CASCADE, null=True, blank=True)
-    ls = models.BooleanField()
-    pc = models.BooleanField()
-    mc = models.BooleanField()
-    image = models.ImageField(upload_to='images/', null=True, blank=True)  # Files are stored in the media directory by default
-    uploaded_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-
-    class Meta:
-        verbose_name = "MENTORSHIP DETAIL"
-        verbose_name_plural = "MENTORSHIP DETAIL"
-
-    def __int__(self):
-        return self.id
     
 class HQIPAssessmentHeader(models.Model):
     facilityfk = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility")
@@ -297,6 +234,27 @@ class HQIPAssessmentHeader(models.Model):
         default=False,
         verbose_name="Root Cause Assessment (RCA) conducted during the assessment", 
         blank=True, null=True)
+    
+    created_by = models.ForeignKey(
+    settings.AUTH_USER_MODEL, 
+    on_delete=models.PROTECT,
+    related_name="hqip_assessments_created", 
+    editable=False, null=True, blank=True)
+
+    created_at = models.DateTimeField(
+    default=timezone.now, editable=False)
+
+    updated_by = models.ForeignKey(
+    settings.AUTH_USER_MODEL,
+    on_delete=models.PROTECT,
+    related_name="hqip_assessments_updated",
+    editable=False,
+    null=True,
+    blank=True)
+
+    updated_at = models.DateTimeField(
+        auto_now=True, 
+        editable=False)
     
     def clean(self):
         super().clean()

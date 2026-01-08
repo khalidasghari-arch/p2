@@ -4,7 +4,7 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import HQIPAssessmentHeader, safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Position, Staff, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, Mentorshipvisit, HQIPAssessment, Training, Participationtype, ThematicMentorship, MentorshipTopics, Mentorshipdetails  
+from .models import HQIPAssessmentHeader, safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, HQIPAssessment, Training, Participationtype  
 from .forms import AimpeeAdminForm, AimpphAdminForm
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
@@ -16,9 +16,10 @@ from django.http import JsonResponse
 from django.db import transaction
 from django.forms.models import BaseInlineFormSet
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
+from django.utils import timezone
 
-admin.site.site_header = "Maternal and Newborn Information Management System (MNIMS)"
-admin.site.site_title = "Health Admin Portal"
+admin.site.site_header = "Maternal and Newborn Health Information Management System (MNHIMS)"
+admin.site.site_title = "IQoC Portal"
 admin.site.index_title = "M&E Data Management System"
 
 class ProvinceFromFacilityFilter(admin.SimpleListFilter):
@@ -694,14 +695,13 @@ class MyModelDistricts(admin.ModelAdmin):
 
 class MyModelAssesors(admin.ModelAdmin):
     list_display = ['id', 'name','contact', 'email','gender', 'tazkira', 'implementer', 
-                    'province', 'Status', 'phaseonecloseout', 'continuetophase2', 'note']
+                    'province', 'phaseonecloseout', 'continuetophase2', 'note']
     list_filter = ['province']  # Add filter for parent
     search_fields = ['name']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
 
 class ModelMentees(admin.ModelAdmin):
-    list_display = ['id', 'hfname','firstname', 'lastname','position', 'tazkiranumber', 'gender', 
-                    'status']
+    list_display = ['id', 'hfname','firstname', 'lastname','position', 'tazkiranumber', 'gender']
     list_filter = ['hfname']  # Add filter for parent
     search_fields = ['firstname']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
@@ -869,8 +869,16 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Implementor.objects.filter(province=prov)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
+    
     def save_model(self, request, obj, form, change):
+         # On create
+        if not obj.pk:
+            obj.created_by = request.user
+            obj.created_at = timezone.now()
+        # On update
+        else:
+            obj.updated_by = request.user
+            obj.updated_at = timezone.now()
         super().save_model(request, obj, form, change)
 
         criteria_qs = Criteria.objects.filter(
@@ -1030,7 +1038,7 @@ class gancfirstsession(admin.ModelAdmin):
     list_per_page = 10  # Set pagination (10 rows per page)
     #list_filter = ['facilityname']  # Add filter for parent
    
-@admin.register(Mentorshipvisit)
+#@admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(admin.ModelAdmin):
     list_display = ("id", "facilityfk", "visitdate", "visitround")
     list_filter = ("facilityfk__districtfk__provincefk__name",)
@@ -1171,13 +1179,8 @@ admin.site.register(Implementor)
 admin.site.register(Assessor, MyModelAssesors)
 admin.site.register(Training)
 admin.site.register(Participationtype)
-admin.site.register(ThematicMentorship)
-admin.site.register(MentorshipTopics, MyModelMentorshiptopics)
-admin.site.register(Position)
-admin.site.register(Staff, ModelMentees)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
 admin.site.register(Qicdataset, MyModelqicdataset)
-admin.site.register(Mentorshipdetails, ModelMentorshipdetails)
 
 

@@ -15,7 +15,7 @@ class PatientSafetyHeader(models.Model):
 
     facility = models.ForeignKey("hiva.Facility", on_delete=models.PROTECT, related_name="patientsafety_headers")
     assessor = models.ForeignKey("hiva.Assessor", on_delete=models.PROTECT, related_name="patientsafety_assessments")
-    staff_profession = models.ForeignKey("hiva.Position", on_delete=models.PROTECT, related_name="patientsafety_professions")
+    #staff_profession = models.ForeignKey("hiva.Position", on_delete=models.PROTECT, related_name="patientsafety_professions")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -88,7 +88,7 @@ class PatientSafetyHeaderAdmin(admin.ModelAdmin):
 
     list_display = (
         "id", "key_intervention_name", "facility", "get_province",
-        "surveymonth", "surveyyear", "assessor", "staff_profession", "created_at",
+        "surveymonth", "surveyyear", "assessor", "created_at",
     )
 
     search_fields = (
@@ -109,7 +109,6 @@ class PatientSafetyHeaderAdmin(admin.ModelAdmin):
         "surveymonth",
         "facility__facilitytypefk",
         "assessor",
-        "staff_profession",
     )
 
     actions = ["mark_submitted", "approve_selected", "reject_selected"]
