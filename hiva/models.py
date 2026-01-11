@@ -428,45 +428,82 @@ YCHOICES = [(2026, "2026"), (2027, "2027")]
     
 class Mpdsr(models.Model):
     yearmpdsr = models.IntegerField(default=2026, choices=YCHOICES, verbose_name="Year")
-    monthmpdsr = models.CharField(max_length=200, choices=MONTH_CHOICES, default="January", verbose_name="Month" )
-    facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+    # IMPORTANT: default must match the *value* in MONTH_CHOICES (e.g. "1"), not the label "January"
+    monthmpdsr = models.CharField(
+        max_length=2,
+        choices=MONTH_CHOICES,
+        default="1",
+        verbose_name="Month"
+    )
+
+    facilityname = models.ForeignKey(
+        "hiva.Facility",
+        on_delete=models.CASCADE,
+        verbose_name="Health Facility Name"
+    )
+
     n_mpdsrcommittee = models.IntegerField(default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
     n_maternaldeathreported = models.IntegerField(default=0, verbose_name="Number of Maternal Death reported")
     n_maternaldeathreviewed = models.IntegerField(default=0, verbose_name="Number of Maternal Death reviewed")
     causeofmaternaldeaths_m = models.TextField(max_length=200, verbose_name="Cause of maternal deaths")
+
     nastillbirthreportedreported = models.IntegerField(default=0, verbose_name="Number of antepartum Still birth reported")
     nastillbirthreportedreviewed = models.IntegerField(default=0, verbose_name="Number of antepartum Still birth reviewed")
+
     nistillbirthreported = models.IntegerField(default=0, verbose_name="Number of intrapartum Still birth reported")
     nistillbirthreviewed = models.IntegerField(default=0, verbose_name="Number of intrapartum Still birth reviewed")
+
     nndeath_afteralivebirth_reported = models.IntegerField(default=0, verbose_name="Number of Neonatal Death (after a live birth) reported")
     nndeath_afteralivebirth_reviewed = models.IntegerField(default=0, verbose_name="Number of neonatal Death (after a live birth) reviewed")
+
     causeofneonataldeath_n = models.TextField(max_length=200, verbose_name="Cause of neonatal death")
-    interventionperformed  = models.TextField(max_length=200, verbose_name="Intervention performed")
+    interventionperformed = models.TextField(max_length=200, verbose_name="Intervention performed")
     recfromMPDSRcommittee = models.TextField(max_length=500, verbose_name="Recommendation from MPDSR committee")
     remarks = models.TextField(max_length=500, blank=True, null=True)
 
-    #optional: track who created/updated (does NOT affect uniqueness)
-    # created_by = models.ForeignKey(
-    #     "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
-    #     related_name="monthly_reports_created"
-    # )
-    # created_at = models.DateTimeField(auto_now_add=True)
+    # ✅ many users can create records; uniqueness is not by user
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mpdsr_created",
+        editable=False
+    )
+    created_at = models.DateTimeField(auto_now_add=True, 
+        null=True, blank=True,editable=False)
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["facilityname", "yearmpdsr", "monthmpdsr"],
-                name="uniq_facilityname_yearmpdsr_monthmpdsr"
-            )
-        ]
-        ordering = ["-yearmpdsr", "-monthmpdsr", "facilityname"]
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mpdsr_updated",
+        editable=False
+    )
+    updated_at = models.DateTimeField(auto_now=True, editable=False)
 
     class Meta:
         verbose_name = "MPDSR"
         verbose_name_plural = "MPDSR"
+        ordering = ["-yearmpdsr", "-monthmpdsr", "facilityname"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["facilityname", "yearmpdsr", "monthmpdsr"],
+                name="uniq_facility_year_month_mpdsr"
+            )
+        ]
+
+    def clean(self):
+        # Optional: data integrity checks
+        if self.n_maternaldeathreviewed > self.n_maternaldeathreported:
+            raise ValidationError({"n_maternaldeathreviewed": "Reviewed cannot be greater than reported."})
+
+        if self.nndeath_afteralivebirth_reviewed > self.nndeath_afteralivebirth_reported:
+            raise ValidationError({"nndeath_afteralivebirth_reviewed": "Reviewed cannot be greater than reported."})
 
     def __str__(self):
-        return f"{self.facilityname} - {self.yearmpdsr}/{self.monthmpdsr}"
+        return f"{self.facilityname} - {self.yearmpdsr}/{int(self.monthmpdsr):02d}"
     
 # class Gancohort(models.Model):
 #     facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
