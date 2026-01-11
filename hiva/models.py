@@ -79,9 +79,9 @@ class Facility(models.Model):
     afiat = models.BooleanField(blank=True, null=True, verbose_name='AFIAT')
     skilllab = models.BooleanField(blank=True, default=False, verbose_name="Skill Lab")
     aimphase = models.IntegerField(blank=True, null=True, verbose_name="AIM Phase")
-    nbcc = models.BooleanField(blank=True, null=True)
-    sncu = models.BooleanField(blank=True, null=True)
-    kmc = models.BooleanField(blank=True, null=True)
+    nbcc = models.BooleanField(blank=True, null=True, verbose_name="NBCC")
+    sncu = models.BooleanField(blank=True, null=True, verbose_name="SNCU")
+    kmc = models.BooleanField(blank=True, null=True, verbose_name="KMC")
 
     class Meta:
         verbose_name = "HEALTH FACILITY"
@@ -91,7 +91,8 @@ class Facility(models.Model):
         return self.name
 
 class Implementor(models.Model):
-    name = models.CharField(max_length=200, unique=True, verbose_name="Service Provider(NGO)")
+    name = models.CharField(max_length=200, unique=True, 
+    verbose_name="Service Provider(NGO)")
     shortname = models.TextField(blank=True)
     provinceimplementor = models.ForeignKey(
         Province, on_delete=models.CASCADE, 
@@ -418,9 +419,16 @@ class Qicdataset(models.Model):
     def __str__(self):
         return f"{self.qicfacility} {self.qiccommdate}" 
     
+MONTH_CHOICES = [
+        ("1", "January"), ("2", "February"), ("3", "March"), ("4", "April"),
+        ("5", "May"), ("6", "June"), ("7", "July"), ("8", "August"),
+        ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
+    ]
+YCHOICES = [("2026", "2026"), ("2027", "2027")]
+    
 class Mpdsr(models.Model):
-    yearmpdsr = models.IntegerField(default=2025, verbose_name="Year")
-    monthmpdsr = models.CharField(max_length=200, default="January", verbose_name="Month" )
+    yearmpdsr = models.IntegerField(default=2025, choices=YCHOICES, verbose_name="Year")
+    monthmpdsr = models.CharField(max_length=200, choices=MONTH_CHOICES, default="January", verbose_name="Month" )
     facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
     n_mpdsrcommittee = models.IntegerField(default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
     n_maternaldeathreported = models.IntegerField(default=0, verbose_name="Number of Maternal Death reported")
@@ -435,9 +443,7 @@ class Mpdsr(models.Model):
     causeofneonataldeath_n = models.CharField(max_length=200, verbose_name="Cause of neonatal death")
     interventionperformed  = models.CharField(max_length=200, verbose_name="Intervention performed")
     recfromMPDSRcommittee = models.CharField(max_length=500, verbose_name="Recommendation from MPDSR committee")
-    remarks = models.TextField(blank=True, null=True)
-    image = models.FileField(upload_to='mpdsr-docs/', null=True, blank=True)  # Files are stored in the media directory by default
-    uploaded_at = models.DateField(auto_now_add=True, null=True, blank=True)
+    remarks = models.TextField(max_length=500, blank=True, null=True)
 
     class Meta:
         verbose_name = "MPDSR"

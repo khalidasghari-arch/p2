@@ -4,7 +4,27 @@ from django.contrib import admin
 from django import forms
 from django.db import connection
 from django.utils.translation import gettext_lazy as _
-from .models import HQIPAssessmentHeader, safesurgeryclinical, aimpee, aimpph, Mpdsr, Qicdataset, Participantposition, Participanteducation, Trainingheader, Standards, Section,Score, Criteria, Area, Assessmenttype, Province, District, Facility, Facilitytype, Implementor, Assessor, HQIPAssessment, Training, Participationtype  
+from .models import (
+    HQIPAssessmentHeader, 
+    safesurgeryclinical, 
+    aimpee, 
+    aimpph, 
+    Mpdsr, 
+    Qicdataset, 
+    Participantposition, 
+    Participanteducation, 
+    Trainingheader, 
+    Standards, 
+    Section,
+    Score, 
+    Criteria, 
+    Area, 
+    Assessmenttype, 
+    Province, 
+    District, 
+    Facility, 
+    Facilitytype, 
+    Implementor, Assessor, HQIPAssessment, Training, Participationtype, Position)  
 from .forms import AimpeeAdminForm, AimpphAdminForm
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth import get_user_model
@@ -730,7 +750,8 @@ class ProvinceFilter(admin.SimpleListFilter):
 class FacilityAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
         'id', 'get_province', 'districtfk', 'name', 'hfcode',
-        'facilitytypefk', 'skilllab', 'aim', 'aimphase', 'safesurgery', 'ganc', 'afiat'
+        'facilitytypefk', 'skilllab', 'aim', 'aimphase', 'safesurgery', 
+        'ganc', 'afiat', 'nbcc','sncu','kmc'
     ]
     list_filter = ['districtfk__provincefk', 'facilitytypefk']
     search_fields = ['name', 'districtfk__name', 'districtfk__provincefk__name']
@@ -1182,5 +1203,6 @@ admin.site.register(Participationtype)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
 admin.site.register(Qicdataset, MyModelqicdataset)
+admin.site.register(Position)
 
 
