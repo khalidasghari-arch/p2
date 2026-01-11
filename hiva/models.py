@@ -424,10 +424,10 @@ MONTH_CHOICES = [
         ("5", "May"), ("6", "June"), ("7", "July"), ("8", "August"),
         ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
     ]
-YCHOICES = [("2026", "2026"), ("2027", "2027")]
+YCHOICES = [(2026, "2026"), (2027, "2027")]
     
 class Mpdsr(models.Model):
-    yearmpdsr = models.IntegerField(default=2025, choices=YCHOICES, verbose_name="Year")
+    yearmpdsr = models.IntegerField(default=2026, choices=YCHOICES, verbose_name="Year")
     monthmpdsr = models.CharField(max_length=200, choices=MONTH_CHOICES, default="January", verbose_name="Month" )
     facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
     n_mpdsrcommittee = models.IntegerField(default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
@@ -445,12 +445,28 @@ class Mpdsr(models.Model):
     recfromMPDSRcommittee = models.TextField(max_length=500, verbose_name="Recommendation from MPDSR committee")
     remarks = models.TextField(max_length=500, blank=True, null=True)
 
+    #optional: track who created/updated (does NOT affect uniqueness)
+    # created_by = models.ForeignKey(
+    #     "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+    #     related_name="monthly_reports_created"
+    # )
+    # created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["facilityname", "yearmpdsr", "monthmpdsr"],
+                name="uniq_facilityname_yearmpdsr_monthmpdsr"
+            )
+        ]
+        ordering = ["-yearmpdsr", "-monthmpdsr", "facilityname"]
+
     class Meta:
         verbose_name = "MPDSR"
         verbose_name_plural = "MPDSR"
 
     def __str__(self):
-        return f"{self.facilityname} {self.monthmpdsr}" 
+        return f"{self.facilityname} - {self.yearmpdsr}/{self.monthmpdsr}"
     
 # class Gancohort(models.Model):
 #     facilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
