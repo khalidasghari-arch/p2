@@ -6,19 +6,20 @@ from .models import (
 
 @admin.register(ThematicMentorship)
 class ThematicMentorshipAdmin(admin.ModelAdmin):
+    list_display= ("id", "name", "shortname")
     search_fields = ("name", "shortname")
 
 
 @admin.register(MentorshipTopics)
 class MentorshipTopicsAdmin(admin.ModelAdmin):
-    list_display = ("thematicfk", "name","nameeng", "namedari", "namepashto")
+    list_display = ("id", "thematicfk", "name","nameeng", "namedari", "namepashto")
     list_filter = ("thematicfk",)
     search_fields = ("name", "shortname", "namedari", "namepashto", "nameeng")
 
 
 @admin.register(Staff)
 class StaffAdmin(admin.ModelAdmin):
-    list_display = ("hfname", "tazkiranumber", "firstname", "lastname", "position", "gender","status")
+    list_display = ("id", "hfname", "tazkiranumber", "firstname", "lastname", "position", "gender","status")
     list_filter = ("hfname", "status", "position")
     search_fields = ("firstname", "lastname", "tazkiranumber")
 
@@ -62,7 +63,7 @@ class MentorshipdetailsInline(admin.TabularInline):
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(admin.ModelAdmin):
-    list_display = ("facilityfk", "visitdate", "visitround", "mentorshipstarttime", "mentorshipendtime")
+    list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", "mentorshipendtime")
     list_filter = ("facilityfk", "visitdate")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
     inlines = (MentorshipdetailsInline,)
