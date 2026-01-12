@@ -1,7 +1,7 @@
 from django.db import models
 
 class ThematicMentorship(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, verbose_name="Mentorship Thematic Area")
     shortname = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
@@ -12,9 +12,9 @@ class ThematicMentorship(models.Model):
         return self.name
 
 class MentorshipTopics(models.Model):
-    thematicfk = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE, null=True, blank=True)
+    thematicfk = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Mentorship Thematic Area")
     shortname = models.CharField(max_length=50, null=True, blank=True)
-    name = models.TextField()
+    name = models.CharField(max_length=50, verbose_name="Topic code")
     namedari = models.TextField(null=True, blank=True)
     namepashto = models.TextField(null=True, blank=True)
     nameeng = models.TextField(null=True, blank=True)
@@ -27,11 +27,11 @@ class MentorshipTopics(models.Model):
         return self.name
 
 class Mentorshipvisit(models.Model):
-    facilityfk = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE)
-    visitdate = models.DateField()
-    visitround = models.IntegerField(null=True, blank=True)
-    mentorshipstarttime = models.TimeField()
-    mentorshipendtime = models.TimeField()
+    facilityfk = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
+    visitdate = models.DateField(verbose_name="Visit Date")
+    visitround = models.IntegerField(null=True, blank=True, verbose_name="Visit Round")
+    mentorshipstarttime = models.TimeField(verbose_name="Mentorship Start Time")
+    mentorshipendtime = models.TimeField(verbose_name="Mentorship End Time")
 
     class Meta:
         verbose_name = "MENTORSHIP VISIT"
@@ -41,11 +41,11 @@ class Mentorshipvisit(models.Model):
         return f"{self.facilityfk} - {self.visitdate}"
 
 class Staff(models.Model):
-    hfname = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE)
-    firstname = models.CharField(max_length=100)
-    lastname = models.CharField(max_length=100, blank=True, null=True)
-    position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE)
-    tazkiranumber = models.CharField(max_length=100, blank=True, null=True)
+    hfname = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
+    firstname = models.CharField(max_length=100, verbose_name="First Name")
+    lastname = models.CharField(max_length=100, blank=True, null=True, verbose_name="Last Name")
+    position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE, verbose_name="Position")
+    tazkiranumber = models.CharField(max_length=100, blank=True, null=True, verbose_name="Tazkira Number")
 
     gender = models.BooleanField(
         choices=[(True, "Female"), (False, "Male")],
@@ -74,7 +74,7 @@ class Mentorshipdetails(models.Model):
     Mentorshipvisit, on_delete=models.CASCADE, related_name="items", null=True, blank=True)
     menteename = models.ForeignKey(Staff, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Mentee")
     thematicname = models.ForeignKey(ThematicMentorship, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Mentorship Thematic Area")
-    topicname = models.ForeignKey(MentorshipTopics, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Topic")
+    topicname = models.ForeignKey(MentorshipTopics, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Topic code")
     mentor = models.ForeignKey("hiva.Assessor", on_delete=models.CASCADE, null=True, blank=True, verbose_name="Mentor")
 
     ls = models.BooleanField(default=False, verbose_name="Learning Session")

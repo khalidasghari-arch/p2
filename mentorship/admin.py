@@ -11,14 +11,14 @@ class ThematicMentorshipAdmin(admin.ModelAdmin):
 
 @admin.register(MentorshipTopics)
 class MentorshipTopicsAdmin(admin.ModelAdmin):
-    list_display = ("name", "thematicfk")
+    list_display = ("thematicfk", "name","nameeng", "namedari", "namepashto")
     list_filter = ("thematicfk",)
     search_fields = ("name", "shortname", "namedari", "namepashto", "nameeng")
 
 
 @admin.register(Staff)
 class StaffAdmin(admin.ModelAdmin):
-    list_display = ("firstname", "lastname", "hfname", "position", "status")
+    list_display = ("hfname", "tazkiranumber", "firstname", "lastname", "position", "gender","status")
     list_filter = ("hfname", "status", "position")
     search_fields = ("firstname", "lastname", "tazkiranumber")
 
@@ -68,7 +68,7 @@ class MentorshipvisitAdmin(admin.ModelAdmin):
     inlines = (MentorshipdetailsInline,)
 
     fieldsets = (
-        ("Mentorship Visit (Header)", {
+        ("Mentorship Visit", {
             "fields": (
                 "facilityfk",
                 ("visitdate", "visitround"),
