@@ -848,7 +848,8 @@ class AssessmentLineInline(admin.TabularInline):
 @admin.register(HQIPAssessmentHeader)
 class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
-    list_display = ("facilityfk", "assessmenttype", "assessmentdate", "areafk")
+    list_display = ("facilityfk", "assessmenttype", "assessmentdate", 
+    "assessmentend_date", "areafk", "assesorfk", "is_RCAduringtheassessment")
     list_filter = ("assessmenttype", "areafk", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
