@@ -45,7 +45,7 @@ class Staff(models.Model):
     firstname = models.CharField(max_length=100, verbose_name="First Name")
     lastname = models.CharField(max_length=100, blank=True, null=True, verbose_name="Last Name")
     position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE, verbose_name="Position")
-    tazkiranumber = models.CharField(max_length=100, blank=True, null=True, verbose_name="Tazkira Number")
+    tazkiranumber = models.CharField(max_length=100, blank=True, null=True, verbose_name="Tazkira Number", unique=True)
 
     gender = models.BooleanField(
         choices=[(True, "Female"), (False, "Male")],

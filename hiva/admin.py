@@ -924,7 +924,7 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             if to_create:
                 HQIPAssessment.objects.bulk_create(to_create)
 
-@admin.register(HQIPAssessment)
+#@admin.register(HQIPAssessment)
 class HQIPAssessmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = ("id", "header", "criteriafk", "scorefk")
     search_fields = ("criteriafk__name", "header__facilityfk__name")
