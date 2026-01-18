@@ -167,6 +167,8 @@ class Assessmenttype(models.Model):
 class Area(models.Model):
     name = models.TextField(max_length=200, verbose_name="Thematic Area")
     shortname = models.TextField(blank=True)
+    area_namepashto = models.TextField(max_length=200, null=True, blank=True, verbose_name="Thematic Area Pashto")
+    area_namedari= models.TextField(max_length=200, null=True, blank=True, verbose_name="Thematic Area Dari")
 
     class Meta:
         verbose_name = "THEMATIC AREA"
@@ -179,6 +181,8 @@ class Section(models.Model):
     areafk = models.ForeignKey(Area, on_delete=models.CASCADE, null=True, blank=True)
     name = models.TextField(verbose_name="Section")
     shortname = models.TextField(blank=True)
+    section_namepashto = models.TextField(max_length=200, null=True, blank=True, verbose_name="Section Pashto")
+    section_namedari= models.TextField(max_length=200, null=True, blank=True, verbose_name="Section Dari")
 
     class Meta:
         verbose_name = "HQIP SECTION"
@@ -191,6 +195,8 @@ class Standards(models.Model):
     sectionfk = models.ForeignKey(Section, on_delete=models.CASCADE, null=True, blank=True)
     name = models.TextField(verbose_name="Standard")
     shortname = models.TextField(blank=True)
+    standard_namepashto = models.TextField(max_length=200, null=True, blank=True, verbose_name="Standard Pashto")
+    standard_namedari= models.TextField(max_length=200, null=True, blank=True, verbose_name="Standard Dari")
 
     class Meta:
         verbose_name = "HQIP STANDARD"
@@ -203,6 +209,8 @@ class Score(models.Model):
     name = models.TextField(verbose_name="Score")
     shorname = models.TextField(blank=True)
     value = models.IntegerField(default=0)
+    score_namepashto = models.TextField(max_length=200, null=True, blank=True, verbose_name="Score Pashto")
+    score_namedari= models.TextField(max_length=200, null=True, blank=True, verbose_name="Score Dari")
 
     class Meta:
         verbose_name = "HQIP SCORE"
@@ -216,7 +224,8 @@ class Criteria(models.Model):
     scorefk = models.ForeignKey(Score, on_delete=models.CASCADE)
     name = models.TextField(verbose_name="Verification Criteria")
     shortname = models.TextField(blank=True)
-    namedari = models.TextField(blank=True)
+    criteria_namepashto = models.TextField(max_length=200, null=True, blank=True, verbose_name="Criteria Pashto")
+    criteria_namedari = models.TextField(max_length=200, null=True, blank=True, verbose_name="Criteria Dari")
     createdby = models.DateTimeField(null=True, blank=True)
 
     class Meta:

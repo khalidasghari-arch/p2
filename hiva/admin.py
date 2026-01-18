@@ -647,19 +647,19 @@ class MyModelIndicator(admin.ModelAdmin):
     list_per_page = 5  # Set pagination (10 rows per page)
 
 class MyModelArea(admin.ModelAdmin):
-    list_display = ['id', 'name','shortname']
+    list_display = ['id', 'name','shortname', 'area_namepashto', 'area_namedari']
     # list_filter = ['areafk']  # Add filter for parent
     # search_fields = ['name']  # Search child name and parent name
     # list_per_page = 10  # Set pagination (10 rows per page)
 
 class MyModelStandard(admin.ModelAdmin):
-    list_display = ['id', 'sectionfk','name', 'shortname']
+    list_display = ['id', 'sectionfk','name', 'shortname','standard_namepashto','standard_namedari']
     list_filter = ['sectionfk']  # Add filter for parent
     search_fields = ['name']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
 
 class MyModelSection(admin.ModelAdmin):
-    list_display = ['id', 'areafk','name', 'shortname']
+    list_display = ['id', 'areafk','name', 'shortname', 'section_namepashto','section_namedari']
     list_filter = ['areafk']  # Add filter for parent
     search_fields = ['name']  # Search child name and parent name
     list_per_page = 10  # Set pagination (10 rows per page)
@@ -685,7 +685,8 @@ class MyModelCriteria(admin.ModelAdmin):
         'standardfk',
         'name',
         #'shortname',
-        'namedari',
+        'criteria_namepashto',
+        'criteria_namedari',
         'scorefk',
     ]
     class Media:
@@ -861,17 +862,19 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
 
     list_display = (
+        "id",
         "facilityfk",
         "assessmenttype",
         "assessmentdate",
         "assessmentend_date",
         "areafk",
         "assesorfk",
-        "is_RCAduringtheassessment",
         "hqip_dashboard_button",
+        "created_by",
+        "created_at",
     )
 
-    list_filter = ("assessmenttype", "areafk", "facilityfk")
+    list_filter = ("areafk", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
     # ---------------------------
