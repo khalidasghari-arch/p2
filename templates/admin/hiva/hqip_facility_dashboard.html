@@ -1,0 +1,437 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+<style>
+  .hqip-wrap { max-width: 1200px; }
+  .hqip-card {
+    background: var(--body-bg);
+    border: 1px solid var(--hairline-color);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .hqip-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 980px) { .hqip-grid { grid-template-columns: 1fr 1fr; } }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .filters .field { display: flex; flex-direction: column; gap: 4px; min-width: 190px; }
+  .filters label { font-weight: 600; }
+  .filters select, .filters input {
+    padding: 6px 8px; border-radius: 6px;
+    border: 1px solid var(--hairline-color);
+    background: var(--body-bg);
+    color: var(--body-fg);
+  }
+  .filters .actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-block;
+    padding: 7px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--hairline-color);
+    background: var(--primary);
+    color: #fff !important;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.secondary { background: transparent; color: var(--body-fg) !important; }
+
+  table.hqip-table { width: 100%; border-collapse: collapse; }
+  table.hqip-table th, table.hqip-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 8px 10px;
+    vertical-align: middle;
+  }
+  table.hqip-table th { text-align: left; font-weight: 700; }
+  .num { text-align: right; white-space: nowrap; }
+
+  .bar-wrap {
+    height: 10px;
+    background: #e7e7e7;
+    border-radius: 999px;
+    overflow: hidden;
+    min-width: 140px;
+  }
+  .bar-fill { height: 100%; width: 0%; border-radius: 999px; }
+  .bar-green { background: #1f8b4c; }
+  .bar-yellow { background: #d4a72c; }
+  .bar-red { background: #c0392b; }
+  .bar-gray { background: #9aa0a6; width: 100%; }
+
+  .pct-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+  }
+  .pct-green { background: #1f8b4c; }
+  .pct-yellow { background: #d4a72c; }
+  .pct-red { background: #c0392b; }
+  .pct-gray { background: #9aa0a6; }
+
+  .muted { color: #777; font-size: 12px; }
+  .chart-box { height: 360px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hqip-wrap">
+
+  <!-- Django admin already shows page title, avoid extra H1 -->
+
+  <div class="hqip-card">
+    <form method="get" class="filters">
+
+      {% if provinces %}
+      <div class="field">
+        <label>Province</label>
+        <select name="province">
+          <option value="">All Provinces</option>
+          {% for p in provinces %}
+            <option value="{{ p.id }}" {% if selected_province == p.id|stringformat:"s" %}selected{% endif %}>
+              {{ p.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="field">
+        <label>Facility</label>
+        <select name="facility" required>
+          <option value="">Select facility...</option>
+          {% for f in facilities %}
+            <option value="{{ f.id }}" {% if selected_facility == f.id|stringformat:"s" %}selected{% endif %}>
+              {{ f.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Area</label>
+        <select name="area">
+          <option value="">All Areas</option>
+          {% for a in areas %}
+            <option value="{{ a.id }}" {% if selected_area == a.id|stringformat:"s" %}selected{% endif %}>
+              {{ a.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if types %}
+      <div class="field">
+        <label>Assessment Type</label>
+        <select name="assessmenttype">
+          <option value="">All Types</option>
+          {% for t in types %}
+            <option value="{{ t.id }}" {% if selected_type == t.id|stringformat:"s" %}selected{% endif %}>
+              {{ t.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="field">
+        <label>Date from</label>
+        <input type="date" name="date_from" value="{{ date_from|default:'' }}">
+      </div>
+
+      <div class="field">
+        <label>Date to</label>
+        <input type="date" name="date_to" value="{{ date_to|default:'' }}">
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">Apply</button>
+        <a class="btn secondary" href="?">Reset</a>
+      </div>
+    </form>
+
+    <div class="muted" style="margin-top:8px;">
+      NA (Score=3) is excluded from numerator and denominator. Only YES(1) and NO(2) are applicable.
+    </div>
+  </div>
+
+  {% if facility_obj %}
+    <div class="hqip-card">
+      <strong>Selected Facility:</strong> {{ facility_obj.name }}
+      {% if facility_obj.districtfk and facility_obj.districtfk.provincefk %}
+        <span class="muted"> — {{ facility_obj.districtfk.provincefk.name }}</span>
+      {% endif %}
+      {% if header_list %}
+        <div class="muted" style="margin-top:6px;">
+          Assessments used: {{ header_list|length }}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="hqip-grid">
+      <div class="hqip-card">
+        <h3 style="margin-top:0;">Standards Achievement (%)</h3>
+        <div class="chart-box"><canvas id="stdChart"></canvas></div>
+      </div>
+
+      <div class="hqip-card">
+        <h3 style="margin-top:0;">Sections Achievement (%)</h3>
+        <div class="chart-box"><canvas id="secChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="hqip-card">
+      <h3 style="margin-top:0;">Standard Results</h3>
+      <table class="hqip-table">
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Section</th>
+            <th>Standard</th>
+            <th class="num">YES</th>
+            <th class="num">Applicable</th>
+            <th>Bar</th>
+            <th class="num">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in standard_results %}
+          <tr>
+            <td>{{ r.area }}</td>
+            <td>{{ r.section }}</td>
+            <td>{{ r.standard }}</td>
+            <td class="num">{{ r.yes }}</td>
+            <td class="num">{{ r.applicable }}</td>
+
+            <td>
+              {% if r.percent is not None %}
+                <div class="bar-wrap">
+                  {% if r.percent >= 80 %}
+                    <div class="bar-fill bar-green js-bar" data-pct="{{ r.percent }}"></div>
+                  {% elif r.percent >= 50 %}
+                    <div class="bar-fill bar-yellow js-bar" data-pct="{{ r.percent }}"></div>
+                  {% else %}
+                    <div class="bar-fill bar-red js-bar" data-pct="{{ r.percent }}"></div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="bar-wrap"><div class="bar-fill bar-gray"></div></div>
+              {% endif %}
+            </td>
+
+            <td class="num">
+              {% if r.percent is not None %}
+                {% if r.percent >= 80 %}
+                  <span class="pct-badge pct-green">{{ r.percent }}%</span>
+                {% elif r.percent >= 50 %}
+                  <span class="pct-badge pct-yellow">{{ r.percent }}%</span>
+                {% else %}
+                  <span class="pct-badge pct-red">{{ r.percent }}%</span>
+                {% endif %}
+              {% else %}
+                <span class="pct-badge pct-gray">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" style="padding:12px;">No standard results.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="hqip-grid">
+      <div class="hqip-card">
+        <h3 style="margin-top:0;">Section Results (Average of Standards)</h3>
+        <table class="hqip-table">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Section</th>
+              <th class="num"># Standards Used</th>
+              <th>Bar</th>
+              <th class="num">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in section_results %}
+            <tr>
+              <td>{{ r.area }}</td>
+              <td>{{ r.section }}</td>
+              <td class="num">{{ r.num_standards_used }}</td>
+
+              <td>
+                {% if r.percent is not None %}
+                  <div class="bar-wrap">
+                    {% if r.percent >= 80 %}
+                      <div class="bar-fill bar-green js-bar" data-pct="{{ r.percent }}"></div>
+                    {% elif r.percent >= 50 %}
+                      <div class="bar-fill bar-yellow js-bar" data-pct="{{ r.percent }}"></div>
+                    {% else %}
+                      <div class="bar-fill bar-red js-bar" data-pct="{{ r.percent }}"></div>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <div class="bar-wrap"><div class="bar-fill bar-gray"></div></div>
+                {% endif %}
+              </td>
+
+              <td class="num">
+                {% if r.percent is not None %}
+                  {% if r.percent >= 80 %}
+                    <span class="pct-badge pct-green">{{ r.percent }}%</span>
+                  {% elif r.percent >= 50 %}
+                    <span class="pct-badge pct-yellow">{{ r.percent }}%</span>
+                  {% else %}
+                    <span class="pct-badge pct-red">{{ r.percent }}%</span>
+                  {% endif %}
+                {% else %}
+                  <span class="pct-badge pct-gray">-</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="padding:12px;">No section results.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="hqip-card">
+        <h3 style="margin-top:0;">Area Results (Average of Sections)</h3>
+        <table class="hqip-table">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th class="num"># Sections Used</th>
+              <th>Bar</th>
+              <th class="num">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in area_results %}
+            <tr>
+              <td>{{ r.area }}</td>
+              <td class="num">{{ r.num_sections_used }}</td>
+
+              <td>
+                {% if r.percent is not None %}
+                  <div class="bar-wrap">
+                    {% if r.percent >= 80 %}
+                      <div class="bar-fill bar-green js-bar" data-pct="{{ r.percent }}"></div>
+                    {% elif r.percent >= 50 %}
+                      <div class="bar-fill bar-yellow js-bar" data-pct="{{ r.percent }}"></div>
+                    {% else %}
+                      <div class="bar-fill bar-red js-bar" data-pct="{{ r.percent }}"></div>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <div class="bar-wrap"><div class="bar-fill bar-gray"></div></div>
+                {% endif %}
+              </td>
+
+              <td class="num">
+                {% if r.percent is not None %}
+                  {% if r.percent >= 80 %}
+                    <span class="pct-badge pct-green">{{ r.percent }}%</span>
+                  {% elif r.percent >= 50 %}
+                    <span class="pct-badge pct-yellow">{{ r.percent }}%</span>
+                  {% else %}
+                    <span class="pct-badge pct-red">{{ r.percent }}%</span>
+                  {% endif %}
+                {% else %}
+                  <span class="pct-badge pct-gray">-</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="padding:12px;">No area results.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  {% else %}
+    <div class="hqip-card">
+      <strong>Please select a facility and click Apply.</strong>
+    </div>
+  {% endif %}
+</div>
+
+{# JSON blobs for clean JS (no template tags inside JS) #}
+{{ std_chart_json|json_script:"std-chart-data" }}
+{{ sec_chart_json|json_script:"sec-chart-data" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // Progress bars: set widths safely
+  document.querySelectorAll(".js-bar").forEach(function(el){
+    var pct = parseFloat(el.dataset.pct || "0");
+    if (isNaN(pct)) pct = 0;
+    pct = Math.max(0, Math.min(100, pct));
+    el.style.width = pct + "%";
+  });
+
+  function parseJSON(id){
+    const el = document.getElementById(id);
+    if (!el) return [];
+    try { return JSON.parse(el.textContent || "[]"); }
+    catch (e) { return []; }
+  }
+
+  // Standards chart (top 15)
+  (function(){
+    const stdData = parseJSON("std-chart-data")
+      .sort((a,b)=> (b.value||0)-(a.value||0))
+      .slice(0, 15);
+
+    const labels = stdData.map(x => x.label);
+    const values = stdData.map(x => x.value);
+
+    const canvas = document.getElementById("stdChart");
+    if (canvas && labels.length){
+      new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{ label: "Achievement (%)", data: values }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, max: 100 } }
+        }
+      });
+    }
+  })();
+
+  // Sections chart (top 15)
+  (function(){
+    const secData = parseJSON("sec-chart-data")
+      .sort((a,b)=> (b.value||0)-(a.value||0))
+      .slice(0, 15);
+
+    const labels = secData.map(x => x.label);
+    const values = secData.map(x => x.value);
+
+    const canvas = document.getElementById("secChart");
+    if (canvas && labels.length){
+      new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{ label: "Achievement (%)", data: values }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, max: 100 } }
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}
