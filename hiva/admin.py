@@ -1,5 +1,5 @@
 import openpyxl
-from django.http import HttpResponse
+from django.http import HttpResponse, response
 from django.contrib import admin
 from django import forms
 from django.db import connection
@@ -51,7 +51,9 @@ from django.db.models import Q, Count
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
-
+from django.db.models import Count, Q
+from collections import defaultdict
+from datetime import datetime
 
 admin.site.site_header = "Maternal and Newborn Health Information Management System (MNHIMS)"
 admin.site.site_title = "IQoC Portal"
@@ -1077,83 +1079,87 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # ==========================================================
     def hqip_facility_dashboard(self, request):
         """
-        Facility drill-down:
-        filters: province(superuser), facility, area, type, date_from/to
-        outputs: Standard %, Section %, Area % (based on selected headers)
+        Facility-level drill-down:
+        - Facility dropdown ALWAYS shows facilities user can access (even if no HQIP headers exist yet).
+        - When facility selected, calculate Standard/Section/Area using the same NA exclusion logic.
         """
 
-        # Base headers restricted by mixin (province users locked)
-        headers_qs = self.get_queryset(request)
-
-        # --- Filters from GET
-        selected_province = request.GET.get("province")
+        # ---------- read filters ----------
+        selected_province = request.GET.get("province")  # superuser only
         selected_facility = request.GET.get("facility")
         selected_area = request.GET.get("area")
         selected_type = request.GET.get("assessmenttype")
         date_from = request.GET.get("date_from")
         date_to = request.GET.get("date_to")
 
-        # Superuser province filter (applies to both facility dropdown + headers)
-        if request.user.is_superuser and selected_province:
-            headers_qs = headers_qs.filter(facilityfk__districtfk__provincefk_id=selected_province)
-
-        # Apply other filters to headers_qs
-        if selected_facility:
-            headers_qs = headers_qs.filter(facilityfk_id=selected_facility)
-
-        if selected_area:
-            headers_qs = headers_qs.filter(areafk_id=selected_area)
-
-        if selected_type:
-            headers_qs = headers_qs.filter(assessmenttype_id=selected_type)
-
-        if date_from:
-            headers_qs = headers_qs.filter(assessmentdate__gte=date_from)
-        if date_to:
-            headers_qs = headers_qs.filter(assessmentdate__lte=date_to)
-
-        # --- Facility dropdown restricted the same way
+        # ---------- build FACILITY queryset (IMPORTANT FIX) ----------
         facilities_qs = Facility.objects.all().select_related("districtfk__provincefk")
-        if request.user.is_superuser and selected_province:
-            facilities_qs = facilities_qs.filter(districtfk__provincefk_id=selected_province)
-        else:
-            # province user: restrict to own province (mixin already restricts headers; but we must also restrict dropdown)
-            prov = getattr(getattr(request.user, "profile", None), "province", None)
+
+        # Province restriction for non-superuser
+        if not request.user.is_superuser:
+            prov = user_province(request)
             if prov:
                 facilities_qs = facilities_qs.filter(districtfk__provincefk=prov)
             else:
                 facilities_qs = facilities_qs.none()
 
-        selected_facility_obj = None
-        if selected_facility:
-            selected_facility_obj = facilities_qs.filter(id=selected_facility).first()
+        # Superuser optional province filter
+        if request.user.is_superuser and selected_province:
+            facilities_qs = facilities_qs.filter(districtfk__provincefk_id=selected_province)
 
-        # Dropdown lists
-        provinces = Province.objects.all().order_by("name") if request.user.is_superuser else None
+        facilities = facilities_qs.order_by("name")
+
+        # ---------- areas/types for dropdowns ----------
         areas = Area.objects.all().order_by("name")
-        types = Assessmenttype.objects.all().order_by("name") if hasattr(Assessmenttype, "name") else None
+        types = Assessmenttype.objects.all().order_by("name")
+        provinces = Province.objects.all().order_by("name") if request.user.is_superuser else None
 
-        # Outputs
+        # ---------- if no facility selected -> only show filters ----------
+        facility_obj = None
         header_list = []
-        standard_results = []
-        section_results = []
-        area_results = []
+        standard_results, section_results, area_results = [], [], []
 
-        if selected_facility_obj:
-            header_list = list(
-                headers_qs.order_by("-assessmentdate").values(
-                    "id",
-                    "assessmentdate",
-                    "assessmentend_date",
-                    "assessmenttype__name",
-                    "areafk__name",
-                )
-            )
+        std_chart_json, sec_chart_json = [], []
 
-            lines = HQIPAssessment.objects.filter(header__in=headers_qs)
+        if selected_facility:
+            facility_obj = Facility.objects.filter(pk=selected_facility).select_related(
+                "districtfk__provincefk"
+            ).first()
 
+            # Security: ensure user can only open allowed facility
+            if facility_obj:
+                if (not request.user.is_superuser) and (facility_obj.districtfk.provincefk != user_province(request)):
+                    facility_obj = None  # block access safely
+
+        if facility_obj:
+            # ---------- build header queryset from allowed headers ----------
+            headers_qs = self.get_queryset(request).filter(facilityfk=facility_obj)
+
+            if selected_area:
+                headers_qs = headers_qs.filter(areafk_id=selected_area)
+
+            if selected_type:
+                headers_qs = headers_qs.filter(assessmenttype_id=selected_type)
+
+            # Date filter (safe parsing)
+            if date_from:
+                try:
+                    headers_qs = headers_qs.filter(assessmentdate__gte=date_from)
+                except Exception:
+                    pass
+            if date_to:
+                try:
+                    headers_qs = headers_qs.filter(assessmentdate__lte=date_to)
+                except Exception:
+                    pass
+
+            header_list = list(headers_qs.values("id", "assessmentdate"))
+
+            # ---------- aggregate STANDARD level ----------
             std_rows = (
-                lines.values(
+                HQIPAssessment.objects
+                .filter(header__in=headers_qs)
+                .values(
                     "criteriafk__standardfk__id",
                     "criteriafk__standardfk__name",
                     "criteriafk__standardfk__sectionfk__id",
@@ -1173,90 +1179,109 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
 
             section_to_standard_percents = defaultdict(list)
+            area_to_section_percents = defaultdict(list)
             sec_name_map = {}
             area_name_map = {}
 
+            # Standard results list
             for r in std_rows:
+                den = r["applicable"]
+                num = r["yes"]
+                std_percent = round((num / den) * 100, 2) if den else None
+
+                standard_results.append({
+                    "area": r["criteriafk__standardfk__sectionfk__areafk__name"],
+                    "section": r["criteriafk__standardfk__sectionfk__name"],
+                    "standard": r["criteriafk__standardfk__name"],
+                    "yes": num,
+                    "applicable": den,
+                    "percent": std_percent,
+                })
+
                 area_id = r["criteriafk__standardfk__sectionfk__areafk__id"]
                 sec_id = r["criteriafk__standardfk__sectionfk__id"]
                 sec_key = (area_id, sec_id)
 
-                area_name = r["criteriafk__standardfk__sectionfk__areafk__name"] or "-"
-                sec_name = r["criteriafk__standardfk__sectionfk__name"] or "-"
+                sec_name_map[sec_key] = (
+                    r["criteriafk__standardfk__sectionfk__areafk__name"],
+                    r["criteriafk__standardfk__sectionfk__name"],
+                )
+                area_name_map[area_id] = r["criteriafk__standardfk__sectionfk__areafk__name"]
 
-                sec_name_map[sec_key] = (area_name, sec_name)
-                area_name_map[area_id] = area_name
+                if std_percent is not None:
+                    section_to_standard_percents[sec_key].append(std_percent)
 
-                pct = self._pct(r["yes"], r["applicable"])
-
-                standard_results.append({
-                    "area": area_name,
-                    "section": sec_name,
-                    "standard": r["criteriafk__standardfk__name"] or "-",
-                    "yes": r["yes"],
-                    "applicable": r["applicable"],
-                    "percent": pct,
-                })
-
-                if pct is not None:
-                    section_to_standard_percents[sec_key].append(pct)
-
-            # SECTION
-            area_to_section_percents = defaultdict(list)
+            # Section results
             for sec_key, percents in section_to_standard_percents.items():
-                area_id, _sec_id = sec_key
+                area_id, sec_id = sec_key
                 area_name, sec_name = sec_name_map.get(sec_key, ("-", "-"))
-
-                sec_pct = None
-                if percents:
-                    sec_pct = self._round2(sum(percents) / len(percents))
+                sec_percent = round(sum(percents) / len(percents), 2) if percents else None
 
                 section_results.append({
                     "area": area_name,
                     "section": sec_name,
                     "num_standards_used": len(percents),
-                    "percent": sec_pct,
+                    "percent": sec_percent,
                 })
 
-                if sec_pct is not None:
-                    area_to_section_percents[area_id].append(sec_pct)
+                if sec_percent is not None:
+                    area_to_section_percents[area_id].append(sec_percent)
 
             section_results.sort(key=lambda x: (x["area"], x["section"]))
 
-            # AREA
+            # Area results
             for area_id, percents in area_to_section_percents.items():
-                area_pct = None
-                if percents:
-                    area_pct = self._round2(sum(percents) / len(percents))
-
+                area_percent = round(sum(percents) / len(percents), 2) if percents else None
                 area_results.append({
                     "area": area_name_map.get(area_id, "-"),
                     "num_sections_used": len(percents),
-                    "percent": area_pct,
+                    "percent": area_percent,
                 })
 
             area_results.sort(key=lambda x: x["area"])
+
+            # JSON for charts (no template tags inside JS)
+            std_chart_json = [
+                {"label": r["standard"], "value": r["percent"]}
+                for r in standard_results
+                if r.get("percent") is not None
+            ]
+            sec_chart_json = [
+                {"label": r["section"], "value": r["percent"]}
+                for r in section_results
+                if r.get("percent") is not None
+            ]
 
         context = dict(
             self.admin_site.each_context(request),
             title="HQIP Facility Drill-Down",
             provinces=provinces,
-            facilities=list(facilities_qs.order_by("name").values("id", "name")),
-            areas=list(areas.values("id", "name")),
-            types=list(types.values("id", "name")) if types else None,
             selected_province=selected_province,
+
+            facilities=facilities,
             selected_facility=selected_facility,
+            facility_obj=facility_obj,
+
+            areas=areas,
             selected_area=selected_area,
+
+            types=types,
             selected_type=selected_type,
+
             date_from=date_from,
             date_to=date_to,
-            facility_obj=selected_facility_obj,
+
             header_list=header_list,
             standard_results=standard_results,
             section_results=section_results,
             area_results=area_results,
+
+            std_chart_json=std_chart_json,
+            sec_chart_json=sec_chart_json,
         )
+
         return TemplateResponse(request, "admin/hiva/hqip_facility_dashboard.html", context)
+
 
 #@admin.register(HQIPAssessment)
 class HQIPAssessmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
