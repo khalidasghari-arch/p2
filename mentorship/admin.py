@@ -28,7 +28,7 @@ class StaffAdmin(admin.ModelAdmin):
 class MentorshipdetailsInline(admin.TabularInline):
     model = Mentorshipdetails
     extra = 0  # start with 0; we’ll set it dynamically
-    autocomplete_fields = ("menteename", "mentor", "thematicname", "topicname")
+    # autocomplete_fields = ("menteename", "mentor", "thematicname", "topicname")
 
     # Make it “HQIP-like”: details appear only after header saved
     def get_extra(self, request, obj=None, **kwargs):
@@ -60,7 +60,6 @@ class MentorshipdetailsInline(admin.TabularInline):
         # stash parent object so formfield_for_foreignkey can use it
         request._mentorship_parent_obj = obj
         return super().get_formset(request, obj, **kwargs)
-
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
