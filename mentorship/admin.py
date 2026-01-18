@@ -3,6 +3,7 @@ from .models import (
     ThematicMentorship, MentorshipTopics,
     Mentorshipvisit, Mentorshipdetails, Staff
 )
+from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 
 @admin.register(ThematicMentorship)
 class ThematicMentorshipAdmin(admin.ModelAdmin):
@@ -62,9 +63,9 @@ class MentorshipdetailsInline(admin.TabularInline):
 
 
 @admin.register(Mentorshipvisit)
-class MentorshipvisitAdmin(admin.ModelAdmin):
+class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", "mentorshipendtime")
-    list_filter = ("facilityfk", "visitdate")
+    list_filter = ("visitdate", "facilityfk", )
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
     inlines = (MentorshipdetailsInline,)
 
@@ -77,3 +78,6 @@ class MentorshipvisitAdmin(admin.ModelAdmin):
             )
         }),
     )
+    
+    def province_filter_kwargs(self, request):
+        return {"facilityfk__districtfk__provincefk": request.user.profile.province}

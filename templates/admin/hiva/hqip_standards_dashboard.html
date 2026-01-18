@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if provinces %}
+  <form method="get" style="margin: 12px 0;">
+    <label><b>Province:</b></label>
+    <select name="province">
+      <option value="">All provinces</option>
+      {% for p in provinces %}
+        <option value="{{ p.id }}" {% if selected_province == p.id|stringformat:"s" %}selected{% endif %}>
+          {{ p.name }}
+        </option>
+      {% endfor %}
+    </select>
+    <button class="button" type="submit">Filter</button>
+  </form>
+{% endif %}
+
+<table style="width:100%; border-collapse: collapse;">
+  <thead>
+    <tr>
+      <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Standard</th>
+      <th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">YES (score=1)</th>
+      <th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">Applicable (YES+NO)</th>
+      <th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">%</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in results %}
+      <tr>
+        <td style="padding:8px; border-bottom:1px solid #eee;">{{ r.standard }}</td>
+        <td style="text-align:right; padding:8px; border-bottom:1px solid #eee;">{{ r.yes }}</td>
+        <td style="text-align:right; padding:8px; border-bottom:1px solid #eee;">{{ r.applicable }}</td>
+        <td style="text-align:right; padding:8px; border-bottom:1px solid #eee;">
+          {% if r.percent is not None %}{{ r.percent }}%{% else %}-{% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" style="padding:12px;">No HQIP data found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

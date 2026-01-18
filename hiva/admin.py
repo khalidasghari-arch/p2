@@ -37,6 +37,12 @@ from django.db import transaction
 from django.forms.models import BaseInlineFormSet
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 from django.utils import timezone
+from django.template.response import TemplateResponse
+from django.db.models import Count, Q
+from django.utils.html import format_html
+from django.urls import reverse
+from collections import defaultdict
+from django.db.models import Count, Q
 
 admin.site.site_header = "Maternal and Newborn Health Information Management System (MNHIMS)"
 admin.site.site_title = "IQoC Portal"
@@ -844,86 +850,196 @@ class AssessmentLineInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         return False
-     
+    
+# Score PK mapping in your system:
+SCORE_YES_ID = 1
+SCORE_NO_ID = 2
+SCORE_NA_ID = 3
+
 @admin.register(HQIPAssessmentHeader)
 class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
-    list_display = ("facilityfk", "assessmenttype", "assessmentdate", 
-    "assessmentend_date", "areafk", "assesorfk", "is_RCAduringtheassessment")
+
+    list_display = (
+        "facilityfk",
+        "assessmenttype",
+        "assessmentdate",
+        "assessmentend_date",
+        "areafk",
+        "assesorfk",
+        "is_RCAduringtheassessment",
+        "hqip_dashboard_button",
+    )
+
     list_filter = ("assessmenttype", "areafk", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
+    # ---------------------------
+    # Province restriction (mix-in)
+    # ---------------------------
     def province_filter_kwargs(self, request):
         return {"facilityfk__districtfk__provincefk": request.user.profile.province}
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
+    # ---------------------------
+    # Dashboard URL (separate admin page)
+    # ---------------------------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "hqip-standards-dashboard/",
+                self.admin_site.admin_view(self.hqip_standards_dashboard),
+                name="hqip_standards_dashboard",
+            ),
+        ]
+        return custom_urls + urls
 
-        # Facility dropdown restriction
-        if not request.user.is_superuser:
-            prov = user_province(request)
-            if prov:
-                form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.filter(
-                    districtfk__provincefk=prov
-                )
-            else:
-                form.base_fields["facilityfk"].queryset = form.base_fields["facilityfk"].queryset.none()
-
-        return form
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    @admin.display(description="Dashboard")
+    def hqip_dashboard_button(self, obj):
         """
-        Extra safety: restrict assessor/implementor dropdowns too (if you want)
+        A button shown in the HQIP header list.
+        (This opens the global dashboard page.)
         """
-        prov = user_province(request)
-        if request.user.is_superuser or not prov:
-            return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        url = reverse("admin:hqip_standards_dashboard")
+        return format_html('<a class="button" href="{}">HQIP Dashboard</a>', url)
 
-        if db_field.name == "facilityfk":
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov)
+    def changelist_view(self, request, extra_context=None):
+        """
+        Optional: adds a top button if you create the template override later.
+        Safe even without template override.
+        """
+        extra_context = extra_context or {}
+        extra_context["hqip_dashboard_url"] = reverse("admin:hqip_standards_dashboard")
+        return super().changelist_view(request, extra_context=extra_context)
 
-        # If Assessor has province FK field named "province"
-        if db_field.name == "assesorfk" and hasattr(Assessor, "province"):
-            kwargs["queryset"] = Assessor.objects.filter(province=prov)
+    def hqip_standards_dashboard(self, request):
+        """
+        Produces 3 KPIs:
+        1) Standard %
+        2) Section % = average(Standard %)
+        3) Area % = average(Section %)
+        Using scorefk_id:
+        YES=1, NO=2, NA=3 (excluded), NULL excluded
+        """
 
-        # If Implementor has province FK field named "province"
-        if db_field.name == "implementorfk" and hasattr(Implementor, "province"):
-            kwargs["queryset"] = Implementor.objects.filter(province=prov)
+        # Province users: restricted by mixin
+        headers_qs = self.get_queryset(request)
 
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
-    def save_model(self, request, obj, form, change):
-         # On create
-        if not obj.pk:
-            obj.created_by = request.user
-            obj.created_at = timezone.now()
-        # On update
-        else:
-            obj.updated_by = request.user
-            obj.updated_at = timezone.now()
-        super().save_model(request, obj, form, change)
+        # Superuser optional province filter
+        selected_province = request.GET.get("province")
+        if request.user.is_superuser and selected_province:
+            headers_qs = headers_qs.filter(
+                facilityfk__districtfk__provincefk_id=selected_province
+            )
 
-        criteria_qs = Criteria.objects.filter(
-            standardfk__sectionfk__areafk=obj.areafk
-        ).select_related("standardfk", "standardfk__sectionfk").order_by(
-            "standardfk__sectionfk__id", "standardfk__id", "id"
+        # ---- 1) Aggregate at STANDARD level (this is the base for everything) ----
+        std_rows = (
+            HQIPAssessment.objects
+            .filter(header__in=headers_qs)
+            .values(
+                "criteriafk__standardfk__id",
+                "criteriafk__standardfk__name",
+                "criteriafk__standardfk__sectionfk__id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__sectionfk__areafk__id",
+                "criteriafk__standardfk__sectionfk__areafk__name",
+            )
+            .annotate(
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+            )
+            .order_by(
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__name",
+            )
         )
 
-        existing_ids = set(obj.lines.values_list("criteriafk_id", flat=True))
-        to_create = []
+        standard_results = []
+        # For Section calculation: store standard% by section
+        section_to_standard_percents = defaultdict(list)
+        # For Area calculation: store section% by area (computed later)
+        # We'll build section_results first then roll up to area.
 
-        for c in criteria_qs:
-            if c.id in existing_ids:
-                continue
-            to_create.append(HQIPAssessment(
-                header=obj,
-                criteriafk=c,
-                scorefk=None
-            ))
+        for r in std_rows:
+            den = r["applicable"]
+            num = r["yes"]
+            std_percent = round((num / den) * 100, 2) if den else None
 
-        with transaction.atomic():
-            if to_create:
-                HQIPAssessment.objects.bulk_create(to_create)
+            standard_results.append({
+                "area": r["criteriafk__standardfk__sectionfk__areafk__name"],
+                "section": r["criteriafk__standardfk__sectionfk__name"],
+                "standard": r["criteriafk__standardfk__name"],
+                "yes": num,
+                "applicable": den,
+                "percent": std_percent,
+            })
+
+            # Only include standards with valid denominator in averages
+            if std_percent is not None:
+                sec_key = (
+                    r["criteriafk__standardfk__sectionfk__areafk__id"],
+                    r["criteriafk__standardfk__sectionfk__id"],
+                )
+                section_to_standard_percents[sec_key].append(std_percent)
+
+        # ---- 2) SECTION % = average(Standard %) ----
+        section_results = []
+        area_to_section_percents = defaultdict(list)
+
+        # We also want names for sections/areas; build a map from the standard results
+        sec_name_map = {}
+        area_name_map = {}
+
+        for r in std_rows:
+            area_id = r["criteriafk__standardfk__sectionfk__areafk__id"]
+            sec_id = r["criteriafk__standardfk__sectionfk__id"]
+            sec_key = (area_id, sec_id)
+            sec_name_map[sec_key] = (r["criteriafk__standardfk__sectionfk__areafk__name"],
+                                    r["criteriafk__standardfk__sectionfk__name"])
+            area_name_map[area_id] = r["criteriafk__standardfk__sectionfk__areafk__name"]
+
+        for sec_key, percents in section_to_standard_percents.items():
+            area_id, sec_id = sec_key
+            area_name, sec_name = sec_name_map.get(sec_key, ("-", "-"))
+            sec_percent = round(sum(percents) / len(percents), 2) if percents else None
+
+            section_results.append({
+                "area": area_name,
+                "section": sec_name,
+                "num_standards_used": len(percents),
+                "percent": sec_percent,
+            })
+
+            if sec_percent is not None:
+                area_to_section_percents[area_id].append(sec_percent)
+
+        section_results.sort(key=lambda x: (x["area"], x["section"]))
+
+        # ---- 3) AREA % = average(Section %) ----
+        area_results = []
+        for area_id, percents in area_to_section_percents.items():
+            area_percent = round(sum(percents) / len(percents), 2) if percents else None
+            area_results.append({
+                "area": area_name_map.get(area_id, "-"),
+                "num_sections_used": len(percents),
+                "percent": area_percent,
+            })
+
+        area_results.sort(key=lambda x: x["area"])
+
+        provinces = Province.objects.all().order_by("name") if request.user.is_superuser else None
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="HQIP Dashboard – Standard / Section / Area Achievement (%)",
+            standard_results=standard_results,
+            section_results=section_results,
+            area_results=area_results,
+            provinces=provinces,
+            selected_province=selected_province,
+        )
+        return TemplateResponse(request, "admin/hiva/hqip_dashboard_full.html", context)
 
 #@admin.register(HQIPAssessment)
 class HQIPAssessmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
