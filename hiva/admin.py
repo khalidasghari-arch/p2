@@ -549,10 +549,13 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ]
         return custom_urls + urls
 
-    @admin.display(description="Standards Dashboard")
+    @admin.display(description="Score")
     def hqip_dashboard_button(self, obj):
         url = reverse("admin:hqip_standards_dashboard")
-        return format_html('<a class="button" href="{}">HQIP Dashboard</a>', url)
+        return format_html(
+            '<a class="button" href="{}?header_id={}">Score</a>',
+            url, obj.id
+    )
 
     @admin.display(description="Detail")
     def hqip_facility_button(self, obj):
@@ -567,7 +570,18 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # A) GLOBAL DASHBOARD
     # ==========================================================
     def hqip_standards_dashboard(self, request):
+        header_id = request.GET.get("header_id")
         headers_qs = self.get_queryset(request)
+        # If a specific header is requested, lock results to that header only
+        if header_id:
+            headers_qs = headers_qs.filter(id=header_id)
+
+        # Superuser optional province filter (only used when header_id is NOT provided)
+        selected_province = request.GET.get("province")
+        if request.user.is_superuser and selected_province and not header_id:
+            headers_qs = headers_qs.filter(
+                facilityfk__districtfk__provincefk_id=selected_province
+            )
 
         selected_province = request.GET.get("province")
         if request.user.is_superuser and selected_province:
