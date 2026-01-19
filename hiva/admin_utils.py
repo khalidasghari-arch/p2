@@ -3,9 +3,8 @@
 def user_province(request):
     if request.user.is_superuser:
         return None
-    profile = getattr(request.user, "profile", None)
+    profile = getattr(request.user, "profile", None) or getattr(request.user, "userprofile", None)
     return getattr(profile, "province", None)
-
 
 class ProvinceRestrictedAdminMixin:
     """

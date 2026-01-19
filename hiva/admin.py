@@ -1,7 +1,6 @@
 import openpyxl
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime
-
 from django import forms
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -33,7 +32,6 @@ from .models import (
     Implementor,
     Assessor,
     UserProfile,
-
     safesurgeryclinical,
     aimpee,
     aimpph,
@@ -46,7 +44,6 @@ from .models import (
     Participationtype,
     Position,
 )
-
 # ============================================================
 # Admin Branding
 # ============================================================
@@ -54,6 +51,27 @@ admin.site.site_header = "Maternal and Newborn Health Information Management Sys
 admin.site.site_title = "IQoC Portal"
 admin.site.index_title = "M&E Data Management System"
 
+class FacilityByProvinceFilter(admin.SimpleListFilter):
+    title = "Facility"
+    parameter_name = "facility"
+
+    def lookups(self, request, model_admin):
+        prov = user_province(request)
+
+        # superuser: show all facilities
+        qs = Facility.objects.all()
+        if not request.user.is_superuser:
+            if not prov:
+                return []
+            qs = qs.filter(districtfk__provincefk=prov)
+
+        qs = qs.order_by("name").values_list("id", "name")
+        return list(qs)
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(facilityfk_id=self.value())
+        return queryset
 
 # ============================================================
 # Province helper (supports user.profile OR user.userprofile)
@@ -453,8 +471,17 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "created_at",
     )
 
-    list_filter = ("areafk", "facilityfk")
+    list_filter = ("areafk", FacilityByProvinceFilter)
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "facilityfk" and not request.user.is_superuser:
+            prov = user_province(request)
+            if prov:
+                kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov).order_by("name")
+            else:
+                kwargs["queryset"] = Facility.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def province_filter_kwargs(self, request):
         return {"facilityfk__districtfk__provincefk": user_province(request)}
@@ -527,10 +554,14 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         url = reverse("admin:hqip_standards_dashboard")
         return format_html('<a class="button" href="{}">HQIP Dashboard</a>', url)
 
-    @admin.display(description="Facility Drill-down")
+    @admin.display(description="Detail")
     def hqip_facility_button(self, obj):
+    # link drilldown to this exact HQIP header row
         url = reverse("admin:hqip_facility_dashboard")
-        return format_html('<a class="button" href="{}">Facility Drill-down</a>', url)
+        return format_html(
+            '<a class="button" href="{}?facility={}&header_id={}">View</a>',
+            url, obj.facilityfk_id, obj.id
+    )
 
     # ==========================================================
     # A) GLOBAL DASHBOARD
@@ -677,7 +708,13 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     facility_obj = None
 
         if facility_obj:
+            header_id = request.GET.get("header_id")
+            # ---------- build header queryset from allowed headers ----------
             headers_qs = self.get_queryset(request).filter(facilityfk=facility_obj)
+            # If user came from a specific HQIP row, lock to that header only
+            if header_id:
+                headers_qs = headers_qs.filter(id=header_id)
+            # Optional filters
             if selected_area:
                 headers_qs = headers_qs.filter(areafk_id=selected_area)
             if selected_type:
@@ -797,7 +834,6 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         )
         return TemplateResponse(request, "admin/hiva/hqip_facility_dashboard.html", context)
 
-
 # ============================================================
 # Hide HQIPAssessment from admin menu (inline only)
 # ============================================================
@@ -806,7 +842,6 @@ class HQIPAssessmentAdmin(admin.ModelAdmin):
 
     def has_module_permission(self, request):
         return False  # hide from sidebar
-
 
 # ============================================================
 # Other Admins (keep simple / safe)
@@ -825,7 +860,6 @@ class QICMonthFilter(admin.SimpleListFilter):
             return queryset.filter(qiccommdate__year=year, qiccommdate__month=month)
         return queryset
 
-
 @admin.register(Qicdataset)
 class MyModelqicdataset(admin.ModelAdmin):
     list_display = [
@@ -839,11 +873,9 @@ class MyModelqicdataset(admin.ModelAdmin):
     list_filter = ["qicfacility", QICMonthFilter, "qicfacility__districtfk__provincefk"]
     list_per_page = 20
 
-
 class Trainingdetails(admin.StackedInline):
     model = Training
     extra = 1
-
 
 @admin.register(Trainingheader)
 class TrainingAdmin(admin.ModelAdmin):
@@ -854,10 +886,8 @@ class TrainingAdmin(admin.ModelAdmin):
     )
     search_fields = ("trainingname",)
 
-
 class MpdsrProvinceFilter(ProvinceFromFacilityFilter):
     province_path = "facilityname__districtfk__provincefk"
-
 
 @admin.register(Mpdsr)
 class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):

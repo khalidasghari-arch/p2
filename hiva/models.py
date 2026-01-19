@@ -244,7 +244,7 @@ class HQIPAssessmentHeader(models.Model):
     assessmentend_date = models.DateField(verbose_name="Assessment End Date")
     areafk = models.ForeignKey(Area, on_delete=models.CASCADE, verbose_name="Thematic Area")
     assessmentteam = models.TextField(
-        max_length=80, blank=True, null=True,
+        max_length=200, blank=True, null=True,
         verbose_name="Assessment Team")
     is_RCAduringtheassessment = models.BooleanField(
         choices=[
@@ -252,7 +252,7 @@ class HQIPAssessmentHeader(models.Model):
             (False, "No"),
         ],
         default=False,
-        verbose_name="Root Cause Assessment (RCA) conducted during the assessment", 
+        verbose_name="RCA conducted", 
         blank=True, null=True)
     
     created_by = models.ForeignKey(
