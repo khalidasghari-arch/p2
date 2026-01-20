@@ -495,6 +495,12 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_filter = (HQIPProvinceFilter, "areafk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
+     # ---------------------------
+    # Province restriction (mix-in requirement)
+    # ---------------------------
+    def province_filter_kwargs(self, request):
+        return {"facilityfk__districtfk__provincefk": user_province(request)}
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "facilityfk" and not request.user.is_superuser:
             prov = user_province(request)
@@ -503,9 +509,6 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             else:
                 kwargs["queryset"] = Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def province_filter_kwargs(self, request):
-        return {"facilityfk__districtfk__provincefk": user_province(request)}
 
     # ---- helpers ----
     def _round2(self, x):
@@ -569,8 +572,8 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             ),
             path(
             "hqip-rca-dashboard/",
-            self.admin_site.admin_view(self.hqip_rca_dashboard),
-            name="hqip_rca_dashboard",
+                self.admin_site.admin_view(self.hqip_rca_dashboard),
+                name="hqip_rca_dashboard",
             ),
         ]
         return custom_urls + urls
@@ -578,25 +581,21 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     @admin.display(description="Score")
     def hqip_dashboard_button(self, obj):
         url = reverse("admin:hqip_standards_dashboard")
-        return format_html(
-            '<a class="button" href="{}?header_id={}">Score</a>',
-            url, obj.id
+        return format_html('<a class="button" href="{}?header_id={}">Score</a>', url, obj.id
     )
 
     @admin.display(description="Detail")
     def hqip_facility_button(self, obj):
     # link drilldown to this exact HQIP header row
         url = reverse("admin:hqip_facility_dashboard")
-        return format_html(
-            '<a class="button" href="{}?facility={}&header_id={}">View</a>',
+        return format_html('<a class="button" href="{}?facility={}&header_id={}">View</a>',
             url, obj.facilityfk_id, obj.id
     )
 
     @admin.display(description="RCA")
     def hqip_rca_button(self, obj):
         url = reverse("admin:hqip_rca_dashboard")
-        return format_html('<a class="button" href="{}">RCA</a>', url, obj.id
-        )
+        return format_html('<a class="button" href="{}?header_id={}">RCA</a>', url, obj.id)
 
     # ==========================================================
     # A) GLOBAL DASHBOARD
@@ -604,20 +603,32 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def hqip_standards_dashboard(self, request):
         header_id = request.GET.get("header_id")
         headers_qs = self.get_queryset(request)
-        # If a specific header is requested, lock results to that header only
+
+          # Row-level: lock to exact header
         if header_id:
             headers_qs = headers_qs.filter(id=header_id)
+            selected_province = None  # irrelevant when header_id is set
+        else:
+            selected_province = request.GET.get("province")
+            if request.user.is_superuser and selected_province:
+                headers_qs = headers_qs.filter(
+                    facilityfk__districtfk__provincefk_id=selected_province
+                )
 
-        # Superuser optional province filter (only used when header_id is NOT provided)
-        selected_province = request.GET.get("province")
-        if request.user.is_superuser and selected_province and not header_id:
-            headers_qs = headers_qs.filter(
-                facilityfk__districtfk__provincefk_id=selected_province
-            )
+        # # If a specific header is requested, lock results to that header only
+        # if header_id:
+        #     headers_qs = headers_qs.filter(id=header_id)
 
-        selected_province = request.GET.get("province")
-        if request.user.is_superuser and selected_province:
-            headers_qs = headers_qs.filter(facilityfk__districtfk__provincefk_id=selected_province)
+        # # Superuser optional province filter (only used when header_id is NOT provided)
+        # selected_province = request.GET.get("province")
+        # if request.user.is_superuser and selected_province and not header_id:
+        #     headers_qs = headers_qs.filter(
+        #         facilityfk__districtfk__provincefk_id=selected_province
+        #     )
+
+        # selected_province = request.GET.get("province")
+        # if request.user.is_superuser and selected_province:
+        #     headers_qs = headers_qs.filter(facilityfk__districtfk__provincefk_id=selected_province)
 
         std_rows = (
             HQIPAssessment.objects
@@ -715,6 +726,7 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             area_results=area_results,
             provinces=provinces,
             selected_province=selected_province,
+            header_id=header_id,
         )
         return TemplateResponse(request, "admin/hiva/hqip_dashboard_full.html", context)
 
@@ -728,8 +740,10 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         selected_type = request.GET.get("assessmenttype")
         date_from = request.GET.get("date_from")
         date_to = request.GET.get("date_to")
+        header_id = request.GET.get("header_id")
 
         facilities_qs = Facility.objects.all().select_related("districtfk__provincefk")
+
         if not request.user.is_superuser:
             prov = user_province(request)
             facilities_qs = facilities_qs.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
@@ -754,21 +768,22 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     facility_obj = None
 
         if facility_obj:
-            header_id = request.GET.get("header_id")
+            # header_id = request.GET.get("header_id")
             # ---------- build header queryset from allowed headers ----------
             headers_qs = self.get_queryset(request).filter(facilityfk=facility_obj)
             # If user came from a specific HQIP row, lock to that header only
             if header_id:
                 headers_qs = headers_qs.filter(id=header_id)
-            # Optional filters
-            if selected_area:
-                headers_qs = headers_qs.filter(areafk_id=selected_area)
-            if selected_type:
-                headers_qs = headers_qs.filter(assessmenttype_id=selected_type)
-            if date_from:
-                headers_qs = headers_qs.filter(assessmentdate__gte=date_from)
-            if date_to:
-                headers_qs = headers_qs.filter(assessmentdate__lte=date_to)
+            else:
+                # Optional filters
+                if selected_area:
+                    headers_qs = headers_qs.filter(areafk_id=selected_area)
+                if selected_type:
+                    headers_qs = headers_qs.filter(assessmenttype_id=selected_type)
+                if date_from:
+                    headers_qs = headers_qs.filter(assessmentdate__gte=date_from)
+                if date_to:
+                    headers_qs = headers_qs.filter(assessmentdate__lte=date_to)
 
             header_list = list(headers_qs.values("id", "assessmentdate"))
 
@@ -871,6 +886,7 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             selected_type=selected_type,
             date_from=date_from,
             date_to=date_to,
+            header_id=header_id,
             header_list=header_list,
             standard_results=standard_results,
             section_results=section_results,
@@ -888,7 +904,6 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         """
 
         header_id = request.GET.get("header_id")
-
         # Always start from province-restricted headers
         headers_qs = self.get_queryset(request)
 
@@ -902,13 +917,12 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             return TemplateResponse(request, "admin/hiva/hqip_rca_dashboard.html", context)
 
-        # Lock to exact header
-        headers_qs = headers_qs.filter(id=header_id)
-
-        # If user tries a header outside their scope -> show nothing (safe)
-        header_obj = headers_qs.select_related(
-            "facilityfk__districtfk__provincefk", "areafk", "assessmenttype"
-        ).first()
+        header_obj = (
+            headers_qs
+            .filter(id=header_id)
+            .select_related("facilityfk__districtfk__provincefk", "areafk", "assessmenttype")
+            .first()
+        )
 
         if not header_obj:
             context = dict(
@@ -919,13 +933,9 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             return TemplateResponse(request, "admin/hiva/hqip_rca_dashboard.html", context)
 
-        # Failed criteria (NO only)
         rca_rows = (
             HQIPAssessment.objects
-            .filter(
-                header_id=header_obj.id,
-                scorefk_id=SCORE_NO_ID,  # 2 = NO
-            )
+            .filter(header_id=header_obj.id, scorefk_id=SCORE_NO_ID)
             .select_related(
                 "criteriafk",
                 "criteriafk__standardfk",
