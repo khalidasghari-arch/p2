@@ -1,4 +1,3 @@
-import openpyxl
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime
 from django import forms
@@ -43,6 +42,8 @@ from .models import (
     Participationtype,
     Position,
 )
+from django.utils.http import urlencode
+
 # ============================================================
 # Admin Branding
 # ============================================================
@@ -580,22 +581,21 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     @admin.display(description="Score")
     def hqip_dashboard_button(self, obj):
-        url = reverse("admin:hqip_standards_dashboard")
-        return format_html('<a class="button" href="{}?header_id={}">Score</a>', url, obj.id
-    )
+        base_url = reverse("admin:hqip_standards_dashboard")
+        qs = urlencode({"header_id": obj.id})
+        return format_html('<a class="button" href="{}?{}">Score</a>', base_url, qs)
 
     @admin.display(description="Detail")
     def hqip_facility_button(self, obj):
-    # link drilldown to this exact HQIP header row
-        url = reverse("admin:hqip_facility_dashboard")
-        return format_html('<a class="button" href="{}?facility={}&header_id={}">View</a>',
-            url, obj.facilityfk_id, obj.id
-    )
+        base_url = reverse("admin:hqip_facility_dashboard")
+        qs = urlencode({"facility": obj.facilityfk_id, "header_id": obj.id})
+        return format_html('<a class="button" href="{}?{}">View</a>', base_url, qs)
 
     @admin.display(description="RCA")
     def hqip_rca_button(self, obj):
-        url = reverse("admin:hqip_rca_dashboard")
-        return format_html('<a class="button" href="{}?header_id={}">RCA</a>', url, obj.id)
+        base_url = reverse("admin:hqip_rca_dashboard")
+        qs = urlencode({"header_id": obj.id})
+        return format_html('<a class="button" href="{}?{}">RCA</a>', base_url, qs)
 
     # ==========================================================
     # A) GLOBAL DASHBOARD

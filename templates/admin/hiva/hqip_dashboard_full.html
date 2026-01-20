@@ -1,8 +1,16 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 
-<h1 style="margin-bottom:10px;">HQIP RCA – Failed Criteria (NO only)</h1>
+{# ---------- Message (optional) ---------- #}
+{% if error_message %}
+  <div class="messagelist">
+    <div class="warning">{{ error_message }}</div>
+  </div>
+{% endif %}
 
+<h1 style="margin-bottom:10px;">HQIP Dashboard</h1>
+
+{# ---------- Header summary (when row-level) ---------- #}
 {% if header_obj %}
   <div style="margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px;">
     <div><strong>Facility:</strong> {{ header_obj.facilityfk }}</div>
@@ -11,46 +19,143 @@
     <div><strong>Assessment Type:</strong> {{ header_obj.assessmenttype }}</div>
     <div><strong>Assessment Date:</strong> {{ header_obj.assessmentdate }}</div>
   </div>
-
-  <table class="adminlist" style="width:100%; border-collapse:collapse;">
-    <thead>
-      <tr>
-        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Area</th>
-        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Section</th>
-        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Standard</th>
-        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Failed Criteria</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in rca_rows %}
-        <tr>
-          <td style="padding:8px; border-bottom:1px solid #eee;">
-            {{ r.criteriafk.standardfk.sectionfk.areafk.name }}
-          </td>
-          <td style="padding:8px; border-bottom:1px solid #eee;">
-            {{ r.criteriafk.standardfk.sectionfk.name }}
-          </td>
-          <td style="padding:8px; border-bottom:1px solid #eee;">
-            {{ r.criteriafk.standardfk.name }}
-          </td>
-          <td style="padding:8px; border-bottom:1px solid #eee; color:#b00020; font-weight:600;">
-            {{ r.criteriafk.name }}
-          </td>
-        </tr>
-      {% empty %}
-        <tr>
-          <td colspan="4" style="padding:12px; text-align:center;">
-            No failed criteria found (Score=NO).
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-{% else %}
-  <div style="padding:12px; border:1px solid #ddd; border-radius:6px;">
-    No header selected (missing header_id) or you don’t have access to that header.
-  </div>
 {% endif %}
+
+<style>
+  .badge {
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:12px;
+    color:#fff;
+  }
+  .bg-red { background:#c62828; }
+  .bg-yellow { background:#f9a825; color:#000; }
+  .bg-green { background:#2e7d32; }
+
+  table.hqip-table { width:100%; border-collapse:collapse; margin-bottom:18px; }
+  table.hqip-table th { text-align:left; border-bottom:1px solid #ddd; padding:8px; }
+  table.hqip-table td { padding:8px; border-bottom:1px solid #eee; }
+</style>
+
+{% with dummy=0 %}
+{% endwith %}
+
+{# helper: color thresholds
+   - red: <50
+   - yellow: 50-74
+   - green: 75+
+#}
+
+<h2 style="margin:18px 0 8px;">Area Achievement</h2>
+<table class="hqip-table">
+  <thead>
+    <tr>
+      <th>Area</th>
+      <th style="width:160px;">% Achievement</th>
+      <th style="width:160px;"># Sections used</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in area_results %}
+      <tr>
+        <td>{{ r.area }}</td>
+        <td>
+          {% if r.percent is None %}
+            -
+          {% else %}
+            {% if r.percent < 50 %}
+              <span class="badge bg-red">{{ r.percent }}%</span>
+            {% elif r.percent < 75 %}
+              <span class="badge bg-yellow">{{ r.percent }}%</span>
+            {% else %}
+              <span class="badge bg-green">{{ r.percent }}%</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>{{ r.num_sections_used }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" style="text-align:center; padding:12px;">No area results.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2 style="margin:18px 0 8px;">Section Achievement</h2>
+<table class="hqip-table">
+  <thead>
+    <tr>
+      <th>Area</th>
+      <th>Section</th>
+      <th style="width:160px;">% Achievement</th>
+      <th style="width:160px;"># Standards used</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in section_results %}
+      <tr>
+        <td>{{ r.area }}</td>
+        <td>{{ r.section }}</td>
+        <td>
+          {% if r.percent is None %}
+            -
+          {% else %}
+            {% if r.percent < 50 %}
+              <span class="badge bg-red">{{ r.percent }}%</span>
+            {% elif r.percent < 75 %}
+              <span class="badge bg-yellow">{{ r.percent }}%</span>
+            {% else %}
+              <span class="badge bg-green">{{ r.percent }}%</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>{{ r.num_standards_used }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" style="text-align:center; padding:12px;">No section results.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2 style="margin:18px 0 8px;">Standard Achievement</h2>
+<table class="hqip-table">
+  <thead>
+    <tr>
+      <th>Area</th>
+      <th>Section</th>
+      <th>Standard</th>
+      <th style="width:160px;">% Achievement</th>
+      <th style="width:110px;">YES</th>
+      <th style="width:110px;">Applicable</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in standard_results %}
+      <tr>
+        <td>{{ r.area }}</td>
+        <td>{{ r.section }}</td>
+        <td>{{ r.standard }}</td>
+        <td>
+          {% if r.percent is None %}
+            -
+          {% else %}
+            {% if r.percent < 50 %}
+              <span class="badge bg-red">{{ r.percent }}%</span>
+            {% elif r.percent < 75 %}
+              <span class="badge bg-yellow">{{ r.percent }}%</span>
+            {% else %}
+              <span class="badge bg-green">{{ r.percent }}%</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>{{ r.yes }}</td>
+        <td>{{ r.applicable }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" style="text-align:center; padding:12px;">No standard results.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 
 {% endblock %}

@@ -1,52 +1,56 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
-
 {% block content %}
-<h1>{{ title }}</h1>
 
-{% if provinces %}
-<form method="get" style="margin-bottom:15px;">
-    <label>Province:</label>
-    <select name="province" onchange="this.form.submit()">
-        <option value="">-- Select Province --</option>
-        {% for p in provinces %}
-            <option value="{{ p.id }}" {% if p.id|stringformat:"s" == selected_province %}selected{% endif %}>
-                {{ p.name }}
-            </option>
-        {% endfor %}
-    </select>
-</form>
-{% endif %}
+<!-- <h1 style="margin-bottom:10px;">HQIP RCA – Failed Criteria (NO only)</h1> -->
 
-<table class="adminlist table table-striped">
+{% if header_obj %}
+  <div style="margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px;">
+    <div><strong>Facility:</strong> {{ header_obj.facilityfk }}</div>
+    <div><strong>Province:</strong> {{ header_obj.facilityfk.districtfk.provincefk.name }}</div>
+    <div><strong>Area:</strong> {{ header_obj.areafk }}</div>
+    <div><strong>Assessment Type:</strong> {{ header_obj.assessmenttype }}</div>
+    <div><strong>Assessment Date:</strong> {{ header_obj.assessmentdate }}</div>
+  </div>
+
+  <table class="adminlist" style="width:100%; border-collapse:collapse;">
     <thead>
-        <tr>
-            <th>Province</th>
-            <th>Facility</th>
-            <th>Area</th>
-            <th>Section</th>
-            <th>Standard</th>
-            <th>Failed Criteria</th>
-            <th>Assessment Date</th>
-        </tr>
+      <tr>
+        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Area</th>
+        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Section</th>
+        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Standard</th>
+        <th style="text-align:left; border-bottom:1px solid #ddd; padding:8px;">Failed Criteria</th>
+      </tr>
     </thead>
     <tbody>
-        {% for r in rca_rows %}
+      {% for r in rca_rows %}
         <tr>
-            <td>{{ r.header.facilityfk.districtfk.provincefk.name }}</td>
-            <td>{{ r.header.facilityfk.name }}</td>
-            <td>{{ r.criteriafk.standardfk.sectionfk.areafk.name }}</td>
-            <td>{{ r.criteriafk.standardfk.sectionfk.name }}</td>
-            <td>{{ r.criteriafk.standardfk.name }}</td>
-            <td><strong style="color:red">{{ r.criteriafk.name }}</strong></td>
-            <td>{{ r.header.assessmentdate }}</td>
+          <td style="padding:8px; border-bottom:1px solid #eee;">
+            {{ r.criteriafk.standardfk.sectionfk.areafk.name }}
+          </td>
+          <td style="padding:8px; border-bottom:1px solid #eee;">
+            {{ r.criteriafk.standardfk.sectionfk.name }}
+          </td>
+          <td style="padding:8px; border-bottom:1px solid #eee;">
+            {{ r.criteriafk.standardfk.name }}
+          </td>
+          <td style="padding:8px; border-bottom:1px solid #eee; color:#b00020; font-weight:600;">
+            {{ r.criteriafk.name }}
+          </td>
         </tr>
-        {% empty %}
+      {% empty %}
         <tr>
-            <td colspan="7" style="text-align:center;">No failed criteria found.</td>
+          <td colspan="4" style="padding:12px; text-align:center;">
+            No failed criteria found (Score=NO).
+          </td>
         </tr>
-        {% endfor %}
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+
+{% else %}
+  <div style="padding:12px; border:1px solid #ddd; border-radius:6px;">
+    No header selected (missing header_id) or you don’t have access to that header.
+  </div>
+{% endif %}
 
 {% endblock %}
