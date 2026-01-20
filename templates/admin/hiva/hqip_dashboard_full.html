@@ -1,161 +1,559 @@
 {% extends "admin/base_site.html" %}
-{% block content %}
-
-{# ---------- Message (optional) ---------- #}
-{% if error_message %}
-  <div class="messagelist">
-    <div class="warning">{{ error_message }}</div>
-  </div>
-{% endif %}
-
-<h1 style="margin-bottom:10px;">HQIP Dashboard</h1>
-
-{# ---------- Header summary (when row-level) ---------- #}
-{% if header_obj %}
-  <div style="margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px;">
-    <div><strong>Facility:</strong> {{ header_obj.facilityfk }}</div>
-    <div><strong>Province:</strong> {{ header_obj.facilityfk.districtfk.provincefk.name }}</div>
-    <div><strong>Area:</strong> {{ header_obj.areafk }}</div>
-    <div><strong>Assessment Type:</strong> {{ header_obj.assessmenttype }}</div>
-    <div><strong>Assessment Date:</strong> {{ header_obj.assessmentdate }}</div>
-  </div>
-{% endif %}
-
+{% block extrastyle %}
+{{ block.super }}
 <style>
-  .badge {
-    display:inline-block;
-    padding:2px 8px;
-    border-radius:999px;
-    font-weight:700;
-    font-size:12px;
-    color:#fff;
+  /* ---- Layout ---- */
+  .hqip-wrap { max-width: 1200px; }
+  .hqip-topbar{
+    display:flex; gap:12px; align-items:flex-start; justify-content:space-between;
+    flex-wrap:wrap; margin: 8px 0 14px;
   }
+  .hqip-title{
+    margin:0; line-height:1.2;
+  }
+  .hqip-sub{
+    margin:4px 0 0; color: var(--body-quiet-color,#6b7280); font-size:13px;
+  }
+
+  /* ---- Cards ---- */
+  .hqip-card{
+    background: var(--body-bg, #fff);
+    border: 1px solid var(--hairline-color, #e5e7eb);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    padding: 12px;
+    margin: 10px 0 14px;
+  }
+  .hqip-card h2{
+    margin: 0 0 10px;
+    font-size: 16px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .hqip-muted{ color: var(--body-quiet-color,#6b7280); font-size:12px; }
+
+  /* ---- Summary grid ---- */
+  .hqip-summary{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1100px){
+    .hqip-summary{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  }
+  .hqip-kpi{
+    border: 1px solid var(--hairline-color,#e5e7eb);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,0));
+  }
+  .hqip-kpi .label{ font-size:12px; color: var(--body-quiet-color,#6b7280); }
+  .hqip-kpi .value{ font-size:14px; font-weight:700; margin-top:6px; }
+
+  /* ---- Badges ---- */
+  .badge {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    color: #fff;
+    white-space: nowrap;
+  }
+  .dot{ width:8px; height:8px; border-radius:999px; background: rgba(255,255,255,.9); display:inline-block; }
   .bg-red { background:#c62828; }
-  .bg-yellow { background:#f9a825; color:#000; }
+  .bg-yellow { background:#f9a825; color:#111; }
+  .bg-yellow .dot{ background: rgba(0,0,0,.75); }
   .bg-green { background:#2e7d32; }
 
-  table.hqip-table { width:100%; border-collapse:collapse; margin-bottom:18px; }
-  table.hqip-table th { text-align:left; border-bottom:1px solid #ddd; padding:8px; }
-  table.hqip-table td { padding:8px; border-bottom:1px solid #eee; }
+  /* ---- Controls ---- */
+  .hqip-controls{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .hqip-controls label{ font-size:12px; color: var(--body-quiet-color,#6b7280); display:block; margin-bottom:4px;}
+  .hqip-controls input[type="text"], .hqip-controls select{
+    padding: 8px 10px;
+    border: 1px solid var(--hairline-color,#d1d5db);
+    border-radius: 10px;
+    background: var(--body-bg,#fff);
+    min-width: 220px;
+    outline: none;
+  }
+  .hqip-controls input[type="text"]:focus, .hqip-controls select:focus{
+    border-color: #94a3b8;
+    box-shadow: 0 0 0 3px rgba(148,163,184,.25);
+  }
+  .hqip-btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--hairline-color,#d1d5db);
+    background: var(--body-bg,#fff);
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .hqip-btn:hover{ background: rgba(0,0,0,.03); }
+  .hqip-btn.primary{
+    border-color: #2563eb;
+    background: #2563eb;
+    color:#fff;
+  }
+  .hqip-btn.primary:hover{ filter: brightness(.96); }
+
+  /* ---- Tables ---- */
+  table.hqip-table{
+    width:100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow:hidden;
+    border: 1px solid var(--hairline-color,#e5e7eb);
+    border-radius: 12px;
+    background: var(--body-bg,#fff);
+  }
+  table.hqip-table th, table.hqip-table td{
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--hairline-color,#e5e7eb);
+    vertical-align: middle;
+  }
+  table.hqip-table thead th{
+    background: rgba(0,0,0,.03);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    text-align:left;
+    font-size: 12px;
+    color: var(--body-quiet-color,#6b7280);
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+  table.hqip-table tbody tr:nth-child(odd){ background: rgba(0,0,0,.01); }
+  table.hqip-table tbody tr:hover{ background: rgba(37,99,235,.06); }
+  table.hqip-table tbody tr:last-child td{ border-bottom:none; }
+
+  .sortable{ cursor:pointer; user-select:none; }
+  .sort-ind{ font-size: 11px; margin-left: 6px; opacity:.75; }
+
+  /* ---- Percent bar ---- */
+  .pct-wrap{
+    display:flex; align-items:center; gap:10px;
+  }
+  .pct-bar{
+    height: 10px; width: 140px;
+    border-radius: 999px;
+    background: rgba(0,0,0,.08);
+    overflow:hidden;
+    border: 1px solid rgba(0,0,0,.06);
+  }
+  .pct-fill{
+    height:100%;
+    width:0%;
+    background: #2e7d32;
+  }
+  .pct-fill.yellow{ background:#f9a825; }
+  .pct-fill.red{ background:#c62828; }
+
+  /* ---- Collapsible sections ---- */
+  details.hqip-details{
+    border: 1px solid var(--hairline-color,#e5e7eb);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: var(--body-bg,#fff);
+    margin-top: 10px;
+  }
+  details.hqip-details summary{
+    cursor:pointer;
+    font-weight: 700;
+    list-style:none;
+  }
+  details.hqip-details summary::-webkit-details-marker{ display:none; }
 </style>
+{% endblock %}
 
-{% with dummy=0 %}
-{% endwith %}
+{% block content %}
+<div class="hqip-wrap">
 
-{# helper: color thresholds
-   - red: <50
-   - yellow: 50-74
-   - green: 75+
-#}
+  {# ---------- Message ---------- #}
+  {% if error_message %}
+    <div class="messagelist">
+      <div class="warning">{{ error_message }}</div>
+    </div>
+  {% endif %}
 
-<h2 style="margin:18px 0 8px;">Area Achievement</h2>
-<table class="hqip-table">
-  <thead>
-    <tr>
-      <th>Area</th>
-      <th style="width:160px;">% Achievement</th>
-      <th style="width:160px;"># Sections used</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in area_results %}
-      <tr>
-        <td>{{ r.area }}</td>
-        <td>
-          {% if r.percent is None %}
-            -
-          {% else %}
-            {% if r.percent < 50 %}
-              <span class="badge bg-red">{{ r.percent }}%</span>
-            {% elif r.percent < 75 %}
-              <span class="badge bg-yellow">{{ r.percent }}%</span>
-            {% else %}
-              <span class="badge bg-green">{{ r.percent }}%</span>
-            {% endif %}
-          {% endif %}
-        </td>
-        <td>{{ r.num_sections_used }}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="3" style="text-align:center; padding:12px;">No area results.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+  <div class="hqip-topbar">
+    <div>
+      <h1 class="hqip-title">HQIP Dashboard</h1>
+      <p class="hqip-sub">
+        Standard % = YES / (YES+NO) × 100 (NA excluded). Section = average(Standard %). Area = average(Section %).
+      </p>
+    </div>
 
-<h2 style="margin:18px 0 8px;">Section Achievement</h2>
-<table class="hqip-table">
-  <thead>
-    <tr>
-      <th>Area</th>
-      <th>Section</th>
-      <th style="width:160px;">% Achievement</th>
-      <th style="width:160px;"># Standards used</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in section_results %}
-      <tr>
-        <td>{{ r.area }}</td>
-        <td>{{ r.section }}</td>
-        <td>
-          {% if r.percent is None %}
-            -
-          {% else %}
-            {% if r.percent < 50 %}
-              <span class="badge bg-red">{{ r.percent }}%</span>
-            {% elif r.percent < 75 %}
-              <span class="badge bg-yellow">{{ r.percent }}%</span>
-            {% else %}
-              <span class="badge bg-green">{{ r.percent }}%</span>
-            {% endif %}
-          {% endif %}
-        </td>
-        <td>{{ r.num_standards_used }}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="4" style="text-align:center; padding:12px;">No section results.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+    <div class="hqip-controls">
+      <div>
+        <label for="hqipSearch">Search (Area / Section / Standard)</label>
+        <input id="hqipSearch" type="text" placeholder="Type to filter tables…" autocomplete="off">
+      </div>
 
-<h2 style="margin:18px 0 8px;">Standard Achievement</h2>
-<table class="hqip-table">
-  <thead>
-    <tr>
-      <th>Area</th>
-      <th>Section</th>
-      <th>Standard</th>
-      <th style="width:160px;">% Achievement</th>
-      <th style="width:110px;">YES</th>
-      <th style="width:110px;">Applicable</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in standard_results %}
-      <tr>
-        <td>{{ r.area }}</td>
-        <td>{{ r.section }}</td>
-        <td>{{ r.standard }}</td>
-        <td>
-          {% if r.percent is None %}
-            -
-          {% else %}
-            {% if r.percent < 50 %}
-              <span class="badge bg-red">{{ r.percent }}%</span>
-            {% elif r.percent < 75 %}
-              <span class="badge bg-yellow">{{ r.percent }}%</span>
-            {% else %}
-              <span class="badge bg-green">{{ r.percent }}%</span>
-            {% endif %}
-          {% endif %}
-        </td>
-        <td>{{ r.yes }}</td>
-        <td>{{ r.applicable }}</td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="6" style="text-align:center; padding:12px;">No standard results.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+      <div>
+        <label for="hqipSortMode">Sort by</label>
+        <select id="hqipSortMode">
+          <option value="percent_desc">Percent (High → Low)</option>
+          <option value="percent_asc">Percent (Low → High)</option>
+          <option value="name_asc">Name (A → Z)</option>
+          <option value="name_desc">Name (Z → A)</option>
+        </select>
+      </div>
 
+      <button class="hqip-btn" type="button" id="hqipReset">Reset</button>
+      <button class="hqip-btn primary" type="button" id="hqipExpand">Expand all</button>
+    </div>
+  </div>
+
+  {# ---------- Header summary (row-level) ---------- #}
+  {% if header_obj %}
+    <div class="hqip-card">
+      <h2>
+        Assessment Summary
+        <span class="hqip-muted">Header ID: {{ header_obj.id }}</span>
+      </h2>
+      <div class="hqip-summary">
+        <div class="hqip-kpi">
+          <div class="label">Facility</div>
+          <div class="value">{{ header_obj.facilityfk }}</div>
+        </div>
+        <div class="hqip-kpi">
+          <div class="label">Province</div>
+          <div class="value">{{ header_obj.facilityfk.districtfk.provincefk.name }}</div>
+        </div>
+        <div class="hqip-kpi">
+          <div class="label">Area</div>
+          <div class="value">{{ header_obj.areafk }}</div>
+        </div>
+        <div class="hqip-kpi">
+          <div class="label">Assessment Type</div>
+          <div class="value">{{ header_obj.assessmenttype }}</div>
+        </div>
+        <div class="hqip-kpi">
+          <div class="label">Assessment Date</div>
+          <div class="value">{{ header_obj.assessmentdate }}</div>
+        </div>
+      </div>
+
+      <details class="hqip-details">
+        <summary>Legend / Interpretation</summary>
+        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+          <span class="badge bg-red"><span class="dot"></span> Red: &lt; 50%</span>
+          <span class="badge bg-yellow"><span class="dot"></span> Yellow: 50–74%</span>
+          <span class="badge bg-green"><span class="dot"></span> Green: ≥ 75%</span>
+        </div>
+        <p class="hqip-muted" style="margin-top:10px;">
+          Recommendation: focus RCA and Improvement Plan on Standards with low % and on “NO” criteria.
+        </p>
+      </details>
+    </div>
+  {% endif %}
+
+  {# ---------- AREA TABLE ---------- #}
+  <div class="hqip-card">
+    <h2>
+      Area Achievement
+      <span class="hqip-muted">Tip: click headers to sort this table only.</span>
+    </h2>
+
+    <table class="hqip-table" id="tblArea">
+      <thead>
+        <tr>
+          <th class="sortable" data-col="name">Area <span class="sort-ind">↕</span></th>
+          <th class="sortable" data-col="percent" style="width:260px;">% Achievement <span class="sort-ind">↕</span></th>
+          <th class="sortable" data-col="count" style="width:160px;"># Sections used <span class="sort-ind">↕</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in area_results %}
+          <tr data-name="{{ r.area|default:'-' }}" data-percent="{{ r.percent|default_if_none:'-1' }}" data-count="{{ r.num_sections_used|default:0 }}">
+            <td>{{ r.area }}</td>
+            <td>
+              {% if r.percent is None %}
+                -
+              {% else %}
+                <div class="pct-wrap">
+                  {% if r.percent < 50 %}
+                    <span class="badge bg-red"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill red" data-pct="{{ r.percent }}"></div></div>
+                  {% elif r.percent < 75 %}
+                    <span class="badge bg-yellow"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill yellow" data-pct="{{ r.percent }}"></div></div>
+                  {% else %}
+                    <span class="badge bg-green"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill" data-pct="{{ r.percent }}"></div></div>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td>{{ r.num_sections_used }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" style="text-align:center; padding:12px;">No area results.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ---------- SECTION TABLE ---------- #}
+  <div class="hqip-card">
+    <h2>Section Achievement</h2>
+    <table class="hqip-table" id="tblSection">
+      <thead>
+        <tr>
+          <th class="sortable" data-col="area">Area <span class="sort-ind">↕</span></th>
+          <th class="sortable" data-col="name">Section <span class="sort-ind">↕</span></th>
+          <th class="sortable" data-col="percent" style="width:260px;">% Achievement <span class="sort-ind">↕</span></th>
+          <th class="sortable" data-col="count" style="width:170px;"># Standards used <span class="sort-ind">↕</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in section_results %}
+          <tr data-area="{{ r.area|default:'-' }}" data-name="{{ r.section|default:'-' }}" data-percent="{{ r.percent|default_if_none:'-1' }}" data-count="{{ r.num_standards_used|default:0 }}">
+            <td>{{ r.area }}</td>
+            <td>{{ r.section }}</td>
+            <td>
+              {% if r.percent is None %}
+                -
+              {% else %}
+                <div class="pct-wrap">
+                  {% if r.percent < 50 %}
+                    <span class="badge bg-red"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill red" data-pct="{{ r.percent }}"></div></div>
+                  {% elif r.percent < 75 %}
+                    <span class="badge bg-yellow"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill yellow" data-pct="{{ r.percent }}"></div></div>
+                  {% else %}
+                    <span class="badge bg-green"><span class="dot"></span>{{ r.percent }}%</span>
+                    <div class="pct-bar"><div class="pct-fill" data-pct="{{ r.percent }}"></div></div>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </td>
+            <td>{{ r.num_standards_used }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" style="text-align:center; padding:12px;">No section results.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ---------- STANDARD TABLE ---------- #}
+  <div class="hqip-card">
+    <h2>Standard Achievement</h2>
+
+    <details class="hqip-details" open>
+      <summary>Show/Hide Standards Table</summary>
+
+      <div style="margin-top:10px;" class="hqip-muted">
+        Professional tip: Sort by % Low → High to quickly identify weak standards for RCA and improvement planning.
+      </div>
+
+      <table class="hqip-table" id="tblStandard" style="margin-top:10px;">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="area">Area <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-col="section">Section <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-col="name">Standard <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-col="percent" style="width:260px;">% Achievement <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-col="yes" style="width:110px;">YES <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-col="app" style="width:130px;">Applicable <span class="sort-ind">↕</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in standard_results %}
+            <tr
+              data-area="{{ r.area|default:'-' }}"
+              data-section="{{ r.section|default:'-' }}"
+              data-name="{{ r.standard|default:'-' }}"
+              data-percent="{{ r.percent|default_if_none:'-1' }}"
+              data-yes="{{ r.yes|default:0 }}"
+              data-app="{{ r.applicable|default:0 }}"
+            >
+              <td>{{ r.area }}</td>
+              <td>{{ r.section }}</td>
+              <td>{{ r.standard }}</td>
+              <td>
+                {% if r.percent is None %}
+                  -
+                {% else %}
+                  <div class="pct-wrap">
+                    {% if r.percent < 50 %}
+                      <span class="badge bg-red"><span class="dot"></span>{{ r.percent }}%</span>
+                      <div class="pct-bar"><div class="pct-fill red" data-pct="{{ r.percent }}"></div></div>
+                    {% elif r.percent < 75 %}
+                      <span class="badge bg-yellow"><span class="dot"></span>{{ r.percent }}%</span>
+                      <div class="pct-bar"><div class="pct-fill yellow" data-pct="{{ r.percent }}"></div></div>
+                    {% else %}
+                      <span class="badge bg-green"><span class="dot"></span>{{ r.percent }}%</span>
+                      <div class="pct-bar"><div class="pct-fill" data-pct="{{ r.percent }}"></div></div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td>{{ r.yes }}</td>
+              <td>{{ r.applicable }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" style="text-align:center; padding:12px;">No standard results.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  // Fill progress bars
+  document.querySelectorAll('.pct-fill[data-pct]').forEach(function(el){
+    var pct = parseFloat(el.getAttribute('data-pct') || '0');
+    pct = isNaN(pct) ? 0 : clamp(pct, 0, 100);
+    el.style.width = pct + '%';
+  });
+
+  function normalize(s){ return (s || '').toString().toLowerCase().trim(); }
+
+  // Global search filters all tables
+  var search = document.getElementById('hqipSearch');
+  function applySearch(){
+    var q = normalize(search.value);
+    ['tblArea','tblSection','tblStandard'].forEach(function(id){
+      var tbl = document.getElementById(id);
+      if(!tbl) return;
+      var rows = tbl.querySelectorAll('tbody tr');
+      rows.forEach(function(tr){
+        if(tr.children.length <= 1) return; // skip empty row
+        var text = normalize(tr.innerText);
+        tr.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+  if(search){
+    search.addEventListener('input', applySearch);
+  }
+
+  // Table sort helpers
+  function sortTable(tbl, col, dir){
+    var tbody = tbl.querySelector('tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows = rows.filter(function(r){ return r.children.length > 1; }); // keep real rows
+
+    function getVal(tr){
+      var v = tr.getAttribute('data-' + col);
+      if(v === null || v === undefined) return '';
+      // numeric columns
+      if(['percent','count','yes','app'].indexOf(col) !== -1){
+        var n = parseFloat(v);
+        return isNaN(n) ? -1 : n;
+      }
+      return v.toString();
+    }
+
+    rows.sort(function(a,b){
+      var va = getVal(a), vb = getVal(b);
+      var isNum = typeof va === 'number' && typeof vb === 'number';
+      if(isNum){
+        return dir === 'asc' ? (va - vb) : (vb - va);
+      }
+      va = normalize(va); vb = normalize(vb);
+      if(va < vb) return dir === 'asc' ? -1 : 1;
+      if(va > vb) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    // Re-append in new order
+    rows.forEach(function(r){ tbody.appendChild(r); });
+  }
+
+  // Click-to-sort per table header
+  document.querySelectorAll('table.hqip-table thead th.sortable').forEach(function(th){
+    th.addEventListener('click', function(){
+      var tbl = th.closest('table');
+      var col = th.getAttribute('data-col');
+      var current = th.getAttribute('data-dir') || 'none';
+      var next = (current === 'asc') ? 'desc' : 'asc';
+
+      // reset sibling directions
+      th.parentElement.querySelectorAll('th.sortable').forEach(function(sib){
+        sib.setAttribute('data-dir','none');
+      });
+      th.setAttribute('data-dir', next);
+
+      // map "name" for different tables
+      // tblArea: data-name, tblSection: data-name, tblStandard: data-name
+      // also support area/section columns in section/standard tables
+      var mapCol = col;
+      if(col === 'name') mapCol = 'name';
+
+      // for area table, we use name/percent/count
+      sortTable(tbl, mapCol, next);
+    });
+  });
+
+  // Sort mode dropdown (applies to all tables)
+  var sortMode = document.getElementById('hqipSortMode');
+  function applySortMode(){
+    var mode = (sortMode && sortMode.value) || 'percent_desc';
+    var parts = mode.split('_');
+    var col = parts[0]; // percent/name
+    var dir = parts[1] || 'desc';
+
+    // area table uses name/percent/count
+    var a = document.getElementById('tblArea');
+    var s = document.getElementById('tblSection');
+    var st = document.getElementById('tblStandard');
+
+    if(a){
+      sortTable(a, col === 'name' ? 'name' : 'percent', dir);
+    }
+    if(s){
+      // prefer percent, then name
+      sortTable(s, col === 'name' ? 'name' : 'percent', dir);
+    }
+    if(st){
+      sortTable(st, col === 'name' ? 'name' : 'percent', dir);
+    }
+  }
+  if(sortMode){
+    sortMode.addEventListener('change', applySortMode);
+  }
+
+  // Reset button
+  var resetBtn = document.getElementById('hqipReset');
+  if(resetBtn){
+    resetBtn.addEventListener('click', function(){
+      if(search) search.value = '';
+      applySearch();
+      if(sortMode) sortMode.value = 'percent_desc';
+      applySortMode();
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  }
+
+  // Expand / collapse details sections
+  var expandBtn = document.getElementById('hqipExpand');
+  if(expandBtn){
+    var expanded = true;
+    expandBtn.addEventListener('click', function(){
+      expanded = !expanded;
+      document.querySelectorAll('details.hqip-details').forEach(function(d){
+        d.open = expanded;
+      });
+      expandBtn.textContent = expanded ? 'Collapse all' : 'Expand all';
+    });
+  }
+
+  // Initial sort
+  applySortMode();
+})();
+</script>
 {% endblock %}
