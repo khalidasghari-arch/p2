@@ -14,7 +14,6 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-
 from .forms import AimpeeAdminForm, AimpphAdminForm
 from .models import (
     HQIPAssessmentHeader,
@@ -51,27 +50,50 @@ admin.site.site_header = "Maternal and Newborn Health Information Management Sys
 admin.site.site_title = "IQoC Portal"
 admin.site.index_title = "M&E Data Management System"
 
-class FacilityByProvinceFilter(admin.SimpleListFilter):
-    title = "Facility"
-    parameter_name = "facility"
+class HQIPProvinceFilter(admin.SimpleListFilter):
+    title = "Province"
+    parameter_name = "province"
 
     def lookups(self, request, model_admin):
-        prov = user_province(request)
+        qs = model_admin.get_queryset(request)
 
-        # superuser: show all facilities
-        qs = Facility.objects.all()
-        if not request.user.is_superuser:
-            if not prov:
-                return []
-            qs = qs.filter(districtfk__provincefk=prov)
+        rows = qs.values_list(
+            "facilityfk__districtfk__provincefk__id",
+            "facilityfk__districtfk__provincefk__name",
+        ).distinct().order_by(
+            "facilityfk__districtfk__provincefk__name"
+        )
 
-        qs = qs.order_by("name").values_list("id", "name")
-        return list(qs)
+        return [(pid, pname) for pid, pname in rows if pid]
 
     def queryset(self, request, queryset):
         if self.value():
-            return queryset.filter(facilityfk_id=self.value())
+            return queryset.filter(
+                facilityfk__districtfk__provincefk_id=self.value()
+            )
         return queryset
+
+# class FacilityByProvinceFilter(admin.SimpleListFilter):
+#     title = "Facility"
+#     parameter_name = "facility"
+
+#     def lookups(self, request, model_admin):
+#         prov = user_province(request)
+
+#         # superuser: show all facilities
+#         qs = Facility.objects.all()
+#         if not request.user.is_superuser:
+#             if not prov:
+#                 return []
+#             qs = qs.filter(districtfk__provincefk=prov)
+
+#         qs = qs.order_by("name").values_list("id", "name")
+#         return list(qs)
+
+#     def queryset(self, request, queryset):
+#         if self.value():
+#             return queryset.filter(facilityfk_id=self.value())
+#         return queryset
 
 # ============================================================
 # Province helper (supports user.profile OR user.userprofile)
@@ -449,7 +471,6 @@ SCORE_YES_ID = 1
 SCORE_NO_ID = 2
 SCORE_NA_ID = 3
 
-
 # ============================================================
 # HQIP HEADER ADMIN (creates details lines)
 # ============================================================
@@ -458,7 +479,6 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [AssessmentLineInline]
 
     list_display = (
-        "id",
         "facilityfk",
         "assessmenttype",
         "assessmentdate",
@@ -469,9 +489,10 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "hqip_facility_button",
         "assessmentteam",
         "created_at",
+        "id",
     )
 
-    list_filter = ("areafk", FacilityByProvinceFilter)
+    list_filter = (HQIPProvinceFilter, "areafk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
