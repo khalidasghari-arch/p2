@@ -465,7 +465,6 @@ class AssessmentLineInline(admin.TabularInline):
     def has_add_permission(self, request, obj=None):
         return False
 
-
 # Score PK mapping:
 SCORE_YES_ID = 1
 SCORE_NO_ID = 2
@@ -487,6 +486,7 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "assesorfk",
         "hqip_dashboard_button",
         "hqip_facility_button",
+        "hqip_rca_button",
         "assessmentteam",
         "created_at",
         "id",
@@ -567,6 +567,11 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 self.admin_site.admin_view(self.hqip_facility_dashboard),
                 name="hqip_facility_dashboard",
             ),
+            path(
+            "hqip-rca-dashboard/",
+            self.admin_site.admin_view(self.hqip_rca_dashboard),
+            name="hqip_rca_dashboard",
+            ),
         ]
         return custom_urls + urls
 
@@ -586,6 +591,12 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             '<a class="button" href="{}?facility={}&header_id={}">View</a>',
             url, obj.facilityfk_id, obj.id
     )
+
+    @admin.display(description="RCA")
+    def hqip_rca_button(self, obj):
+        url = reverse("admin:hqip_rca_dashboard")
+        return format_html('<a class="button" href="{}">RCA</a>', url, obj.id
+        )
 
     # ==========================================================
     # A) GLOBAL DASHBOARD
@@ -868,6 +879,76 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             sec_chart_json=sec_chart_json,
         )
         return TemplateResponse(request, "admin/hiva/hqip_facility_dashboard.html", context)
+    
+    def hqip_rca_dashboard(self, request):
+        """
+        RCA (row-level): show only FAILED criteria for the given HQIP header_id.
+        Includes only scorefk_id = 2 (NO).
+        Excludes NA (3) and NULL automatically.
+        """
+
+        header_id = request.GET.get("header_id")
+
+        # Always start from province-restricted headers
+        headers_qs = self.get_queryset(request)
+
+        # If no header_id provided -> show empty page (safe)
+        if not header_id:
+            context = dict(
+                self.admin_site.each_context(request),
+                title="HQIP RCA – Failed Criteria (NO only)",
+                header_obj=None,
+                rca_rows=[],
+            )
+            return TemplateResponse(request, "admin/hiva/hqip_rca_dashboard.html", context)
+
+        # Lock to exact header
+        headers_qs = headers_qs.filter(id=header_id)
+
+        # If user tries a header outside their scope -> show nothing (safe)
+        header_obj = headers_qs.select_related(
+            "facilityfk__districtfk__provincefk", "areafk", "assessmenttype"
+        ).first()
+
+        if not header_obj:
+            context = dict(
+                self.admin_site.each_context(request),
+                title="HQIP RCA – Failed Criteria (NO only)",
+                header_obj=None,
+                rca_rows=[],
+            )
+            return TemplateResponse(request, "admin/hiva/hqip_rca_dashboard.html", context)
+
+        # Failed criteria (NO only)
+        rca_rows = (
+            HQIPAssessment.objects
+            .filter(
+                header_id=header_obj.id,
+                scorefk_id=SCORE_NO_ID,  # 2 = NO
+            )
+            .select_related(
+                "criteriafk",
+                "criteriafk__standardfk",
+                "criteriafk__standardfk__sectionfk",
+                "criteriafk__standardfk__sectionfk__areafk",
+                "header",
+                "header__facilityfk",
+            )
+            .order_by(
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__name",
+                "criteriafk__id",
+            )
+        )
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="HQIP RCA – Failed Criteria (NO only)",
+            header_obj=header_obj,
+            rca_rows=rca_rows,
+        )
+        return TemplateResponse(request, "admin/hiva/hqip_rca_dashboard.html", context)
 
 # ============================================================
 # Hide HQIPAssessment from admin menu (inline only)

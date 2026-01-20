@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if provinces %}
+<form method="get" style="margin-bottom:15px;">
+    <label>Province:</label>
+    <select name="province" onchange="this.form.submit()">
+        <option value="">-- Select Province --</option>
+        {% for p in provinces %}
+            <option value="{{ p.id }}" {% if p.id|stringformat:"s" == selected_province %}selected{% endif %}>
+                {{ p.name }}
+            </option>
+        {% endfor %}
+    </select>
+</form>
+{% endif %}
+
+<table class="adminlist table table-striped">
+    <thead>
+        <tr>
+            <th>Province</th>
+            <th>Facility</th>
+            <th>Area</th>
+            <th>Section</th>
+            <th>Standard</th>
+            <th>Failed Criteria</th>
+            <th>Assessment Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rca_rows %}
+        <tr>
+            <td>{{ r.header.facilityfk.districtfk.provincefk.name }}</td>
+            <td>{{ r.header.facilityfk.name }}</td>
+            <td>{{ r.criteriafk.standardfk.sectionfk.areafk.name }}</td>
+            <td>{{ r.criteriafk.standardfk.sectionfk.name }}</td>
+            <td>{{ r.criteriafk.standardfk.name }}</td>
+            <td><strong style="color:red">{{ r.criteriafk.name }}</strong></td>
+            <td>{{ r.header.assessmentdate }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7" style="text-align:center;">No failed criteria found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}
