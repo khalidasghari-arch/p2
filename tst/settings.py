@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'taggit',
     'kms.apps.KmsConfig',
     'survey',
+    'hmis',
 ]
 
 # -----------------------------
