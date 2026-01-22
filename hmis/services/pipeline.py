@@ -115,89 +115,102 @@ def apply_cleaning(df: pd.DataFrame) -> pd.DataFrame:
     adb.columns = NEW_COLUMN_NAMES
     return adb
 
-def to_long(cleaned: pd.DataFrame) -> pd.DataFrame:
-    # indicator columns are ANC1 ... Total-number-of-Neonatal-deaths
+def to_long_batched(cleaned, batch_size=300):
+    """
+    Convert wide → long in small batches to avoid memory/timeouts.
+    """
     start = cleaned.columns.get_loc("ANC1")
     end = cleaned.columns.get_loc("Total-number-of-Neonatal-deaths")
     indicator_cols = cleaned.columns[start:end + 1].tolist()
 
-    long_df = cleaned.melt(
-        id_vars=["PROV", "DIST", "HF", "PERIOD", "HFName_cleaned", "ID", "HIVA-HFs", "year", "month", "month_name"],
-        value_vars=indicator_cols,
-        var_name="indicator_name",
-        value_name="value_raw",
-    )
+    for i in range(0, len(cleaned), batch_size):
+        part = cleaned.iloc[i:i + batch_size]
 
-    long_df["value_raw"] = pd.to_numeric(long_df["value_raw"], errors="coerce")
-    long_df = long_df[long_df["value_raw"].notna()].copy()
+        long_df = part.melt(
+            id_vars=[
+                "PROV", "DIST", "HF", "PERIOD",
+                "HFName_cleaned", "ID", "HIVA-HFs",
+                "year", "month", "month_name"
+            ],
+            value_vars=indicator_cols,
+            var_name="indicator_name",
+            value_name="value_raw",
+        )
 
-    long_df["indicator_code"] = long_df["indicator_name"].astype(str).apply(lambda x: slugify(x)[:128])
-    return long_df
+        long_df["value_raw"] = pd.to_numeric(long_df["value_raw"], errors="coerce")
+        long_df = long_df[long_df["value_raw"].notna()].copy()
+        long_df["indicator_code"] = long_df["indicator_name"].astype(str).apply(
+            lambda x: slugify(x)[:128]
+        )
 
-def _to_decimal(x):
-    try:
-        return Decimal(str(x))
-    except (InvalidOperation, ValueError):
-        return None
+        yield long_df
 
 @transaction.atomic
-def load_replace(upload, long_df: pd.DataFrame, chunk_size: int = 5000) -> dict:
-    periods = long_df["PERIOD"].astype(str).str.strip().unique().tolist()
-    hfs = long_df["HF"].astype(str).unique().tolist()
+def load_replace_batched(upload, long_df_iterator, cleaned):
+    """
+    Replace strategy:
+    - Delete existing facts for HF + PERIOD
+    - Insert facts batch-by-batch
+    """
+    periods = cleaned["PERIOD"].astype(str).unique().tolist()
+    hfs = cleaned["HF"].astype(str).unique().tolist()
 
-    deleted = HMISFact.objects.filter(hf__in=hfs, periodcode__in=periods).delete()[0]
+    deleted = HMISFact.objects.filter(
+        hf__in=hfs,
+        periodcode__in=periods
+    ).delete()[0]
 
-    objs = []
     inserted = 0
 
-    for _, r in long_df.iterrows():
-        val = _to_decimal(r["value_raw"])
-        if val is None:
-            continue
+    for long_df in long_df_iterator:
+        objs = []
+        for _, r in long_df.iterrows():
+            try:
+                value = Decimal(str(r["value_raw"]))
+            except Exception:
+                continue
 
-        objs.append(HMISFact(
-            source_upload=upload,
-            prov=str(r["PROV"] or ""),
-            dist=str(r["DIST"] or ""),
-            hf=str(r["HF"] or ""),
+            objs.append(HMISFact(
+                source_upload=upload,
+                prov=str(r["PROV"] or ""),
+                dist=str(r["DIST"] or ""),
+                hf=str(r["HF"] or ""),
+                periodcode=str(r["PERIOD"]),
+                year=int(r["year"]),
+                month=int(r["month"]),
+                month_name=str(r["month_name"] or ""),
+                hf_name_cleaned=str(r["HFName_cleaned"] or ""),
+                hfid=int(r["ID"]),
+                hiva_hfs=bool(r["HIVA-HFs"]),
+                indicator_name=str(r["indicator_name"]),
+                indicator_code=str(r["indicator_code"]),
+                value=value,
+            ))
 
-            periodcode=str(r["PERIOD"]),
-            year=int(r["year"]),
-            month=int(r["month"]),
-            month_name=str(r["month_name"] or ""),
-
-            hf_name_cleaned=str(r["HFName_cleaned"] or ""),
-            hfid=int(r["ID"]),
-            hiva_hfs=bool(r["HIVA-HFs"]),
-
-            indicator_name=str(r["indicator_name"]),
-            indicator_code=str(r["indicator_code"]),
-            value=val,
-        ))
-
-        if len(objs) >= chunk_size:
-            HMISFact.objects.bulk_create(objs, batch_size=chunk_size)
+        if objs:
+            HMISFact.objects.bulk_create(objs, batch_size=1000)
             inserted += len(objs)
-            objs = []
-
-    if objs:
-        HMISFact.objects.bulk_create(objs, batch_size=chunk_size)
-        inserted += len(objs)
 
     return {"deleted": int(deleted), "inserted": int(inserted)}
 
-
 def run_import(upload) -> dict:
+    # 1) Read CSV
     df = parse_csv_to_df(upload.file.path)
-    cleaned = apply_cleaning(df)
-    load_summary_replace(upload, cleaned)
-    long_df = to_long(cleaned)
-    load_report = load_replace(upload, long_df)
 
+    # 2) Apply your exact cleaning logic
+    cleaned = apply_cleaning(df)
+
+    # 3) Load monthly summary (wide, fast, safe)
+    load_summary_replace(upload, cleaned)
+
+    # 4) Convert + load facts safely (batched)
+    long_iter = to_long_batched(cleaned, batch_size=300)
+    load_report = load_replace_batched(upload, long_iter, cleaned)
+
+    # 5) Save final report
     report = {
         "raw_rows": int(len(df)),
         "cleaned_rows": int(len(cleaned)),
-        "long_rows": int(len(long_df)),
         "load": load_report,
     }
 
@@ -207,7 +220,12 @@ def run_import(upload) -> dict:
     upload.period_max = str(cleaned["PERIOD"].max())
     upload.report = report
     upload.status = "IMPORTED"
-    upload.save(update_fields=["row_count", "hf_count", "period_min", "period_max", "report", "status"])
+    upload.save(update_fields=[
+        "row_count", "hf_count",
+        "period_min", "period_max",
+        "report", "status"
+    ])
+
     return report
 
 @transaction.atomic
