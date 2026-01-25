@@ -1,0 +1,87 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+
+{% if error_message %}
+  <div class="messagelist">
+    <div class="warning">{{ error_message }}</div>
+  </div>
+{% endif %}
+
+<h1 style="margin-bottom:10px;">HQIP Priority Thematic Areas</h1>
+
+{% if header_obj %}
+  <div style="margin-bottom:12px; padding:12px; border:1px solid #ddd; border-radius:10px; background:#fff;">
+    <div style="display:flex; gap:18px; flex-wrap:wrap;">
+      <div><strong>Facility:</strong> {{ header_obj.facilityfk }}</div>
+      <div><strong>Province:</strong> {{ header_obj.facilityfk.districtfk.provincefk.name }}</div>
+      <div><strong>Area (Header):</strong> {{ header_obj.areafk }}</div>
+      <div><strong>Assessment Type:</strong> {{ header_obj.assessmenttype }}</div>
+      <div><strong>Date:</strong> {{ header_obj.assessmentdate }}</div>
+      <div><strong>Header ID:</strong> {{ header_obj.id }}</div>
+    </div>
+  </div>
+
+  <style>
+    .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:12px;color:#fff}
+    .b-red{background:#c62828}
+    .b-yellow{background:#f9a825;color:#000}
+    .b-green{background:#2e7d32}
+    .b-grey{background:#607d8b}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px}
+    .pill-pri{background:#ffe9e9;color:#9b0000;border:1px solid #ffc9c9}
+    .pill-non{background:#eef6ff;color:#0b5394;border:1px solid #cfe2ff}
+    table.hqip{width:100%;border-collapse:collapse}
+    table.hqip th{border-bottom:1px solid #ddd;padding:10px;text-align:left;background:#fafafa}
+    table.hqip td{border-bottom:1px solid #eee;padding:10px;vertical-align:middle}
+  </style>
+
+  <p style="margin:8px 0 14px; color:#444;">
+    The <strong>lowest 3</strong> thematic areas (based on % achievement for this header) are flagged as
+    <span class="pill pill-pri">Priority thematic areas</span>. NA and NULL scores are excluded from calculations.
+  </p>
+
+  <table class="hqip">
+    <thead>
+      <tr>
+        <th style="width:260px;">Thematic Area</th>
+        <th style="width:170px;">% Achievement</th>
+        <th style="width:110px;">YES</th>
+        <th style="width:140px;">Applicable</th>
+        <th style="width:220px;">Priority</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.area }}</strong></td>
+          <td>
+            {% if r.percent is None %}
+              <span class="badge b-grey">N/A</span>
+            {% else %}
+              {% if r.percent < 50 %}
+                <span class="badge b-red">{{ r.percent }}%</span>
+              {% elif r.percent < 75 %}
+                <span class="badge b-yellow">{{ r.percent }}%</span>
+              {% else %}
+                <span class="badge b-green">{{ r.percent }}%</span>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>{{ r.yes }}</td>
+          <td>{{ r.applicable }}</td>
+          <td>
+            {% if r.is_priority %}
+              <span class="pill pill-pri">Priority thematic area</span>
+            {% else %}
+              <span class="pill pill-non">Non-priority area</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" style="text-align:center;padding:14px;">No results found for this header.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+
+{% endblock %}
