@@ -1,4 +1,6 @@
+from urllib.parse import urlencode
 import openpyxl
+from django.http import HttpResponse
 from openpyxl.utils import get_column_letter
 from django.http import HttpResponse
 from decimal import Decimal, ROUND_HALF_UP
@@ -601,6 +603,114 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         qs = urlencode({"facility_id": obj.facilityfk_id})
         return format_html('<a class="button" href="{}?{}">Priority</a>', base_url, qs)
 
+    def _compute_hqip_rollups(self, headers_qs):
+        """
+        Shared HQIP rollup calculator:
+        Criteria -> Standard %  (YES / (YES+NO)) ignoring NA/NULL
+        Section % = average(Standard %)
+        Area %    = average(Section %)
+
+        Returns:
+        standard_results: list[dict]
+        section_results:  list[dict]
+        area_results:     list[dict]
+        """
+
+        std_rows = (
+            HQIPAssessment.objects
+            .filter(header__in=headers_qs)
+            .values(
+                "criteriafk__standardfk__id",
+                "criteriafk__standardfk__name",
+                "criteriafk__standardfk__sectionfk__id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__sectionfk__areafk__id",
+                "criteriafk__standardfk__sectionfk__areafk__name",
+            )
+            .annotate(
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+            )
+            .order_by(
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__name",
+            )
+        )
+
+        from collections import defaultdict
+
+        standard_results = []
+        section_results = []
+        area_results = []
+
+        section_to_standard_percents = defaultdict(list)
+        area_to_section_percents = defaultdict(list)
+
+        # name maps
+        sec_name_map = {}
+        area_name_map = {}
+
+        # ---------- Standard level ----------
+        for r in std_rows:
+            area_id = r["criteriafk__standardfk__sectionfk__areafk__id"]
+            sec_id = r["criteriafk__standardfk__sectionfk__id"]
+            sec_key = (area_id, sec_id)
+
+            area_name = r["criteriafk__standardfk__sectionfk__areafk__name"] or "-"
+            sec_name = r["criteriafk__standardfk__sectionfk__name"] or "-"
+            std_name = r["criteriafk__standardfk__name"] or "-"
+
+            sec_name_map[sec_key] = (area_name, sec_name)
+            area_name_map[area_id] = area_name
+
+            den = r["applicable"]
+            num = r["yes"]
+            std_percent = self._pct(num, den)  # <- YOUR SAME helper (YES/(YES+NO))*100
+
+            standard_results.append({
+                "area": area_name,
+                "section": sec_name,
+                "standard": std_name,
+                "yes": num,
+                "applicable": den,
+                "percent": std_percent,
+            })
+
+            if std_percent is not None:
+                section_to_standard_percents[sec_key].append(std_percent)
+
+        # ---------- Section level = average(Standard %) ----------
+        for sec_key, percents in section_to_standard_percents.items():
+            area_id, _sec_id = sec_key
+            area_name, sec_name = sec_name_map.get(sec_key, ("-", "-"))
+
+            sec_percent = self._round2(sum(percents) / len(percents)) if percents else None
+
+            section_results.append({
+                "area": area_name,
+                "section": sec_name,
+                "num_standards_used": len(percents),
+                "percent": sec_percent,
+            })
+
+            if sec_percent is not None:
+                area_to_section_percents[area_id].append(sec_percent)
+
+        section_results.sort(key=lambda x: (x["area"], x["section"]))
+
+        # ---------- Area level = average(Section %) ----------
+        for area_id, percents in area_to_section_percents.items():
+            area_percent = self._round2(sum(percents) / len(percents)) if percents else None
+            area_results.append({
+                "area": area_name_map.get(area_id, "-"),
+                "num_sections_used": len(percents),
+                "percent": area_percent,
+            })
+
+        area_results.sort(key=lambda x: x["area"])
+
+        return standard_results, section_results, area_results
 
     # ==========================================================
     # A) STANDARDS DASHBOARD
@@ -608,6 +718,8 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def hqip_standards_dashboard(self, request):
         header_id = request.GET.get("header_id")
         headers_qs = self.get_queryset(request)
+
+        standard_results, section_results, area_results = self._compute_hqip_rollups(headers_qs)
 
         header_obj = None
         error_message = None
@@ -979,140 +1091,160 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     def hqip_priority_areas(self, request):
         """
-        Facility-level priority thematic areas:
-        - Compute Area % = YES / (YES+NO) * 100  (NA + NULL excluded)
-        - Flag lowest 3 areas as Priority
-        - export=1 -> Excel
+        Priority thematic areas for a FACILITY:
+        - Uses the SAME % calculations as Score/View (via _compute_hqip_rollups)
+        - Flags lowest 3 thematic areas as Priority
+        - Optional export: ?facility_id=107&export=1
         """
-        import openpyxl
-        from openpyxl.utils import get_column_letter
-        from django.http import HttpResponse
-        from django.template.response import TemplateResponse
 
         facility_id = request.GET.get("facility_id")
         export = request.GET.get("export") == "1"
 
-        # 1) Allowed facilities for this user
-        facilities_qs = Facility.objects.select_related("districtfk__provincefk").all()
+        # Province-restricted headers (superuser sees all)
+        headers_base = self.get_queryset(request)
 
-        if not request.user.is_superuser:
-            prov = user_province(request)
-            if prov:
-                facilities_qs = facilities_qs.filter(districtfk__provincefk=prov)
-            else:
-                facilities_qs = facilities_qs.none()
-
-        facility_obj = facilities_qs.filter(id=facility_id).first() if facility_id else None
-
+        facility_obj = None
         rows = []
         error_message = None
 
         if not facility_id:
-            error_message = "No facility selected (missing facility_id)."
-        elif not facility_obj:
-            error_message = "You don’t have access to this facility (or it does not exist)."
-
-        # 2) Calculate rows if facility is valid
-        if facility_obj:
-            headers_qs = self.get_queryset(request).filter(facilityfk=facility_obj)
-
-            area_rows = (
-                HQIPAssessment.objects
-                .filter(header__in=headers_qs)
-                .values(
-                    "criteriafk__standardfk__sectionfk__areafk__id",
-                    "criteriafk__standardfk__sectionfk__areafk__name",
-                )
-                .annotate(
-                    yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
-                    applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
-                )
-                .order_by("criteriafk__standardfk__sectionfk__areafk__name")
+            error_message = "No facility selected."
+            context = dict(
+                self.admin_site.each_context(request),
+                title="HQIP Priority Thematic Areas",
+                error_message=error_message,
+                facility_obj=None,
+                rows=[],
             )
+            return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-            tmp = []
-            for r in area_rows:
-                den = r["applicable"]
-                num = r["yes"]
-                pct = self._pct(num, den)  # your helper: rounds + handles den=0
-                tmp.append({
-                    "area_id": r["criteriafk__standardfk__sectionfk__areafk__id"],
-                    "area": r["criteriafk__standardfk__sectionfk__areafk__name"] or "-",
-                    "yes": num or 0,
-                    "applicable": den or 0,
-                    "percent": pct,
-                })
+        # Load facility (and enforce access)
+        facility_obj = Facility.objects.select_related("districtfk__provincefk").filter(pk=facility_id).first()
+        if not facility_obj:
+            error_message = "Invalid facility."
+            context = dict(
+                self.admin_site.each_context(request),
+                title="HQIP Priority Thematic Areas",
+                error_message=error_message,
+                facility_obj=None,
+                rows=[],
+            )
+            return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-            # Sort: lowest first, N/A at the bottom
-            def sort_key(x):
-                return (1, 999999) if x["percent"] is None else (0, x["percent"])
+        if not request.user.is_superuser:
+            prov = user_province(request)
+            if not prov or facility_obj.districtfk.provincefk_id != prov.id:
+                error_message = "You don’t have access to this facility."
+                context = dict(
+                    self.admin_site.each_context(request),
+                    title="HQIP Priority Thematic Areas",
+                    error_message=error_message,
+                    facility_obj=None,
+                    rows=[],
+                )
+                return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-            tmp_sorted = sorted(tmp, key=sort_key)
+        # Only headers for this facility
+        headers_qs = headers_base.filter(facilityfk_id=facility_obj.id)
 
-            # Pick lowest 3 VALID percents
-            priority_ids = []
-            for x in tmp_sorted:
-                if x["percent"] is None:
-                    continue
-                priority_ids.append(x["area_id"])
-                if len(priority_ids) == 3:
-                    break
+        # If no headers, show empty
+        if not headers_qs.exists():
+            error_message = "No HQIP assessments found for this facility."
+            context = dict(
+                self.admin_site.each_context(request),
+                title="HQIP Priority Thematic Areas",
+                error_message=error_message,
+                facility_obj=facility_obj,
+                rows=[],
+            )
+            return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-            rows = [{
-                "area": x["area"],
-                "yes": x["yes"],
-                "applicable": x["applicable"],
-                "percent": x["percent"],
-                "is_priority": x["area_id"] in priority_ids,
-            } for x in tmp_sorted]
+        # ---- SAME calculations as Score/View ----
+        _std, _sec, area_results = self._compute_hqip_rollups(headers_qs)
 
-        # 3) Excel export (ALWAYS returns HttpResponse)
+        # For display ONLY (not used in %): raw counts per area
+        raw_counts = (
+            HQIPAssessment.objects
+            .filter(header__in=headers_qs)
+            .values("criteriafk__standardfk__sectionfk__areafk__name")
+            .annotate(
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+            )
+        )
+        raw_map = {
+            r["criteriafk__standardfk__sectionfk__areafk__name"] or "-": {
+                "yes": r["yes"],
+                "applicable": r["applicable"],
+            }
+            for r in raw_counts
+        }
+
+        # Build rows: percent comes from area_results (HQIP hierarchy)
+        rows = []
+        for r in area_results:
+            area_name = r["area"]
+            rows.append({
+                "area": area_name,
+                "percent": r["percent"],
+                "num_sections_used": r["num_sections_used"],
+                "yes": raw_map.get(area_name, {}).get("yes", 0),
+                "applicable": raw_map.get(area_name, {}).get("applicable", 0),
+                "is_priority": False,  # set below
+            })
+
+        # Priority = lowest 3 by percent (ignore None)
+        scored = [x for x in rows if x["percent"] is not None]
+        scored_sorted = sorted(scored, key=lambda x: x["percent"])  # lowest first
+        priority_set = set([x["area"] for x in scored_sorted[:3]])
+
+        for x in rows:
+            x["is_priority"] = (x["area"] in priority_set)
+
+        # Optional: export to Excel
         if export:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Priority Areas"
 
-            if not facility_obj:
-                ws.append(["Message"])
-                ws.append([error_message or "No facility selected"])
-            else:
-                ws.append(["Facility", facility_obj.name])
-                ws.append(["Province", facility_obj.districtfk.provincefk.name])
-                ws.append(["District", facility_obj.districtfk.name])
-                ws.append([])
-                ws.append(["Thematic Area", "% Achievement", "YES", "Applicable", "Priority"])
+            ws.append([
+                "Facility", "Province", "District", "HF Code",
+                "Thematic Area", "HQIP % (Area)", "Priority",
+                "YES (criteria)", "Applicable (criteria)", "# Sections used"
+            ])
 
-                for r in rows:
-                    ws.append([
-                        r["area"],
-                        "" if r["percent"] is None else float(r["percent"]),
-                        int(r["yes"]),
-                        int(r["applicable"]),
-                        "Priority" if r["is_priority"] else "Non-priority",
-                    ])
-
-                for col in range(1, 6):
-                    ws.column_dimensions[get_column_letter(col)].width = 24
+            for x in rows:
+                ws.append([
+                    facility_obj.name,
+                    facility_obj.districtfk.provincefk.name,
+                    facility_obj.districtfk.name,
+                    facility_obj.hfcode,
+                    x["area"],
+                    x["percent"] if x["percent"] is not None else "",
+                    "PRIORITY" if x["is_priority"] else "NON-PRIORITY",
+                    x["yes"],
+                    x["applicable"],
+                    x["num_sections_used"],
+                ])
 
             resp = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            fname = "HQIP_Priority_Areas.xlsx" if not facility_obj else f"HQIP_Priority_Areas_{facility_obj.name}.xlsx"
-            resp["Content-Disposition"] = f'attachment; filename="{fname}"'
+            filename = f"HQIP_Priority_Areas_Facility_{facility_obj.id}.xlsx"
+            resp["Content-Disposition"] = f'attachment; filename="{filename}"'
             wb.save(resp)
             return resp
 
-        # 4) Normal HTML (ALWAYS returns TemplateResponse)
         context = dict(
             self.admin_site.each_context(request),
             title="HQIP Priority Thematic Areas",
+            error_message=error_message,
             facility_obj=facility_obj,
             rows=rows,
-            error_message=error_message,
         )
         return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-# ============================================================
+# ===========================================================
 # Hide HQIPAssessment from admin menu (inline only)
 # ============================================================
 class HQIPAssessmentAdmin(admin.ModelAdmin):
