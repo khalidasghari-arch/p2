@@ -1,4 +1,6 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
+
 {% block content %}
 
 {% if error_message %}
@@ -9,50 +11,121 @@
 
 <h1 style="margin-bottom:10px;">HQIP Priority Thematic Areas</h1>
 
-{% if header_obj %}
-  <div style="margin-bottom:12px; padding:12px; border:1px solid #ddd; border-radius:10px; background:#fff;">
-    <div style="display:flex; gap:18px; flex-wrap:wrap;">
-      <div><strong>Facility:</strong> {{ header_obj.facilityfk }}</div>
-      <div><strong>Province:</strong> {{ header_obj.facilityfk.districtfk.provincefk.name }}</div>
-      <div><strong>Area (Header):</strong> {{ header_obj.areafk }}</div>
-      <div><strong>Assessment Type:</strong> {{ header_obj.assessmenttype }}</div>
-      <div><strong>Date:</strong> {{ header_obj.assessmentdate }}</div>
-      <div><strong>Header ID:</strong> {{ header_obj.id }}</div>
+{% if facility_obj %}
+  <div class="hqip-card">
+    <div class="hqip-card-grid">
+      <div><span class="muted">Facility:</span><br><strong>{{ facility_obj.name }}</strong></div>
+      <div><span class="muted">Province:</span><br><strong>{{ facility_obj.districtfk.provincefk.name }}</strong></div>
+      <div><span class="muted">District:</span><br><strong>{{ facility_obj.districtfk.name }}</strong></div>
+      <div><span class="muted">HF Code:</span><br><strong>{{ facility_obj.hfcode }}</strong></div>
     </div>
   </div>
 
   <style>
-    .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:12px;color:#fff}
+    .hqip-card{
+      margin: 12px 0 14px;
+      padding: 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+    .hqip-card-grid{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 980px){
+      .hqip-card-grid{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+    }
+    @media (max-width: 520px){
+      .hqip-card-grid{ grid-template-columns: 1fr; }
+    }
+    .muted{ color:#6b7280; font-size: 12px; }
+
+    .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;color:#fff}
     .b-red{background:#c62828}
     .b-yellow{background:#f9a825;color:#000}
     .b-green{background:#2e7d32}
     .b-grey{background:#607d8b}
-    .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px}
-    .pill-pri{background:#ffe9e9;color:#9b0000;border:1px solid #ffc9c9}
-    .pill-non{background:#eef6ff;color:#0b5394;border:1px solid #cfe2ff}
+
+    .pill{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:700;font-size:12px;border:1px solid transparent}
+    .pill-pri{background:#ffe9e9;color:#9b0000;border-color:#ffc9c9}
+    .pill-non{background:#eef6ff;color:#0b5394;border-color:#cfe2ff}
+
+    .hqip-toolbar{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin: 10px 0 12px;
+    }
+    .hqip-input{
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      background:#fff;
+      min-width: 260px;
+    }
+    .hqip-check{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      padding: 6px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background:#fff;
+    }
+
     table.hqip{width:100%;border-collapse:collapse}
-    table.hqip th{border-bottom:1px solid #ddd;padding:10px;text-align:left;background:#fafafa}
+    table.hqip th{
+      border-bottom:1px solid #ddd;
+      padding:10px;
+      text-align:left;
+      background:#fafafa;
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+    }
     table.hqip td{border-bottom:1px solid #eee;padding:10px;vertical-align:middle}
+    .sort-ind{ font-size: 11px; color:#6b7280; margin-left:6px; }
+    .smallnote{ color:#444; margin: 8px 0 12px; }
   </style>
 
-  <p style="margin:8px 0 14px; color:#444;">
-    The <strong>lowest 3</strong> thematic areas (based on % achievement for this header) are flagged as
-    <span class="pill pill-pri">Priority thematic areas</span>. NA and NULL scores are excluded from calculations.
+  <p class="smallnote">
+    The <strong>lowest 3</strong> thematic areas (based on % achievement across <strong>all HQIP assessments for this facility</strong>)
+    are flagged as <span class="pill pill-pri">Priority thematic areas</span>.
+    <strong>NA</strong> and <strong>NULL</strong> scores are excluded from calculations.
   </p>
 
-  <table class="hqip">
+  <div class="hqip-toolbar">
+    <input id="searchBox" class="hqip-input" type="text" placeholder="Search thematic area...">
+    <label class="hqip-check">
+      <input id="priorityOnly" type="checkbox">
+      <span>Show Priority only</span>
+    </label>
+    <span class="muted" id="rowCount"></span>
+  </div>
+
+  <table class="hqip" id="hqipTable">
     <thead>
       <tr>
-        <th style="width:260px;">Thematic Area</th>
-        <th style="width:170px;">% Achievement</th>
-        <th style="width:110px;">YES</th>
-        <th style="width:140px;">Applicable</th>
-        <th style="width:220px;">Priority</th>
+        <th data-key="area">Thematic Area <span class="sort-ind" id="si-area"></span></th>
+        <th data-key="percent">% Achievement <span class="sort-ind" id="si-percent"></span></th>
+        <th data-key="yes">YES <span class="sort-ind" id="si-yes"></span></th>
+        <th data-key="applicable">Applicable <span class="sort-ind" id="si-applicable"></span></th>
+        <th data-key="priority">Priority <span class="sort-ind" id="si-priority"></span></th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="hqipBody">
       {% for r in rows %}
-        <tr>
+        <tr
+          data-area="{{ r.area|default_if_none:''|lower }}"
+          data-priority="{% if r.is_priority %}1{% else %}0{% endif %}"
+          data-percent="{% if r.percent is None %}-1{% else %}{{ r.percent }}{% endif %}"
+          data-yes="{{ r.yes|default_if_none:0 }}"
+          data-applicable="{{ r.applicable|default_if_none:0 }}"
+        >
           <td><strong>{{ r.area }}</strong></td>
           <td>
             {% if r.percent is None %}
@@ -78,10 +151,132 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" style="text-align:center;padding:14px;">No results found for this header.</td></tr>
+        <tr><td colspan="5" style="text-align:center;padding:14px;">No results found for this facility.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <script>
+    (function(){
+      const searchBox = document.getElementById("searchBox");
+      const priorityOnly = document.getElementById("priorityOnly");
+      const body = document.getElementById("hqipBody");
+      const rowCount = document.getElementById("rowCount");
+
+      let sortKey = "priority";
+      let sortDir = "asc"; // asc/desc
+
+      function visibleRows(){
+        return Array.from(body.querySelectorAll("tr"))
+          .filter(tr => tr.style.display !== "none");
+      }
+
+      function updateCount(){
+        const v = visibleRows().length;
+        rowCount.textContent = v ? `${v} row(s)` : "No matching rows";
+      }
+
+      function applyFilter(){
+        const q = (searchBox.value || "").trim().toLowerCase();
+        const priOnly = priorityOnly.checked;
+
+        Array.from(body.querySelectorAll("tr")).forEach(tr => {
+          const area = tr.getAttribute("data-area") || "";
+          const pri = tr.getAttribute("data-priority") === "1";
+
+          const matchText = !q || area.includes(q);
+          const matchPri = !priOnly || pri;
+
+          tr.style.display = (matchText && matchPri) ? "" : "none";
+        });
+
+        updateCount();
+      }
+
+      function getSortVal(tr){
+        if(sortKey === "area") return tr.getAttribute("data-area") || "";
+        if(sortKey === "priority") return Number(tr.getAttribute("data-priority") || 0);
+        if(sortKey === "percent") return Number(tr.getAttribute("data-percent") || -1);
+        if(sortKey === "yes") return Number(tr.getAttribute("data-yes") || 0);
+        if(sortKey === "applicable") return Number(tr.getAttribute("data-applicable") || 0);
+        return "";
+      }
+
+      function clearSortIndicators(){
+        ["area","priority","percent","yes","applicable"].forEach(k => {
+          const el = document.getElementById("si-" + k);
+          if(el) el.textContent = "";
+        });
+      }
+
+      function setSortIndicator(){
+        clearSortIndicators();
+        const el = document.getElementById("si-" + sortKey);
+        if(el) el.textContent = (sortDir === "asc") ? "▲" : "▼";
+      }
+
+      function applySort(){
+        const rows = Array.from(body.querySelectorAll("tr"));
+        rows.sort((a,b) => {
+          const va = getSortVal(a);
+          const vb = getSortVal(b);
+
+          // Special rule: percent = -1 means N/A -> always bottom
+          if(sortKey === "percent"){
+            const aNA = (va === -1);
+            const bNA = (vb === -1);
+            if(aNA && !bNA) return 1;
+            if(!aNA && bNA) return -1;
+          }
+
+          if(typeof va === "number" && typeof vb === "number"){
+            return (sortDir === "asc") ? (va - vb) : (vb - va);
+          }
+          return (sortDir === "asc")
+            ? String(va).localeCompare(String(vb))
+            : String(vb).localeCompare(String(va));
+        });
+
+        rows.forEach(r => body.appendChild(r));
+        setSortIndicator();
+      }
+
+      // Default sort: priority first, then percent ascending
+      sortKey = "priority";
+      sortDir = "desc";
+      applySort();
+      applyFilter();
+
+      // Filter events
+      searchBox.addEventListener("input", applyFilter);
+      priorityOnly.addEventListener("change", applyFilter);
+
+      // Sort events (click headers)
+      document.querySelectorAll("#hqipTable thead th").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.getAttribute("data-key");
+          if(!key) return;
+
+          if(sortKey === key){
+            sortDir = (sortDir === "asc") ? "desc" : "asc";
+          } else {
+            sortKey = key;
+            sortDir = "asc";
+            // If sorting by priority, default: priority on top
+            if(key === "priority") sortDir = "desc";
+          }
+          applySort();
+        });
+      });
+
+    })();
+  </script>
+
+{% else %}
+  <div class="hqip-card">
+    <strong>No facility selected.</strong><br>
+    Please open this page using the <em>Priority</em> button from HQIP headers.
+  </div>
 {% endif %}
 
 {% endblock %}

@@ -595,8 +595,9 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     @admin.display(description="Priority")
     def hqip_priority_button(self, obj):
         base_url = reverse("admin:hqip_priority_areas")
-        qs = urlencode({"header_id": obj.id})
+        qs = urlencode({"facility_id": obj.facilityfk_id})
         return format_html('<a class="button" href="{}?{}">Priority</a>', base_url, qs)
+
 
     # ==========================================================
     # A) STANDARDS DASHBOARD
@@ -977,43 +978,70 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # D) PRIORITY THEMATIC AREAS (bottom 3 areas; row-level only)
     # ==========================================================
     def hqip_priority_areas(self, request):
-        header_id = request.GET.get("header_id")
-        headers_qs = self.get_queryset(request)
+        """
+        Facility-level Priority Areas:
+        - Uses ALL HQIP headers for the selected facility (within user's access).
+        - Computes Area % = YES / (YES+NO) (NA ignored).
+        - Flags bottom 3 areas as Priority.
+        """
+
+        facility_id = request.GET.get("facility_id")
+        headers_qs = self.get_queryset(request)  # province-restricted via mixin
 
         error_message = None
+        facility_obj = None
 
-        if not header_id:
-            error_message = "No header selected (missing header_id) or you don’t have access to that header."
+        if not facility_id:
+            error_message = "No facility selected (missing facility_id)."
             context = dict(
                 self.admin_site.each_context(request),
                 title="HQIP Priority Thematic Areas",
-                header_obj=None,
+                facility_obj=None,
                 rows=[],
                 error_message=error_message,
             )
             return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-        header_obj = (
-            headers_qs
-            .filter(id=header_id)
-            .select_related("facilityfk__districtfk__provincefk", "areafk", "assessmenttype")
+        # Validate facility exists + is accessible to user (province restriction)
+        facility_obj = (
+            Facility.objects
+            .filter(id=facility_id)
+            .select_related("districtfk__provincefk")
             .first()
         )
 
-        if not header_obj:
-            error_message = "No header selected (missing header_id) or you don’t have access to that header."
+        if not facility_obj:
+            error_message = "Facility not found."
             context = dict(
                 self.admin_site.each_context(request),
                 title="HQIP Priority Thematic Areas",
-                header_obj=None,
+                facility_obj=None,
                 rows=[],
                 error_message=error_message,
             )
             return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
+        # Province-user safety: ensure facility is within user province
+        if not request.user.is_superuser:
+            prov = user_province(request)
+            if not prov or facility_obj.districtfk.provincefk_id != prov.id:
+                error_message = "You don’t have access to this facility."
+                context = dict(
+                    self.admin_site.each_context(request),
+                    title="HQIP Priority Thematic Areas",
+                    facility_obj=None,
+                    rows=[],
+                    error_message=error_message,
+                )
+                return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
+
+        # All headers for this facility (within user's allowed scope)
+        headers_qs = headers_qs.filter(facilityfk_id=facility_obj.id)
+
+        # Aggregate by thematic Area across all headers for the facility
         area_rows = (
             HQIPAssessment.objects
-            .filter(header_id=header_obj.id)
+            .filter(header__in=headers_qs)
             .values(
                 "criteriafk__standardfk__sectionfk__areafk__id",
                 "criteriafk__standardfk__sectionfk__areafk__name",
@@ -1037,6 +1065,7 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "percent": pct,
             })
 
+        # Rank (ignore None)
         rankable = [x for x in rows if x["percent"] is not None]
         rankable.sort(key=lambda x: x["percent"])  # lowest first
         priority_ids = set([x["area_id"] for x in rankable[:3]])
@@ -1044,12 +1073,13 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         for x in rows:
             x["is_priority"] = (x["area_id"] in priority_ids)
 
-        rows.sort(key=lambda x: (x["percent"] is None, x["percent"] if x["percent"] is not None else 999999))
+        # Nice ordering: priority first, then percent ascending
+        rows.sort(key=lambda x: (not x["is_priority"], x["percent"] is None, x["percent"] if x["percent"] is not None else 999999))
 
         context = dict(
             self.admin_site.each_context(request),
             title="HQIP Priority Thematic Areas",
-            header_obj=header_obj,
+            facility_obj=facility_obj,
             rows=rows,
             error_message=None,
         )
