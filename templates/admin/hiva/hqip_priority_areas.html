@@ -1,6 +1,5 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
-
 {% block content %}
 
 {% if error_message %}
@@ -55,10 +54,17 @@
 
     .hqip-toolbar{
       display:flex;
+      justify-content:space-between;
       gap:10px;
       flex-wrap:wrap;
       align-items:center;
       margin: 10px 0 12px;
+    }
+    .hqip-toolbar-left{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
     }
     .hqip-input{
       padding: 8px 10px;
@@ -95,16 +101,22 @@
   <p class="smallnote">
     The <strong>lowest 3</strong> thematic areas (based on % achievement across <strong>all HQIP assessments for this facility</strong>)
     are flagged as <span class="pill pill-pri">Priority thematic areas</span>.
-    <strong>NA</strong> and <strong>NULL</strong> scores are excluded from calculations.
+    <strong>NA</strong> scores are excluded from calculations.
   </p>
 
   <div class="hqip-toolbar">
-    <input id="searchBox" class="hqip-input" type="text" placeholder="Search thematic area...">
-    <label class="hqip-check">
-      <input id="priorityOnly" type="checkbox">
-      <span>Show Priority only</span>
-    </label>
-    <span class="muted" id="rowCount"></span>
+    <div class="hqip-toolbar-left">
+      <input id="searchBox" class="hqip-input" type="text" placeholder="Search thematic area...">
+      <label class="hqip-check">
+        <input id="priorityOnly" type="checkbox">
+        <span>Show Priority only</span>
+      </label>
+      <span class="muted" id="rowCount"></span>
+    </div>
+
+    <div>
+      <a class="button" href="?facility_id={{ facility_obj.id }}&export=1">Export to Excel</a>
+    </div>
   </div>
 
   <table class="hqip" id="hqipTable">
@@ -117,6 +129,7 @@
         <th data-key="priority">Priority <span class="sort-ind" id="si-priority"></span></th>
       </tr>
     </thead>
+
     <tbody id="hqipBody">
       {% for r in rows %}
         <tr
@@ -164,7 +177,7 @@
       const rowCount = document.getElementById("rowCount");
 
       let sortKey = "priority";
-      let sortDir = "asc"; // asc/desc
+      let sortDir = "desc"; // default: priority on top
 
       function visibleRows(){
         return Array.from(body.querySelectorAll("tr"))
@@ -221,7 +234,7 @@
           const va = getSortVal(a);
           const vb = getSortVal(b);
 
-          // Special rule: percent = -1 means N/A -> always bottom
+          // percent=-1 means N/A -> always bottom
           if(sortKey === "percent"){
             const aNA = (va === -1);
             const bNA = (vb === -1);
@@ -241,9 +254,7 @@
         setSortIndicator();
       }
 
-      // Default sort: priority first, then percent ascending
-      sortKey = "priority";
-      sortDir = "desc";
+      // Initial sort + filter
       applySort();
       applyFilter();
 
@@ -251,7 +262,7 @@
       searchBox.addEventListener("input", applyFilter);
       priorityOnly.addEventListener("change", applyFilter);
 
-      // Sort events (click headers)
+      // Sort events
       document.querySelectorAll("#hqipTable thead th").forEach(th => {
         th.addEventListener("click", () => {
           const key = th.getAttribute("data-key");
@@ -262,13 +273,11 @@
           } else {
             sortKey = key;
             sortDir = "asc";
-            // If sorting by priority, default: priority on top
             if(key === "priority") sortDir = "desc";
           }
           applySort();
         });
       });
-
     })();
   </script>
 
