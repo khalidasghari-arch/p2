@@ -1,0 +1,10 @@
+tr.hqip-group td {
+  background: #f6f7f9;
+  border-top: 1px solid #ddd;
+  padding: 8px 10px;
+}
+
+tr.hqip-standard td {
+  background: #fbfbfc;
+  padding-left: 25px;
+}

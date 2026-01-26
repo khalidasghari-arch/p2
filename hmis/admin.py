@@ -32,7 +32,7 @@ class HMISFactAdmin(admin.ModelAdmin):
     # ✅ What users should see first (clean)
     list_display = (
         "prov", "dist", "hf",
-        "year", "month_name",
+        "year", "month", "month_name",
         "indicator_name", "value",
         "hiva_hfs",
     )
@@ -72,7 +72,7 @@ class HMISFactAdmin(admin.ModelAdmin):
 @admin.register(HMISMonthlySummary)
 class HMISMonthlySummaryAdmin(admin.ModelAdmin):
     list_display = (
-        "prov","dist","hf","year","month_name",
+        "prov","dist","hf","year","month", "month_name",
         "hiva_hfs",
         "anc1","anc2","anc3","anc4",
         "pnc1","pnc2",
