@@ -56,8 +56,11 @@ from .models import (
     Training,
     Participationtype,
     Position,
+    WhoChildbirthChecklistMonthly,
 )
 from django.utils.http import urlencode
+from decimal import Decimal, InvalidOperation
+from django.core.exceptions import ValidationError
 
 # ============================================================
 # Admin Branding
@@ -145,7 +148,6 @@ class ProvinceRestrictedAdminMixin:
             return True
         return self._obj_in_scope(request, obj)
 
-
 # ============================================================
 # Reusable filters
 # ============================================================
@@ -169,7 +171,6 @@ class ProvinceFromFacilityFilter(admin.SimpleListFilter):
             return queryset.filter(**{f"{self.province_path}__id": self.value()})
         return queryset
 
-
 class DistrictFilter(admin.SimpleListFilter):
     title = "District"
     parameter_name = "district"
@@ -186,7 +187,6 @@ class DistrictFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(aimfacilityname__districtfk__id=self.value())
         return queryset
-
 
 class AimpeeFacilityFilter(admin.SimpleListFilter):
     title = "Facility"
@@ -205,7 +205,6 @@ class AimpeeFacilityFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(aimfacilityname__id=self.value())
         return queryset
-
 
 # ============================================================
 # AIM-PEE
@@ -260,7 +259,6 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
 # ============================================================
 # AIM-PPH
 # ============================================================
@@ -304,6 +302,153 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+@admin.register(WhoChildbirthChecklistMonthly)
+class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+
+    """
+    Same admin logic pattern as your SafeSurgery admin:
+    - province-restricted facility dropdown
+    - list_display includes key ratios
+    - save_model computes ratios (stored fields OR assigns to attrs if you later add DB fields)
+    """
+
+    # If you have a dedicated form, use it here
+    # form = WhoChildbirthChecklistMonthlyAdminForm
+
+    list_display = (
+        "id",
+        "get_province",
+        "facility_name",
+        "shamsi_year",
+        "shamsi_month",
+        "period",
+        "total_deliveries",
+        "files_selected",
+        "sec1_complete",
+        "sec1_completeness_ratio",
+        "cervix_ge4_admission",
+        "partograph_started_ge4",
+        "partograph_use_ge4_rate",
+        "sec2_complete",
+        "sec2_completeness_ratio",
+        "newborn_supplies_5_available",
+        "newborn_supplies_5_ratio",
+        "sec3_complete",
+        "sec3_completeness_ratio",
+        "bf_s2s_first_hour",
+        "bf_s2s_first_hour_ratio",
+        "sec4_complete",
+        "sec4_completeness_ratio",
+        "abx_need_checked_newborn",
+        "abx_need_checked_ratio",
+        "all4_sections_complete",
+        "all4_sections_completeness_ratio",
+    )
+
+    # NOTE:
+    # In your model I provided ratios as @property. Those are already "read-only".
+    # Adding them here just makes them show in the form "as read-only fields"
+    readonly_fields = (
+        "sec1_completeness_ratio",
+        "partograph_use_ge4_rate",
+        "sec2_completeness_ratio",
+        "newborn_supplies_5_ratio",
+        "sec3_completeness_ratio",
+        "bf_s2s_first_hour_ratio",
+        "sec4_completeness_ratio",
+        "abx_need_checked_ratio",
+        "all4_sections_completeness_ratio",
+        "created_at",
+        "updated_at",
+    )
+
+    # Keep your existing filters pattern (replace if you have a different facility filter)
+    #list_filter = (DistrictFilter, AimpeeFacilityFilter)
+    search_fields = ("facility_name",)
+
+    # -------------------------
+    # Shared percent helper
+    # -------------------------
+    def _pct(self, num, den):
+        try:
+            if num is None or den in (None, 0):
+                return None
+            return (Decimal(num) / Decimal(den)) * Decimal("100.0")
+        except (InvalidOperation, ZeroDivisionError):
+            return None
+
+    # ----------------------------------------------------
+    # OPTIONAL: compute & attach stored ratios on save
+    # ----------------------------------------------------
+    def save_model(self, request, obj, form, change):
+        """
+        Your current model uses @property ratios (calculated, not stored).
+        This save_model keeps the SAME admin "logic style" you showed:
+        - calculates ratios safely
+        - if later you add DB fields, the assignments will start persisting automatically.
+        """
+        # These setattr() will not persist unless you add matching model fields.
+        setattr(obj, "sec1_completeness_ratio_calc", self._pct(obj.sec1_complete, obj.files_selected))
+        setattr(obj, "sec2_completeness_ratio_calc", self._pct(obj.sec2_complete, obj.files_selected))
+        setattr(obj, "sec3_completeness_ratio_calc", self._pct(obj.sec3_complete, obj.files_selected))
+        setattr(obj, "sec4_completeness_ratio_calc", self._pct(obj.sec4_complete, obj.files_selected))
+
+        setattr(obj, "partograph_use_ge4_rate_calc", self._pct(obj.partograph_started_ge4, obj.cervix_ge4_admission))
+        setattr(obj, "newborn_supplies_5_ratio_calc", self._pct(obj.newborn_supplies_5_available, obj.total_deliveries))
+        setattr(obj, "bf_s2s_first_hour_ratio_calc", self._pct(obj.bf_s2s_first_hour, obj.total_deliveries))
+        setattr(obj, "abx_need_checked_ratio_calc", self._pct(obj.abx_need_checked_newborn, obj.total_deliveries))
+        setattr(obj, "all4_sections_completeness_ratio_calc", self._pct(obj.all4_sections_complete, obj.files_selected))
+
+        super().save_model(request, obj, form, change)
+
+    # -------------------------
+    # Province display + rules
+    # -------------------------
+    @admin.display(description="Province")
+    def get_province(self, obj):
+        """
+        If you change facility_name to a FK (recommended), then replace this with:
+        return obj.facility.districtfk.provincefk.name
+        """
+        # If facility_name is just text, province cannot be derived.
+        # Return "-" to avoid crashing admin.
+        return "-"
+
+    def province_filter_kwargs(self, request):
+        """
+        If you change facility_name to a FK, update filter kwargs accordingly.
+        """
+        # Example (when you change to facility FK):
+        # return {"facility__districtfk__provincefk": user_province(request)}
+        return {}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+        Only applies if you replace facility_name with a FK field like 'facility'.
+        Keep the same logic style as your SafeSurgery admin.
+        """
+        # Example (when you change to facility FK):
+        # if db_field.name == "facility" and not request.user.is_superuser:
+        #     prov = user_province(request)
+        #     kwargs["queryset"] = (
+        #         Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+        #     )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    # -------------------------
+    # Extra guard in admin UI
+    # -------------------------
+    def save_related(self, request, form, formsets, change):
+        """
+        Ensures model.clean() errors show nicely in admin.
+        """
+        obj = form.instance
+        try:
+            obj.full_clean()
+        except ValidationError as e:
+            form.add_error(None, e)
+            return
+        super().save_related(request, form, formsets, change)
 
 # ============================================================
 # Safe Surgery (C-Section clinical)

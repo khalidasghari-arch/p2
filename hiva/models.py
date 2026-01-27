@@ -3,6 +3,8 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Province(models.Model):
     name = models.CharField(max_length=200, unique=True)
@@ -924,6 +926,200 @@ class aimpph(models.Model):
 
     def __str__(self):
         return f"AIM-PPH #{self.id}"
+    
+class WhoChildbirthChecklistMonthly(models.Model):
+
+    shamsi_month = models.CharField(verbose_name="Afghanistan Month")
+    shamsi_year = models.CharField(verbose_name="Afghanistan Year")
+    period = models.CharField(verbose_name="Period")
+    bl_progress = models.CharField(verbose_name="Baseline and Progress")
+    facility_name = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+    gre_month =models.CharField(verbose_name="Calender Month")
+    gre_year= models.CharField(verbose_name="Calender Year")
+    afiat_flag = models.BooleanField(verbose_name="AFIAT")
+
+    """
+    WHO Childbirth Checklist – Monthly Facility Summary
+    (Counts + auto-calculated ratios)
+    """
+
+    # --- 1) Deliveries (denominator for many indicators) ---
+    total_deliveries = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Total number of Deliveries (normal/assisted/c-sections)",
+    )
+
+    # --- 2) Sample size: randomly selected files (up to 20) ---
+    files_selected = models.PositiveIntegerField(
+        default=0,
+        verbose_name=(
+            "Out of total number of deliveries in the month, select RANDOMLY up to 20 patient files "
+            "and record number of files selected"
+        ),
+        help_text="Expected range: 0–20.",
+    )
+
+    # --- Section 1 ---
+    sec1_complete = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of section 1 of the WHO childbirth Checklists completely filled out",
+    )
+
+    # --- Partograph at admission cervix ≥4 cm (from selected files) ---
+    cervix_ge4_admission = models.PositiveIntegerField(
+        default=0,
+        verbose_name=(
+            "Number of patient files selected with pregnant women presenting cervix ≥4 cms at admission"
+        ),
+    )
+    partograph_started_ge4 = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of partographs started at cervix ≥4 cms at admission",
+    )
+
+    # --- Section 2 ---
+    sec2_complete = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of section 2 of the WHO childbirth Checklists completely filled out",
+    )
+
+    # --- Newborn essential supplies at bedside (from deliveries) ---
+    newborn_supplies_5_available = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of deliveries with the 5 essential supplies available at bedside for newborn",
+    )
+
+    # --- Section 3 ---
+    sec3_complete = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of section 3 of the WHO childbirth Checklists completely filled out",
+    )
+
+    # --- Early breastfeeding + skin-to-skin (from deliveries) ---
+    bf_s2s_first_hour = models.PositiveIntegerField(
+        default=0,
+        verbose_name=(
+            "Number of deliveries which started breastfeeding and skin-to-skin contact during first hour "
+            "(if mother and baby are well)."
+        ),
+    )
+
+    # --- Section 4 ---
+    sec4_complete = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of section 4 of the WHO childbirth Checklists completely filled out",
+    )
+
+    # --- Antibiotic need checked before discharge (from deliveries) ---
+    abx_need_checked_newborn = models.PositiveIntegerField(
+        default=0,
+        verbose_name=(
+            "Number of deliveries for which the need for antibiotic for newborn was checked before discharge"
+        ),
+    )
+
+    # --- All 4 sections complete (from selected files) ---
+    all4_sections_complete = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Number of patient files with the 4 sections of the WHO childbirth Checklists completely filled out",
+    )
+
+    # ---- Audit fields ----
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "WHO CHILDBIRTH CHECKLIST"
+        verbose_name_plural = "WHO CHILDBIRTH CHECKLIST"
+        unique_together = ("facility_name", "shamsi_year", "shamsi_month")
+        ordering = ("-shamsi_year", "-shamsi_month", "facility_name")
+
+    def __str__(self):
+        return f"{self.facility_name} - {self.shamsi_year}/{self.shamsi_month}"
+
+    # -----------------------------
+    # Safe ratio helpers + metrics
+    # -----------------------------
+    @staticmethod
+    def _ratio(numerator: int, denominator: int) -> float:
+        if not denominator:
+            return 0.0
+        return round((numerator / denominator) * 100.0, 2)
+
+    @property
+    def sec1_completeness_ratio(self) -> float:
+        # Indicator 4: Completeness ratio of section 1 (out of selected files)
+        return self._ratio(self.sec1_complete, self.files_selected)
+
+    @property
+    def sec2_completeness_ratio(self) -> float:
+        # Indicator 9: completeness rate of section 2 (out of selected files)
+        return self._ratio(self.sec2_complete, self.files_selected)
+
+    @property
+    def sec3_completeness_ratio(self) -> float:
+        # Indicator 13: completeness rate of section 3 (out of selected files)
+        return self._ratio(self.sec3_complete, self.files_selected)
+
+    @property
+    def sec4_completeness_ratio(self) -> float:
+        # completeness rate of section 4 (out of selected files)
+        return self._ratio(self.sec4_complete, self.files_selected)
+
+    @property
+    def partograph_use_ge4_rate(self) -> float:
+        # Indicator 7: partograph use at cervix ≥4 cm rate (out of cervix≥4 admissions)
+        return self._ratio(self.partograph_started_ge4, self.cervix_ge4_admission)
+
+    @property
+    def newborn_supplies_5_ratio(self) -> float:
+        # Indicator 11: ratio of deliveries with 5 essential supplies available (out of total deliveries)
+        return self._ratio(self.newborn_supplies_5_available, self.total_deliveries)
+
+    @property
+    def bf_s2s_first_hour_ratio(self) -> float:
+        # Indicator 19: ratio of deliveries started breastfeeding & skin-to-skin in first hour (out of total deliveries)
+        return self._ratio(self.bf_s2s_first_hour, self.total_deliveries)
+
+    @property
+    def abx_need_checked_ratio(self) -> float:
+        # Indicator 21: ratio of deliveries with newborn antibiotic need checked (out of total deliveries)
+        return self._ratio(self.abx_need_checked_newborn, self.total_deliveries)
+
+    @property
+    def all4_sections_completeness_ratio(self) -> float:
+        # completeness ratio of all 4 sections (out of selected files)
+        return self._ratio(self.all4_sections_complete, self.files_selected)
+
+    def clean(self):
+        """
+        Light validation to avoid impossible values.
+        (Admin/form will show user-friendly errors.)
+        """
+        errors = {}
+
+        if self.files_selected > 20:
+            errors["files_selected"] = "files_selected must be 0–20 (random sample up to 20)."
+
+        # Counts based on selected files should not exceed files_selected
+        for field in ["sec1_complete", "sec2_complete", "sec3_complete", "sec4_complete", "all4_sections_complete"]:
+            if getattr(self, field) > self.files_selected:
+                errors[field] = f"{field} cannot be greater than files_selected."
+
+        # Partograph denominators
+        if self.cervix_ge4_admission > self.files_selected:
+            errors["cervix_ge4_admission"] = "Cannot be greater than files_selected."
+        if self.partograph_started_ge4 > self.cervix_ge4_admission:
+            errors["partograph_started_ge4"] = "Cannot be greater than cervix_ge4_admission."
+
+        # Delivery-based counts should not exceed total deliveries
+        for field in ["newborn_supplies_5_available", "bf_s2s_first_hour", "abx_need_checked_newborn"]:
+            if getattr(self, field) > self.total_deliveries:
+                errors[field] = f"{field} cannot be greater than total_deliveries."
+
+        if errors:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(errors)
 
 class safesurgeryclinical(models.Model):
 
