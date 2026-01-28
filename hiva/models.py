@@ -435,7 +435,7 @@ MONTH_CHOICES = [
         ("5", "May"), ("6", "June"), ("7", "July"), ("8", "August"),
         ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
     ]
-YCHOICES = [(2026, "2026"), (2027, "2027")]
+YCHOICES = [(2026, "2026"), (2026, "2026"), (2027, "2027")]
     
 class Mpdsr(models.Model):
     yearmpdsr = models.IntegerField(default=2026, choices=YCHOICES, verbose_name="Year")

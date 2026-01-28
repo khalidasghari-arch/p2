@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 
+
 class PatientSafetyHeader(models.Model):
     ENGLISH_MONTH_CHOICES = [
         ("1", "January"), ("2", "February"), ("3", "March"), ("4", "April"),
@@ -16,12 +17,13 @@ class PatientSafetyHeader(models.Model):
     facility = models.ForeignKey("hiva.Facility", on_delete=models.PROTECT, related_name="patientsafety_headers")
     assessor = models.ForeignKey("hiva.Assessor", on_delete=models.PROTECT, related_name="patientsafety_assessments")
     staff_profession = models.ForeignKey(
-        'hiva.Position',
-        on_delete=models.PROTECT,   # or your existing on_delete
+        "hiva.Position",
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name='patient_safety_headers')
-    
+        related_name="patient_safety_headers",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -34,14 +36,20 @@ class PatientSafetyHeader(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS, default="draft")
     submitted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        null=True, blank=True, related_name="ps_submitted"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ps_submitted",
     )
     submitted_at = models.DateTimeField(null=True, blank=True)
 
     approved_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        null=True, blank=True, related_name="ps_approved"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ps_approved",
     )
     approved_at = models.DateTimeField(null=True, blank=True)
     approval_note = models.TextField(null=True, blank=True)
@@ -52,6 +60,7 @@ class PatientSafetyHeader(models.Model):
 
     def __str__(self):
         return f"{self.facility} | {self.surveymonth}-{self.surveyyear}"
+
 
 class WorkArea(models.Model):
     work_area_name = models.CharField(max_length=150)
@@ -173,6 +182,83 @@ class PatientSafetyDetails(models.Model):
     f4 = models.PositiveSmallIntegerField(choices=LIKERT_1_5, null=True, blank=True)
     f5 = models.PositiveSmallIntegerField(choices=LIKERT_1_5, null=True, blank=True)
     f6 = models.PositiveSmallIntegerField(choices=LIKERT_1_5, null=True, blank=True)
+
+    # ============================================================
+    # NEW SECTION (after F): Medication & Surgical Errors + RMC
+    # (Added only — no changes to your existing fields)
+    # ============================================================
+
+    EVENT_FREQ_1_5 = [
+        (1, "Never"),
+        (2, "Once or twice per year"),
+        (3, "Once every three months"),
+        (4, "Once every month"),
+        (5, "At least every 1-2 weeks"),
+        (9, "Does Not Apply / Don't Know"),
+    ]
+
+    RMC_FREQ_1_5 = [
+        (1, "Never"),
+        (2, "Rarely"),
+        (3, "Some of the time"),
+        (4, "Most of the time"),
+        (5, "Every time"),
+        (9, "Does Not Apply / Don't Know"),
+    ]
+
+    # H1–H4: patient safety events witnessed (past 12 months)
+    h1_wrong_medication = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H1. Wrong medication (past 12 months - frequency witnessed)"
+    )
+    h2_wrong_dose = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H2. Wrong dose of medication (past 12 months - frequency witnessed)"
+    )
+    h3_wrong_route = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H3. Wrong route of medication (past 12 months - frequency witnessed)"
+    )
+    h4_wrong_surgical_procedure = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H4. Wrong surgical procedure (past 12 months - frequency witnessed)"
+    )
+
+    # H5–H9: RMC violations witnessed (past 12 months)
+    h5_physical_abuse_ld = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H5. Physical abuse during labor & delivery (violations witnessed)"
+    )
+    h6_verbal_abuse_ld = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H6. Verbal abuse during labor & delivery (violations witnessed)"
+    )
+    h7_stigma_discrimination = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H7. Stigma or discrimination (violations witnessed)"
+    )
+    h8_privacy_confidentiality = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H8. Violations of privacy or confidentiality (violations witnessed)"
+    )
+    h9_no_staff_at_birth = models.PositiveSmallIntegerField(
+        choices=EVENT_FREQ_1_5, null=True, blank=True,
+        verbose_name="H9. No staff member present at the time of birth (violations witnessed)"
+    )
+
+    # H10–H12: Respectful maternity care practice frequency
+    h10_informed_consent = models.PositiveSmallIntegerField(
+        choices=RMC_FREQ_1_5, null=True, blank=True,
+        verbose_name="H10. Informed consent obtained prior to procedures/exams (labor & delivery)"
+    )
+    h11_companionship_choice = models.PositiveSmallIntegerField(
+        choices=RMC_FREQ_1_5, null=True, blank=True,
+        verbose_name="H11. Women allowed choice of companionship during labor & delivery"
+    )
+    h12_treated_respectfully = models.PositiveSmallIntegerField(
+        choices=RMC_FREQ_1_5, null=True, blank=True,
+        verbose_name="H12. Women treated with respect and in a friendly manner during labor & delivery"
+    )
 
     # G1–G4
     g1 = models.CharField(max_length=1, choices=YEARS_HOSP, null=True, blank=True)
