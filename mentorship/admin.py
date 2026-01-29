@@ -265,7 +265,8 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     class Media:
         js = (
+            "admin/js/jquery.init.js",   # MUST be first
             "mentorship/js/prefill_staff_facility.js",
-            # NEW FILE NAME (prevents browser cache)
             "mentorship/js/topic_refresh_v2.js",
         )
+

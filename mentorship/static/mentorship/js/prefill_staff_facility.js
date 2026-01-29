@@ -1,21 +1,25 @@
-(function ($) {
-  $(document).ready(function () {
+(function () {
+  // Wait until Django admin has fully loaded jQuery
+  document.addEventListener("DOMContentLoaded", function () {
 
-    // This file should NEVER crash
-    // Only run if popup exists
-    var isPopup = window.location.search.indexOf("_popup=1") !== -1;
-    if (!isPopup) return;
+    if (typeof django === "undefined" || typeof django.jQuery === "undefined") {
+      console.warn("prefill_staff_facility: django.jQuery not available");
+      return;
+    }
 
-    // Facility is passed as ?facility=<id>
+    var $ = django.jQuery;
+
+    // Only run inside popup
+    if (window.location.search.indexOf("_popup=1") === -1) return;
+
     var params = new URLSearchParams(window.location.search);
     var facilityId = params.get("facility");
-
     if (!facilityId) return;
 
-    var $facilitySelect = $("select[name='hfname']");
-    if ($facilitySelect.length) {
-      $facilitySelect.val(facilityId);
+    var $facility = $("select[name='hfname']");
+    if ($facility.length) {
+      $facility.val(facilityId);
     }
 
   });
-})(django.jQuery);
+})();
