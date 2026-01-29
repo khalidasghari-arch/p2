@@ -265,7 +265,7 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     class Media:
         js = (
-            "mentorship/js/prefill_staff_facility.js",
+            # "mentorship/js/prefill_staff_facility.js",
             "mentorship/js/topic_refresh_stable.js",
         )
 
