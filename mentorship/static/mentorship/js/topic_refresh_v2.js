@@ -1,39 +1,30 @@
 (function ($) {
   $(document).ready(function () {
 
-    // Correct endpoint (NO object id in the URL)
-    // Always: /admin/mentorship/mentorshipvisit/topics-by-thematic/
+    /* =========================================================
+       AJAX ENDPOINT (STABLE – NOT ADMIN-DEPENDENT)
+       ========================================================= */
     function endpoint() {
-      var p = window.location.pathname;
-
-      // Change page example:
-      // /admin/mentorship/mentorshipvisit/2/change/
-      // Add page example:
-      // /admin/mentorship/mentorshipvisit/add/
-      // List page example:
-      // /admin/mentorship/mentorshipvisit/
-      //
-      // We want base: /admin/mentorship/mentorshipvisit/
-      var base = p
-        .replace(/\/\d+\/change\/?$/, "/")   // remove "<id>/change/"
-        .replace(/\/add\/?$/, "/");         // remove "add/"
-
-      // ensure trailing slash
-      if (!base.endsWith("/")) base += "/";
-
-      return base + "topics-by-thematic/";
+      return "/mentorship/ajax/topics-by-thematic/";
     }
 
-    function setEmpty($topic) {
-      $topic.empty().append($("<option>").val("").text("---------"));
+    /* =========================================================
+       HELPERS
+       ========================================================= */
+    function clearTopic($topic) {
+      $topic.empty();
+      $topic.append($("<option>").val("").text("---------"));
     }
 
-    function setLoading($topic) {
-      $topic.empty().append($("<option>").val("").text("Loading..."));
+    function showLoading($topic) {
+      $topic.empty();
+      $topic.append($("<option>").val("").text("Loading..."));
     }
 
-    function setOptions($topic, items, selectedId) {
-      $topic.empty().append($("<option>").val("").text("---------"));
+    function populateTopics($topic, items, selectedId) {
+      $topic.empty();
+      $topic.append($("<option>").val("").text("---------"));
+
       items.forEach(function (item) {
         var opt = $("<option>").val(item.id).text(item.label);
         if (selectedId && String(item.id) === String(selectedId)) {
@@ -43,68 +34,87 @@
       });
     }
 
-    // Map thematic select to topic select by ID suffix in the same inline row
-    function findTopicForThematic($thematic) {
-      var tid = $thematic.attr("id");
-      if (!tid || tid.indexOf("__prefix__") !== -1) return null;
-      var topicId = tid.replace(/-thematicname$/, "-topicname");
+    /* =========================================================
+       FIND MATCHING TOPIC FIELD FOR A THEMATIC FIELD
+       (SAME INLINE ROW)
+       ========================================================= */
+    function findTopicSelect($thematic) {
+      var id = $thematic.attr("id");
+      if (!id || id.indexOf("__prefix__") !== -1) return null;
+
+      var topicId = id.replace("-thematicname", "-topicname");
       var $topic = $("#" + topicId);
+
       return $topic.length ? $topic : null;
     }
 
+    /* =========================================================
+       LOAD TOPICS VIA AJAX
+       ========================================================= */
     function loadTopics($thematic) {
       var thematicId = $thematic.val();
-      var $topic = findTopicForThematic($thematic);
+      var $topic = findTopicSelect($thematic);
+
       if (!$topic) return;
 
       if (!thematicId) {
-        setEmpty($topic);
+        clearTopic($topic);
         return;
       }
 
-      var current = $topic.val();
-      setLoading($topic);
+      var previouslySelected = $topic.val();
+      showLoading($topic);
 
-      $.getJSON(endpoint(), { thematic_id: thematicId })
-        .done(function (resp) {
-          var items = (resp && resp.results) ? resp.results : [];
+      $.ajax({
+        url: endpoint(),
+        data: { thematic_id: thematicId },
+        method: "GET",
+        dataType: "json",
+        success: function (resp) {
+          var items = resp && resp.results ? resp.results : [];
 
-          // If backend returns empty, show only "---------" (not blank)
-          var keep = items.some(function (x) { return String(x.id) === String(current); })
-            ? current
-            : "";
+          // Keep selection ONLY if still valid
+          var keep = items.some(function (x) {
+            return String(x.id) === String(previouslySelected);
+          }) ? previouslySelected : "";
 
-          setOptions($topic, items, keep);
-        })
-        .fail(function () {
-          // Request failed -> revert to empty list
-          setEmpty($topic);
-        });
+          populateTopics($topic, items, keep);
+        },
+        error: function () {
+          // On error, NEVER leave blank
+          clearTopic($topic);
+        }
+      });
     }
 
-    // Change thematic => refresh topic instantly
+    /* =========================================================
+       EVENTS
+       ========================================================= */
+
+    // When thematic changes → reload topic
     $(document).on("change", "select[id$='-thematicname']", function () {
       loadTopics($(this));
     });
 
-    // Initialize existing rows on load
+    // Initialize existing rows on page load
     $("select[id$='-thematicname']").each(function () {
-      var $t = $(this);
-      if ($t.attr("id").indexOf("__prefix__") !== -1) return;
+      var $thematic = $(this);
+      if ($thematic.attr("id").indexOf("__prefix__") !== -1) return;
 
-      var $topic = findTopicForThematic($t);
-      if ($topic) setEmpty($topic);
+      var $topic = findTopicSelect($thematic);
+      if ($topic) clearTopic($topic);
 
-      if ($t.val()) loadTopics($t);
+      if ($thematic.val()) {
+        loadTopics($thematic);
+      }
     });
 
-    // New inline row added
+    // When new inline row is added
     $(document).on("formset:added", function (event, $row) {
-      var $t = $row.find("select[id$='-thematicname']");
-      if ($t.length) {
-        var $topic = findTopicForThematic($t);
-        if ($topic) setEmpty($topic);
-        if ($t.val()) loadTopics($t);
+      var $thematic = $row.find("select[id$='-thematicname']");
+      if ($thematic.length) {
+        var $topic = findTopicSelect($thematic);
+        if ($topic) clearTopic($topic);
       }
     });
 
