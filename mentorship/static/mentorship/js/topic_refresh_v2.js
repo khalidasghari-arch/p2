@@ -1,29 +1,22 @@
 (function ($) {
   $(document).ready(function () {
 
-    /* =========================================================
-       AJAX ENDPOINT (STABLE – NOT ADMIN-DEPENDENT)
-       ========================================================= */
     function endpoint() {
       return "/mentorship/ajax/topics-by-thematic/";
     }
 
-    /* =========================================================
-       HELPERS
-       ========================================================= */
+    console.log("[topic_refresh_v2] loaded");
+
     function clearTopic($topic) {
-      $topic.empty();
-      $topic.append($("<option>").val("").text("---------"));
+      $topic.empty().append($("<option>").val("").text("---------"));
     }
 
     function showLoading($topic) {
-      $topic.empty();
-      $topic.append($("<option>").val("").text("Loading..."));
+      $topic.empty().append($("<option>").val("").text("Loading..."));
     }
 
     function populateTopics($topic, items, selectedId) {
-      $topic.empty();
-      $topic.append($("<option>").val("").text("---------"));
+      $topic.empty().append($("<option>").val("").text("---------"));
 
       items.forEach(function (item) {
         var opt = $("<option>").val(item.id).text(item.label);
@@ -34,35 +27,37 @@
       });
     }
 
-    /* =========================================================
-       FIND MATCHING TOPIC FIELD FOR A THEMATIC FIELD
-       (SAME INLINE ROW)
-       ========================================================= */
-    function findTopicSelect($thematic) {
-      var id = $thematic.attr("id");
-      if (!id || id.indexOf("__prefix__") !== -1) return null;
+    // Find topic select in SAME inline row (by name suffix)
+    function findTopicSelectFromThematic($thematic) {
+      var $row = $thematic.closest("tr, .form-row, fieldset, .inline-related");
+      if (!$row.length) return null;
 
-      var topicId = id.replace("-thematicname", "-topicname");
-      var $topic = $("#" + topicId);
+      // most reliable: name ends with "-topicname"
+      var $topic = $row.find("select[name$='-topicname']");
+      if ($topic.length) return $topic;
 
-      return $topic.length ? $topic : null;
+      // fallback: if your field name differs, try "topicname"
+      $topic = $row.find("select[name*='topicname']");
+      if ($topic.length) return $topic;
+
+      return null;
     }
 
-    /* =========================================================
-       LOAD TOPICS VIA AJAX
-       ========================================================= */
     function loadTopics($thematic) {
       var thematicId = $thematic.val();
-      var $topic = findTopicSelect($thematic);
+      var $topic = findTopicSelectFromThematic($thematic);
 
-      if (!$topic) return;
+      // DEBUG line to confirm it finds the topic select
+      console.log("[topic_refresh_v2] thematic:", thematicId, "topic_found:", !!($topic && $topic.length));
+
+      if (!$topic || !$topic.length) return;
 
       if (!thematicId) {
         clearTopic($topic);
         return;
       }
 
-      var previouslySelected = $topic.val();
+      var prev = $topic.val();
       showLoading($topic);
 
       $.ajax({
@@ -71,50 +66,37 @@
         method: "GET",
         dataType: "json",
         success: function (resp) {
-          var items = resp && resp.results ? resp.results : [];
-
-          // Keep selection ONLY if still valid
+          var items = (resp && resp.results) ? resp.results : [];
           var keep = items.some(function (x) {
-            return String(x.id) === String(previouslySelected);
-          }) ? previouslySelected : "";
-
+            return String(x.id) === String(prev);
+          }) ? prev : "";
           populateTopics($topic, items, keep);
         },
         error: function () {
-          // On error, NEVER leave blank
           clearTopic($topic);
         }
       });
     }
 
-    /* =========================================================
-       EVENTS
-       ========================================================= */
-
-    // When thematic changes → reload topic
-    $(document).on("change", "select[id$='-thematicname']", function () {
+    // listen by NAME (not ID)
+    $(document).on("change", "select[name$='-thematicname'], select[name*='thematicname']", function () {
       loadTopics($(this));
     });
 
-    // Initialize existing rows on page load
-    $("select[id$='-thematicname']").each(function () {
-      var $thematic = $(this);
-      if ($thematic.attr("id").indexOf("__prefix__") !== -1) return;
-
-      var $topic = findTopicSelect($thematic);
-      if ($topic) clearTopic($topic);
-
-      if ($thematic.val()) {
-        loadTopics($thematic);
-      }
+    // init existing rows
+    $("select[name$='-thematicname'], select[name*='thematicname']").each(function () {
+      var $t = $(this);
+      var $topic = findTopicSelectFromThematic($t);
+      if ($topic && $topic.length) clearTopic($topic);
+      if ($t.val()) loadTopics($t);
     });
 
-    // When new inline row is added
+    // new inline rows
     $(document).on("formset:added", function (event, $row) {
-      var $thematic = $row.find("select[id$='-thematicname']");
-      if ($thematic.length) {
-        var $topic = findTopicSelect($thematic);
-        if ($topic) clearTopic($topic);
+      var $t = $row.find("select[name$='-thematicname'], select[name*='thematicname']");
+      if ($t.length) {
+        var $topic = findTopicSelectFromThematic($t);
+        if ($topic && $topic.length) clearTopic($topic);
       }
     });
 
