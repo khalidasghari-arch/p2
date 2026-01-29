@@ -7,6 +7,8 @@ from .models import (
     Mentorshipvisit, Mentorshipdetails, Staff
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
+from django.urls import path
+from django.http import JsonResponse
 
 # =====================================================
 # BASIC ADMINS (unchanged)
@@ -229,5 +231,39 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             ) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "topics-by-thematic/",
+                self.admin_site.admin_view(self.topics_by_thematic),
+                name="mentorship_topics_by_thematic",
+            )
+        ]
+        return custom + urls
+
+    def topics_by_thematic(self, request):
+        """
+        GET params:
+          - thematic_id=<id>
+        returns:
+          {"results":[{"id":1,"label":"ANC-1 - Safe sex"}, ...]}
+        """
+        thematic_id = request.GET.get("thematic_id")
+        if not thematic_id:
+            return JsonResponse({"results": []})
+
+        qs = MentorshipTopics.objects.filter(thematicfk_id=thematic_id).order_by("shortname", "name")
+
+        data = []
+        for t in qs:
+            label = f"{t.shortname} - {t.name}" if t.shortname else t.name
+            data.append({"id": t.id, "label": label})
+
+        return JsonResponse({"results": data})
+
     class Media:
-        js = ("mentorship/js/prefill_staff_facility.js",)
+        js = (
+            "mentorship/js/prefill_staff_facility.js",   # keep your existing JS
+            "mentorship/js/topic_refresh.js",            # NEW JS
+        )
