@@ -105,7 +105,54 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
             raise ValidationError("Only ONE of LS, PC, or MC can be selected.")
         return cleaned
 
+class MentorshipdetailsInlineForm(forms.ModelForm):
+    class Meta:
+        model = Mentorshipdetails
+        fields = "__all__"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Default: no topics until we know thematic
+        self.fields["topicname"].queryset = MentorshipTopics.objects.none()
+
+        thematic_id = None
+
+        # 1) If user is submitting/changing values, get thematic from POST
+        # Inline field name is like: <prefix>-thematicname
+        if self.is_bound:
+            thematic_id = self.data.get(f"{self.prefix}-thematicname") or None
+
+        # 2) If editing existing row, get thematic from saved instance
+        if not thematic_id and getattr(self.instance, "thematicname_id", None):
+            thematic_id = self.instance.thematicname_id
+
+        # Apply filter
+        if thematic_id:
+            self.fields["topicname"].queryset = MentorshipTopics.objects.filter(
+                thematicfk_id=thematic_id
+            ).order_by("shortname", "name")
+
+    def clean(self):
+        cleaned = super().clean()
+
+        # Enforce only ONE of LS/PC/MC
+        selected = sum([
+            bool(cleaned.get("ls")),
+            bool(cleaned.get("pc")),
+            bool(cleaned.get("mc")),
+        ])
+        if selected > 1:
+            raise ValidationError("Only ONE of LS, PC, or MC can be selected.")
+
+        # Optional safety: if topic is selected, ensure it matches thematic
+        thematic = cleaned.get("thematicname")
+        topic = cleaned.get("topicname")
+        if thematic and topic and topic.thematicfk_id != thematic.id:
+            raise ValidationError("Selected topic does not match the selected thematic area.")
+
+        return cleaned
+    
 # =====================================================
 # INLINE – mentee by facility, topic by thematic, assessor by province
 # =====================================================
@@ -113,13 +160,15 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 class MentorshipdetailsInline(admin.TabularInline):
     model = Mentorshipdetails
     form = MentorshipdetailsInlineForm
-    extra = 0
+    extra = 0  # HQIP-style: show inline only after header saved
 
     def get_extra(self, request, obj=None, **kwargs):
         return 1 if obj else 0
 
     def has_add_permission(self, request, obj=None):
-        return False if obj is None else super().has_add_permission(request, obj)
+        if obj is None:
+            return False
+        return super().has_add_permission(request, obj=obj)
 
     def get_formset(self, request, obj=None, **kwargs):
         request._mentorship_parent_obj = obj
@@ -128,27 +177,24 @@ class MentorshipdetailsInline(admin.TabularInline):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         parent_obj = getattr(request, "_mentorship_parent_obj", None)
 
-        # 1️⃣ MENTEE → only staff from visit facility
+        # Mentee: only staff from parent facility
         if db_field.name == "menteename":
-            kwargs["queryset"] = (
-                Staff.objects.filter(hfname=parent_obj.facilityfk)
-                if parent_obj else Staff.objects.none()
-            )
+            if parent_obj:
+                kwargs["queryset"] = Staff.objects.filter(
+                    hfname=parent_obj.facilityfk
+                ).order_by("firstname", "lastname")
+            else:
+                kwargs["queryset"] = Staff.objects.none()
 
-        # 2️⃣ TOPIC → only topics under selected thematic
-        if db_field.name == "topicname":
-            kwargs["queryset"] = MentorshipTopics.objects.none()
-
-        # 3️⃣ MENTOR (ASSESSOR) → only assessor from user province
+        # Mentor (Assessor): restrict by user province
         if db_field.name == "mentor" and not request.user.is_superuser:
-            Assessor = db_field.remote_field.model
+            Assessor = db_field.remote_field.model  # hiva.Assessor
             prov = user_province(request)
-            kwargs["queryset"] = Assessor.objects.filter(
-                province=prov
-            ) if prov else Assessor.objects.none()
+
+            # IMPORTANT: adjust this line if your Assessor uses provincefk, etc.
+            kwargs["queryset"] = Assessor.objects.filter(province=prov) if prov else Assessor.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # =====================================================
 # MENTORSHIP VISIT ADMIN (UNCHANGED + SAFE)
