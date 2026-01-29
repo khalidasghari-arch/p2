@@ -7,7 +7,7 @@ from .models import (
     Mentorshipvisit, Mentorshipdetails, Staff
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
-from django.urls import path
+from django.urls import path, reverse
 from django.http import JsonResponse
 
 # =====================================================
@@ -243,27 +243,29 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         return custom + urls
 
     def topics_by_thematic(self, request):
-        """
-        GET params:
-          - thematic_id=<id>
-        returns:
-          {"results":[{"id":1,"label":"ANC-1 - Safe sex"}, ...]}
-        """
         thematic_id = request.GET.get("thematic_id")
         if not thematic_id:
             return JsonResponse({"results": []})
 
         qs = MentorshipTopics.objects.filter(thematicfk_id=thematic_id).order_by("shortname", "name")
 
-        data = []
+        results = []
         for t in qs:
             label = f"{t.shortname} - {t.name}" if t.shortname else t.name
-            data.append({"id": t.id, "label": label})
+            results.append({"id": t.id, "label": label})
 
-        return JsonResponse({"results": data})
+        return JsonResponse({"results": results})
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """
+        Pass absolute endpoint URL to JS.
+        """
+        extra_context = extra_context or {}
+        extra_context["TOPICS_ENDPOINT_URL"] = reverse("admin:mentorship_topics_by_thematic")
+        return super().changeform_view(request, object_id, form_url, extra_context=extra_context)
 
     class Media:
         js = (
-            "mentorship/js/prefill_staff_facility.js",   # keep your existing JS
-            "mentorship/js/topic_refresh.js",            # NEW JS
+            "mentorship/js/prefill_staff_facility.js",
+            "mentorship/js/topic_refresh.js",
         )

@@ -1,16 +1,24 @@
 (function ($) {
   $(document).ready(function () {
 
-    function getEndpointUrl() {
-      // We are inside /admin/mentorship/mentorshipvisit/<id>/change/
-      // so relative URL works:
-      return "topics-by-thematic/";
+    function endpoint() {
+      // Provided by change_form.html
+      return window.TOPICS_ENDPOINT_URL || "";
+    }
+
+    function setLoading($topic) {
+      $topic.empty();
+      $topic.append($("<option></option>").val("").text("Loading..."));
+    }
+
+    function setEmpty($topic) {
+      $topic.empty();
+      $topic.append($("<option></option>").val("").text("---------"));
     }
 
     function setOptions($topic, items, selectedId) {
       $topic.empty();
       $topic.append($("<option></option>").val("").text("---------"));
-
       items.forEach(function (item) {
         var opt = $("<option></option>").val(item.id).text(item.label);
         if (selectedId && String(item.id) === String(selectedId)) {
@@ -20,68 +28,65 @@
       });
     }
 
-    function clearTopic($topic) {
-      $topic.empty();
-      $topic.append($("<option></option>").val("").text("---------"));
-    }
+    function updateRowTopics($thematic) {
+      var url = endpoint();
+      if (!url) return;   // endpoint missing -> do nothing safely
 
-    function updateRowTopics($thematicSelect) {
-      var thematicId = $thematicSelect.val();
-
-      // Find matching topic select in the same inline row
-      // In TabularInline, both selects are in same <tr>
-      var $row = $thematicSelect.closest("tr");
+      var thematicId = $thematic.val();
+      var $row = $thematic.closest("tr");
       var $topic = $row.find("select[id$='-topicname']");
 
-      if ($topic.length === 0) return;
+      if (!$topic.length) return;
 
+      // Clear immediately to avoid wrong selection
       if (!thematicId) {
-        clearTopic($topic);
+        setEmpty($topic);
         return;
       }
 
-      // Keep current topic selection if still valid
-      var currentTopic = $topic.val();
+      var current = $topic.val();
+      setLoading($topic);
 
-      $.getJSON(getEndpointUrl(), { thematic_id: thematicId })
+      $.getJSON(url, { thematic_id: thematicId })
         .done(function (resp) {
           var items = (resp && resp.results) ? resp.results : [];
-          // If currentTopic exists, try keep it (only if in list)
-          var keep = items.some(function (x) { return String(x.id) === String(currentTopic); })
-            ? currentTopic
+          // keep current if it exists in returned list
+          var keep = items.some(function (x) { return String(x.id) === String(current); })
+            ? current
             : "";
-
           setOptions($topic, items, keep);
         })
         .fail(function () {
-          // If request fails, don’t break admin UI
-          clearTopic($topic);
+          setEmpty($topic);
         });
     }
 
-    // 1) On change of thematic in ANY row -> update that row topics
+    // On thematic change
     $(document).on("change", "select[id$='-thematicname']", function () {
       updateRowTopics($(this));
     });
 
-    // 2) On page load, initialize all existing rows with thematic selected
+    // On page load initialize existing rows
     $("select[id$='-thematicname']").each(function () {
-      var $thematic = $(this);
-      if ($thematic.val()) {
-        updateRowTopics($thematic);
+      var $t = $(this);
+      if ($t.val()) updateRowTopics($t);
+      else {
+        // ensure topic is empty
+        var $row = $t.closest("tr");
+        var $topic = $row.find("select[id$='-topicname']");
+        if ($topic.length) setEmpty($topic);
       }
     });
 
-    // 3) When a new inline row is added -> initialize it too
-    $(document).on("formset:added", function (event, $row, formsetName) {
-      // find thematic select in new row and update
-      var $thematic = $row.find("select[id$='-thematicname']");
-      if ($thematic.length && $thematic.val()) {
-        updateRowTopics($thematic);
-      } else if ($thematic.length) {
-        // ensure topic starts empty
-        var $topic = $row.find("select[id$='-topicname']");
-        if ($topic.length) clearTopic($topic);
+    // When a new inline row is added
+    $(document).on("formset:added", function (event, $row) {
+      var $t = $row.find("select[id$='-thematicname']");
+      if ($t.length) {
+        if ($t.val()) updateRowTopics($t);
+        else {
+          var $topic = $row.find("select[id$='-topicname']");
+          if ($topic.length) setEmpty($topic);
+        }
       }
     });
 
