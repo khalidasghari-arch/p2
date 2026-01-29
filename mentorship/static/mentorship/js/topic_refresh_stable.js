@@ -1,119 +1,98 @@
-(function ($) {
-  $(function () {
-    var ENDPOINT = "/mentorship/ajax/topics-by-thematic/";
+(function () {
+  // Always use Django Admin's jQuery safely
+  var $ = (window.django && django.jQuery) ? django.jQuery : null;
+  if (!$) {
+    console.warn("[topic_refresh_stable] django.jQuery not found");
+    return;
+  }
 
-    function isTemplate(el) {
-      var n = (el.getAttribute("name") || "") + (el.getAttribute("id") || "");
-      return n.indexOf("__prefix__") !== -1;
-    }
+  var ENDPOINT = "/mentorship/ajax/topics-by-thematic/"; // your working endpoint
 
-    // Get the topic select in the SAME ROW as the thematic select
-    function getTopicSelect($thematic) {
-      var thematicEl = $thematic.get(0);
-      if (!thematicEl || isTemplate(thematicEl)) return null;
+  function setOptions($select, items, selectedId) {
+    var el = $select.get(0);
+    if (!el) return;
 
-      // Best: same prefix mapping by name
-      var thematicName = $thematic.attr("name") || "";
-      if (thematicName) {
-        var topicName = thematicName.replace(/thematicname$/, "topicname");
-        var $topicByName = $("select[name='" + topicName + "']");
-        if ($topicByName.length) return $topicByName.first();
-      }
+    // clear all options
+    while (el.options.length) el.remove(0);
 
-      // Fallback: same <tr>
-      var $tr = $thematic.closest("tr");
-      if (!$tr.length) return null;
+    // add blank option
+    el.add(new Option("---------", ""), undefined);
 
-      var $topic = $tr.find("select[name$='-topicname'], select[id$='-topicname']").first();
-      return $topic.length ? $topic : null;
-    }
-
-    function setLoading($topic) {
-      var el = $topic.get(0);
-      if (!el) return;
-      el.disabled = true;
-      el.options.length = 0;
-      el.add(new Option("Loading...", ""), undefined);
-    }
-
-    function setOptionsKeepSelection($topic, items) {
-      var el = $topic.get(0);
-      if (!el) return;
-
-      // Keep whatever user already selected (if it still exists)
-      var prev = $topic.val();
-
-      el.options.length = 0;
-      el.add(new Option("---------", ""), undefined);
-
-      for (var i = 0; i < items.length; i++) {
-        el.add(new Option(items[i].label, String(items[i].id)), undefined);
-      }
-
-      // restore previous selection if still valid
-      if (prev && el.querySelector("option[value='" + prev + "']")) {
-        $topic.val(prev);
-      } else {
-        $topic.val("");
-      }
-
-      el.disabled = false;
-
-      // IMPORTANT: do NOT trigger change on topic (prevents reset loops)
-    }
-
-    function loadTopicsForThematic($thematic) {
-      var thematicId = $thematic.val();
-      var $topic = getTopicSelect($thematic);
-      if (!$topic || !$topic.length) return;
-
-      // prevent reloading if thematic didn't actually change
-      var last = $thematic.data("lastThematic") || "";
-      if (String(last) === String(thematicId)) return;
-      $thematic.data("lastThematic", String(thematicId || ""));
-
-      if (!thematicId) {
-        setOptionsKeepSelection($topic, []);
-        return;
-      }
-
-      setLoading($topic);
-
-      $.ajax({
-        url: ENDPOINT,
-        method: "GET",
-        dataType: "json",
-        data: { thematic_id: thematicId },
-        success: function (resp) {
-          var items = (resp && resp.results) ? resp.results : [];
-          setOptionsKeepSelection($topic, items);
-        },
-        error: function () {
-          setOptionsKeepSelection($topic, []);
-        }
-      });
-    }
-
-    // ✅ Only listen to THEMATIC changes
-    $(document).on("change", "select[name$='-thematicname'], select[id$='-thematicname']", function () {
-      loadTopicsForThematic($(this));
+    // add items
+    (items || []).forEach(function (item) {
+      var opt = new Option(item.label, item.id);
+      if (selectedId && String(item.id) === String(selectedId)) opt.selected = true;
+      el.add(opt, undefined);
     });
 
-    // Init: load topics for rows that already have thematic selected
-    $("select[name$='-thematicname'], select[id$='-thematicname']").each(function () {
-      var $t = $(this);
-      if ($t.val()) loadTopicsForThematic($t);
-    });
+    // some admin themes need change trigger
+    $select.trigger("change");
+  }
 
-    // When a new inline row is added
-    $(document).on("formset:added", function (event, $row) {
-      $row.find("select[name$='-thematicname'], select[id$='-thematicname']").each(function () {
-        var $t = $(this);
-        // store empty lastThematic so first selection triggers load
-        $t.data("lastThematic", "");
-      });
-    });
+  function setLoading($select) {
+    var el = $select.get(0);
+    if (!el) return;
+    while (el.options.length) el.remove(0);
+    el.add(new Option("Loading...", ""), undefined);
+  }
 
-    console.log("[topic_refresh_stable] loaded");
+  // find topic select in same inline row as the thematic select
+  function getTopicSelect($thematic) {
+    var $row = $thematic.closest("tr.form-row, tr, fieldset, .inline-related");
+    if (!$row.length) return null;
+
+    // best: field name ends with "-topicname"
+    var $topic = $row.find("select[name$='-topicname']");
+    if ($topic.length) return $topic;
+
+    // fallback: id ends with "-topicname"
+    $topic = $row.find("select[id$='-topicname']");
+    if ($topic.length) return $topic;
+
+    return null;
+  }
+
+  function loadTopics($thematic) {
+    var thematicId = $thematic.val();
+    var $topic = getTopicSelect($thematic);
+
+    if (!$topic || !$topic.length) return;
+
+    if (!thematicId) {
+      setOptions($topic, []);
+      return;
+    }
+
+    // keep previous selection if still valid
+    var prev = $topic.val();
+    setLoading($topic);
+
+    $.ajax({
+      url: ENDPOINT (/* no concat */),
+      method: "GET",
+      dataType: "json",
+      data: { thematic_id: thematicId },
+      success: function (resp) {
+        var items = (resp && resp.results) ? resp.results : [];
+        setOptions($topic, items, prev);
+      },
+      error: function (xhr) {
+        console.error("[topic_refresh_stable] ajax error", xhr.status, xhr.responseText);
+        setOptions($topic, []);
+      },
+    });
+  }
+
+  // When thematic changes, reload topics
+  $(document).on("change", "select[name$='-thematicname'], select[id$='-thematicname']", function () {
+    loadTopics($(this));
   });
-})(django.jQuery);
+
+  // On page load, initialize existing rows (edit page)
+  $("select[name$='-thematicname'], select[id$='-thematicname']").each(function () {
+    var $t = $(this);
+    if ($t.val()) loadTopics($t);
+  });
+
+  console.log("[topic_refresh_stable] loaded");
+})();
