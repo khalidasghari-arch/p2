@@ -2,18 +2,31 @@
   $(document).ready(function () {
 
     function endpoint() {
-      // Provided by change_form.html
       return window.TOPICS_ENDPOINT_URL || "";
     }
 
-    function setLoading($topic) {
-      $topic.empty();
-      $topic.append($("<option></option>").val("").text("Loading..."));
+    function isTemplateRowId(id) {
+      return id && id.indexOf("__prefix__") !== -1;
+    }
+
+    function getTopicSelectForThematic($thematic) {
+      // Example: id_items-0-thematicname  -> id_items-0-topicname
+      var tid = $thematic.attr("id");
+      if (!tid || isTemplateRowId(tid)) return null;
+
+      var topicId = tid.replace(/-thematicname$/, "-topicname");
+      var $topic = $("#" + topicId);
+      return $topic.length ? $topic : null;
     }
 
     function setEmpty($topic) {
       $topic.empty();
       $topic.append($("<option></option>").val("").text("---------"));
+    }
+
+    function setLoading($topic) {
+      $topic.empty();
+      $topic.append($("<option></option>").val("").text("Loading..."));
     }
 
     function setOptions($topic, items, selectedId) {
@@ -28,17 +41,15 @@
       });
     }
 
-    function updateRowTopics($thematic) {
+    function updateTopicsForThematic($thematic) {
       var url = endpoint();
-      if (!url) return;   // endpoint missing -> do nothing safely
+      if (!url) return;
 
       var thematicId = $thematic.val();
-      var $row = $thematic.closest("tr");
-      var $topic = $row.find("select[id$='-topicname']");
+      var $topic = getTopicSelectForThematic($thematic);
+      if (!$topic) return;
 
-      if (!$topic.length) return;
-
-      // Clear immediately to avoid wrong selection
+      // Clear immediately to avoid wrong topic remaining
       if (!thematicId) {
         setEmpty($topic);
         return;
@@ -50,10 +61,12 @@
       $.getJSON(url, { thematic_id: thematicId })
         .done(function (resp) {
           var items = (resp && resp.results) ? resp.results : [];
-          // keep current if it exists in returned list
+
+          // keep current if still valid
           var keep = items.some(function (x) { return String(x.id) === String(current); })
             ? current
             : "";
+
           setOptions($topic, items, keep);
         })
         .fail(function () {
@@ -61,32 +74,35 @@
         });
     }
 
-    // On thematic change
+    // On thematic change -> update its paired topic select
     $(document).on("change", "select[id$='-thematicname']", function () {
-      updateRowTopics($(this));
+      updateTopicsForThematic($(this));
     });
 
-    // On page load initialize existing rows
+    // On page load -> initialize all existing inline rows
     $("select[id$='-thematicname']").each(function () {
       var $t = $(this);
-      if ($t.val()) updateRowTopics($t);
-      else {
-        // ensure topic is empty
-        var $row = $t.closest("tr");
-        var $topic = $row.find("select[id$='-topicname']");
-        if ($topic.length) setEmpty($topic);
+      if (isTemplateRowId($t.attr("id"))) return;
+
+      // If thematic already selected, load its topics
+      if ($t.val()) {
+        updateTopicsForThematic($t);
+      } else {
+        var $topic = getTopicSelectForThematic($t);
+        if ($topic) setEmpty($topic);
       }
     });
 
-    // When a new inline row is added
+    // When new inline row added -> initialize its topic field
     $(document).on("formset:added", function (event, $row) {
       var $t = $row.find("select[id$='-thematicname']");
-      if ($t.length) {
-        if ($t.val()) updateRowTopics($t);
-        else {
-          var $topic = $row.find("select[id$='-topicname']");
-          if ($topic.length) setEmpty($topic);
-        }
+      if (!$t.length || isTemplateRowId($t.attr("id"))) return;
+
+      if ($t.val()) {
+        updateTopicsForThematic($t);
+      } else {
+        var $topic = getTopicSelectForThematic($t);
+        if ($topic) setEmpty($topic);
       }
     });
 
