@@ -1,94 +1,46 @@
-(function ($) {
-  $(document).ready(function () {
+(function () {
+  // Always use Django Admin's jQuery safely
+  var $ = (window.django && django.jQuery) ? django.jQuery : null;
+  if (!$) {
+    console.warn("[prefill_staff_facility] django.jQuery not found");
+    return;
+  }
 
-    function endpoint() {
-      return "/mentorship/ajax/topics-by-thematic/";
+  function getFacilityId() {
+    return $("#id_facilityfk").val();
+  }
+
+  function addFacilityParam(href, facId) {
+    if (!facId) return href;
+
+    try {
+      var url = new URL(href, window.location.origin);
+      url.searchParams.set("facility", facId);
+      return url.pathname + url.search;
+    } catch (e) {
+      // fallback
+      if (href.indexOf("facility=") !== -1) return href;
+      return href + (href.indexOf("?") === -1 ? "?" : "&") + "facility=" + encodeURIComponent(facId);
     }
+  }
 
-    console.log("[topic_refresh_v2] loaded");
+  // Update the "+" popup link for mentee only
+  $(document).on("mousedown", "a.related-widget-wrapper-link.add-related", function () {
+    var facId = getFacilityId();
+    if (!facId) return;
 
-    function clearTopic($topic) {
-      $topic.empty().append($("<option>").val("").text("---------"));
-    }
+    // only apply when clicking "+" next to menteename in inline row
+    var isMenteeField = $(this).closest("td, .related-widget-wrapper").closest(".form-row, td").hasClass("field-menteename")
+      || $(this).closest("td").hasClass("field-menteename")
+      || $(this).closest(".form-row").hasClass("field-menteename");
 
-    function showLoading($topic) {
-      $topic.empty().append($("<option>").val("").text("Loading..."));
-    }
+    if (!isMenteeField) return;
 
-    function populate($topic, items) {
-      $topic.empty().append($("<option>").val("").text("---------"));
-      items.forEach(function (item) {
-        $topic.append($("<option>").val(item.id).text(item.label));
-      });
-    }
+    var href = $(this).attr("href");
+    if (!href) return;
 
-    // Finds the topic select in the SAME inline row as the thematic select
-    function findTopicSelect($thematic) {
-      var $row = $thematic.closest("tr.form-row, tr, .inline-related, fieldset, .form-row");
-      if (!$row.length) return null;
-
-      // try exact model field name first
-      var $topic = $row.find("select[name$='-topicname']");
-      if ($topic.length) return $topic;
-
-      // fallback: contains topicname
-      $topic = $row.find("select[name*='topicname']");
-      if ($topic.length) return $topic;
-
-      // last fallback: any select in the Topic Code column (3rd select after mentee+thematic)
-      var selects = $row.find("select");
-      if (selects.length >= 3) return $(selects.get(2));
-
-      return null;
-    }
-
-    function loadTopics($thematic) {
-      var thematicId = $thematic.val();
-      var $topic = findTopicSelect($thematic);
-
-      console.log("[topic_refresh_v2] thematic:", thematicId, "topic_found:", !!($topic && $topic.length));
-
-      if (!$topic || !$topic.length) return;
-
-      if (!thematicId) {
-        clearTopic($topic);
-        return;
-      }
-
-      showLoading($topic);
-
-      $.ajax({
-        url: endpoint(),
-        method: "GET",
-        dataType: "json",
-        data: { thematic_id: thematicId },
-        success: function (resp) {
-          console.log("[topic_refresh_v2] ajax ok", resp);
-
-          var items = (resp && resp.results) ? resp.results : [];
-          populate($topic, items);
-        },
-        error: function (xhr) {
-          console.error("[topic_refresh_v2] ajax error", xhr.status, xhr.responseText);
-          clearTopic($topic);
-        }
-      });
-    }
-
-    // ✅ IMPORTANT: Catch BOTH possible names (some admin themes change it)
-    $(document).on(
-      "change",
-      "select[name$='-thematicname'], select[name*='thematicname'], select[id$='-thematicname']",
-      function () {
-        loadTopics($(this));
-      }
-    );
-
-    // Init rows on load
-    $("select[name$='-thematicname'], select[name*='thematicname'], select[id$='-thematicname']").each(function () {
-      var $t = $(this);
-      if ($t.val()) loadTopics($t);
-    });
-
+    $(this).attr("href", addFacilityParam(href, facId));
   });
-})(django.jQuery);
+
+  console.log("[prefill_staff_facility] loaded");
+})();
