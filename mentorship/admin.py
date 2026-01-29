@@ -265,8 +265,7 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     class Media:
         js = (
-            "admin/js/jquery.init.js",   # MUST be first
             "mentorship/js/prefill_staff_facility.js",
-            "mentorship/js/topic_refresh_v2.js",
+            "mentorship/js/topic_refresh_v3.js",
         )
 
