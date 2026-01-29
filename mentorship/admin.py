@@ -257,12 +257,13 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         return JsonResponse({"results": results})
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
-        """
-        Pass absolute endpoint URL to JS.
-        """
         extra_context = extra_context or {}
-        extra_context["TOPICS_ENDPOINT_URL"] = reverse("admin:mentorship_topics_by_thematic")
+        extra_context["topics_endpoint_url"] = self._topics_endpoint_url(request)
         return super().changeform_view(request, object_id, form_url, extra_context=extra_context)
+
+    def _topics_endpoint_url(self, request):
+        # Hard absolute path (works in admin regardless of reverse naming issues)
+        return request.build_absolute_uri("topics-by-thematic/")
 
     class Media:
         js = (

@@ -1,8 +1,7 @@
 {% extends "admin/change_form.html" %}
-
 {% block extrahead %}
   {{ block.super }}
   <script>
-    window.TOPICS_ENDPOINT_URL = "{{ TOPICS_ENDPOINT_URL|default:'' }}";
+    window.TOPICS_ENDPOINT_URL = "{{ topics_endpoint_url|default:'' }}";
   </script>
 {% endblock %}
