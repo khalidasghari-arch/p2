@@ -2,16 +2,33 @@ import re
 from django.contrib import admin
 from django import forms
 from django.core.exceptions import ValidationError
+from django.urls import path
+from django.http import JsonResponse
+
 from .models import (
     ThematicMentorship, MentorshipTopics,
     Mentorshipvisit, Mentorshipdetails, Staff
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
-from django.urls import path, reverse
-from django.http import JsonResponse
+
 
 # =====================================================
-# BASIC ADMINS (unchanged)
+# Helpers
+# =====================================================
+
+def _prov_id(request):
+    """
+    Returns province id (int) safely.
+    Works whether user_province returns Province object or id.
+    """
+    prov = user_province(request)
+    if prov is None:
+        return None
+    return getattr(prov, "id", prov)
+
+
+# =====================================================
+# BASIC ADMINS
 # =====================================================
 
 @admin.register(ThematicMentorship)
@@ -19,14 +36,16 @@ class ThematicMentorshipAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "shortname")
     search_fields = ("name", "shortname")
 
+
 @admin.register(MentorshipTopics)
 class MentorshipTopicsAdmin(admin.ModelAdmin):
-    list_display = ("id", "thematicfk", "name", "nameeng", "namedari", "namepashto")
+    list_display = ("id", "thematicfk", "shortname", "name", "nameeng", "namedari", "namepashto")
     list_filter = ("thematicfk",)
     search_fields = ("name", "shortname", "namedari", "namepashto", "nameeng")
 
+
 # =====================================================
-# STAFF ADMIN (UNCHANGED – already working)
+# STAFF ADMIN (Province restriction + popup facility prefill)
 # =====================================================
 
 @admin.register(Staff)
@@ -36,6 +55,11 @@ class StaffAdmin(admin.ModelAdmin):
     search_fields = ("firstname", "lastname", "tazkiranumber")
 
     def _facility_id_from_popup_context(self, request):
+        """
+        Priority:
+          1) ?facility=<id> if present
+          2) if popup opened from Mentorshipvisit change page, parse HTTP_REFERER
+        """
         facility_id = request.GET.get("facility")
         if facility_id:
             return facility_id
@@ -44,6 +68,7 @@ class StaffAdmin(admin.ModelAdmin):
             return None
 
         ref = request.META.get("HTTP_REFERER", "")
+        # Example: /admin/mentorship/mentorshipvisit/6/change/
         m = re.search(r"/admin/mentorship/mentorshipvisit/(\d+)/change/?", ref)
         if not m:
             return None
@@ -58,8 +83,12 @@ class StaffAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
         if request.user.is_superuser:
             return qs
-        prov = user_province(request)
-        return qs.filter(hfname__districtfk__provincefk=prov) if prov else qs.none()
+
+        prov_id = _prov_id(request)
+        if prov_id is None:
+            return qs.none()
+
+        return qs.filter(hfname__districtfk__provincefk_id=prov_id)
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -70,25 +99,30 @@ class StaffAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "hfname" and not request.user.is_superuser:
-            Facility = db_field.remote_field.model
+            Facility = db_field.remote_field.model  # hiva.Facility
+
             facility_id = self._facility_id_from_popup_context(request)
 
+            # Popup from mentorship visit: only that facility
             if facility_id:
                 kwargs["queryset"] = Facility.objects.filter(pk=facility_id)
                 field = super().formfield_for_foreignkey(db_field, request, **kwargs)
                 field.initial = facility_id
                 return field
 
-            prov = user_province(request)
+            # Normal add/edit: restrict to user province
+            prov_id = _prov_id(request)
             kwargs["queryset"] = Facility.objects.filter(
-                districtfk__provincefk=prov
-            ) if prov else Facility.objects.none()
+                districtfk__provincefk_id=prov_id
+            ).order_by("name") if prov_id else Facility.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # =====================================================
-# INLINE FORM – enforce ONLY ONE of LS / PC / MC
+# INLINE FORM VALIDATION:
+# - Topic must match thematic (server-side safety)
+# - Only ONE of LS/PC/MC
 # =====================================================
 
 class MentorshipdetailsInlineForm(forms.ModelForm):
@@ -98,73 +132,38 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+
+        # Only one of LS/PC/MC
         selected = sum([
             bool(cleaned.get("ls")),
             bool(cleaned.get("pc")),
             bool(cleaned.get("mc")),
         ])
         if selected > 1:
-            raise ValidationError("Only ONE of LS, PC, or MC can be selected.")
-        return cleaned
+            raise ValidationError("Only ONE of (LS, PC, MC) can be selected.")
 
-class MentorshipdetailsInlineForm(forms.ModelForm):
-    class Meta:
-        model = Mentorshipdetails
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Default: no topics until we know thematic
-        self.fields["topicname"].queryset = MentorshipTopics.objects.none()
-
-        thematic_id = None
-
-        # 1) If user is submitting/changing values, get thematic from POST
-        # Inline field name is like: <prefix>-thematicname
-        if self.is_bound:
-            thematic_id = self.data.get(f"{self.prefix}-thematicname") or None
-
-        # 2) If editing existing row, get thematic from saved instance
-        if not thematic_id and getattr(self.instance, "thematicname_id", None):
-            thematic_id = self.instance.thematicname_id
-
-        # Apply filter
-        if thematic_id:
-            self.fields["topicname"].queryset = MentorshipTopics.objects.filter(
-                thematicfk_id=thematic_id
-            ).order_by("shortname", "name")
-
-    def clean(self):
-        cleaned = super().clean()
-
-        # Enforce only ONE of LS/PC/MC
-        selected = sum([
-            bool(cleaned.get("ls")),
-            bool(cleaned.get("pc")),
-            bool(cleaned.get("mc")),
-        ])
-        if selected > 1:
-            raise ValidationError("Only ONE of LS, PC, or MC can be selected.")
-
-        # Optional safety: if topic is selected, ensure it matches thematic
+        # Topic must match thematic
         thematic = cleaned.get("thematicname")
         topic = cleaned.get("topicname")
         if thematic and topic and topic.thematicfk_id != thematic.id:
-            raise ValidationError("Selected topic does not match the selected thematic area.")
+            raise ValidationError("Selected Topic does not match the selected Thematic Area.")
 
         return cleaned
-    
+
+
 # =====================================================
-# INLINE – mentee by facility, topic by thematic, assessor by province
+# DETAILS INLINE:
+# - Mentee filtered by visit facility
+# - Mentor filtered by user province
 # =====================================================
 
 class MentorshipdetailsInline(admin.TabularInline):
     model = Mentorshipdetails
     form = MentorshipdetailsInlineForm
-    extra = 0  # HQIP-style: show inline only after header saved
+    extra = 0
 
     def get_extra(self, request, obj=None, **kwargs):
+        # HQIP-style: show inline only after header saved
         return 1 if obj else 0
 
     def has_add_permission(self, request, obj=None):
@@ -188,18 +187,23 @@ class MentorshipdetailsInline(admin.TabularInline):
             else:
                 kwargs["queryset"] = Staff.objects.none()
 
-        # Mentor (Assessor): restrict by user province
+        # Mentor (Assessor): restrict by province (SAFE: uses province_id)
         if db_field.name == "mentor" and not request.user.is_superuser:
+            prov_id = _prov_id(request)
             Assessor = db_field.remote_field.model  # hiva.Assessor
-            prov = user_province(request)
 
-            # IMPORTANT: adjust this line if your Assessor uses provincefk, etc.
-            kwargs["queryset"] = Assessor.objects.filter(province=prov) if prov else Assessor.objects.none()
+            kwargs["queryset"] = Assessor.objects.filter(
+                province_id=prov_id
+            ).order_by("id") if prov_id else Assessor.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+
 # =====================================================
-# MENTORSHIP VISIT ADMIN (UNCHANGED + SAFE)
+# MENTORSHIP VISIT ADMIN:
+# - Province restriction (Mixin)
+# - Facility dropdown restricted by province
+# - Topics endpoint for instant refresh
 # =====================================================
 
 @admin.register(Mentorshipvisit)
@@ -219,18 +223,23 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         }),
     )
 
+    # Province restriction for list/view/edit/delete (Mixin uses this)
     def province_filter_kwargs(self, request):
-        return {"facilityfk__districtfk__provincefk": user_province(request)}
+        prov_id = _prov_id(request)
+        return {"facilityfk__districtfk__provincefk_id": prov_id} if prov_id else {"pk__in": []}
 
+    # Restrict facility dropdown itself
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "facilityfk" and not request.user.is_superuser:
-            Facility = db_field.remote_field.model
-            prov = user_province(request)
+            Facility = db_field.remote_field.model  # hiva.Facility
+            prov_id = _prov_id(request)
             kwargs["queryset"] = Facility.objects.filter(
-                districtfk__provincefk=prov
-            ) if prov else Facility.objects.none()
+                districtfk__provincefk_id=prov_id
+            ).order_by("name") if prov_id else Facility.objects.none()
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    # ---- JSON endpoint used by JS (topic refresh) ----
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -238,7 +247,7 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "topics-by-thematic/",
                 self.admin_site.admin_view(self.topics_by_thematic),
                 name="mentorship_topics_by_thematic",
-            )
+            ),
         ]
         return custom + urls
 
@@ -248,25 +257,15 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             return JsonResponse({"results": []})
 
         qs = MentorshipTopics.objects.filter(thematicfk_id=thematic_id).order_by("shortname", "name")
-
         results = []
         for t in qs:
             label = f"{t.shortname} - {t.name}" if t.shortname else t.name
             results.append({"id": t.id, "label": label})
-
         return JsonResponse({"results": results})
-
-    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["topics_endpoint_url"] = self._topics_endpoint_url(request)
-        return super().changeform_view(request, object_id, form_url, extra_context=extra_context)
-
-    def _topics_endpoint_url(self, request):
-        # Hard absolute path (works in admin regardless of reverse naming issues)
-        return request.build_absolute_uri("topics-by-thematic/")
 
     class Media:
         js = (
             "mentorship/js/prefill_staff_facility.js",
-            "mentorship/js/topic_refresh.js",
+            # NEW FILE NAME (prevents browser cache)
+            "mentorship/js/topic_refresh_v2.js",
         )
