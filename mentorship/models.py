@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 
 class ThematicMentorship(models.Model):
     name = models.CharField(max_length=255, verbose_name="Mentorship Thematic Area")
@@ -84,6 +85,11 @@ class Mentorshipdetails(models.Model):
     class Meta:
         verbose_name = "MENTORSHIP DETAIL"
         verbose_name_plural = "MENTORSHIP DETAIL"
+
+    def clean(self):
+        selected = sum([bool(self.ls), bool(self.pc), bool(self.mc)])
+        if selected > 1:
+            raise ValidationError("Only ONE of (LS, PC, MC) can be selected for each mentorship detail.")
 
     def __str__(self):
         return f"Detail #{self.pk}"
