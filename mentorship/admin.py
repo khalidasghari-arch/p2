@@ -11,7 +11,6 @@ from .models import (
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 
-
 # =====================================================
 # Helpers
 # =====================================================
@@ -121,8 +120,8 @@ class StaffAdmin(admin.ModelAdmin):
 
 # =====================================================
 # INLINE FORM VALIDATION:
-# - Topic must match thematic (server-side safety)
 # - Only ONE of LS/PC/MC
+# NOTE: Topic/thematic matching REMOVED (user requested no filtering)
 # =====================================================
 
 class MentorshipdetailsInlineForm(forms.ModelForm):
@@ -142,12 +141,6 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
         if selected > 1:
             raise ValidationError("Only ONE of (LS, PC, MC) can be selected.")
 
-        # Topic must match thematic
-        thematic = cleaned.get("thematicname")
-        topic = cleaned.get("topicname")
-        if thematic and topic and topic.thematicfk_id != thematic.id:
-            raise ValidationError("Selected Topic does not match the selected Thematic Area.")
-
         return cleaned
 
 
@@ -155,6 +148,7 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 # DETAILS INLINE:
 # - Mentee filtered by visit facility
 # - Mentor filtered by user province
+# - Topicname shows ALL topics (NO filtering)
 # =====================================================
 
 class MentorshipdetailsInline(admin.TabularInline):
@@ -196,14 +190,16 @@ class MentorshipdetailsInline(admin.TabularInline):
                 province_id=prov_id
             ).order_by("id") if prov_id else Assessor.objects.none()
 
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        # ✅ Topicname: show ALL topics always (no filtering, no ajax)
+        if db_field.name == "topicname":
+            kwargs["queryset"] = MentorshipTopics.objects.all().order_by("thematicfk_id", "name")
 
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 # =====================================================
 # MENTORSHIP VISIT ADMIN:
 # - Province restriction (Mixin)
 # - Facility dropdown restricted by province
-# - Topics endpoint for instant refresh
 # =====================================================
 
 @admin.register(Mentorshipvisit)
@@ -239,33 +235,6 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    # ---- JSON endpoint used by JS (topic refresh) ----
-    def get_urls(self):
-        urls = super().get_urls()
-        custom = [
-            path(
-                "topics-by-thematic/",
-                self.admin_site.admin_view(self.topics_by_thematic),
-                name="mentorship_topics_by_thematic",
-            ),
-        ]
-        return custom + urls
-
-    def topics_by_thematic(self, request):
-        thematic_id = request.GET.get("thematic_id")
-        if not thematic_id:
-            return JsonResponse({"results": []})
-
-        qs = MentorshipTopics.objects.filter(thematicfk_id=thematic_id).order_by("shortname", "name")
-        results = []
-        for t in qs:
-            label = f"{t.shortname} - {t.name}" if t.shortname else t.name
-            results.append({"id": t.id, "label": label})
-        return JsonResponse({"results": results})
-
     class Media:
-        js = (
-            # "mentorship/js/prefill_staff_facility.js",
-            "mentorship/js/topic_refresh_stable.js",
-        )
-
+        # ✅ DO NOT load any custom JS (prevents disappearing dropdown problems)
+        js = ()
