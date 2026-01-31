@@ -8,7 +8,6 @@ from .models import (
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 
-
 # =====================================================
 # Helpers
 # =====================================================
@@ -23,7 +22,6 @@ def _prov_id(request):
         return None
     return getattr(prov, "id", prov)
 
-
 # =====================================================
 # BASIC ADMINS
 # =====================================================
@@ -33,13 +31,11 @@ class ThematicMentorshipAdmin(admin.ModelAdmin):
     list_display = ("id", "name", "shortname")
     search_fields = ("name", "shortname")
 
-
 @admin.register(MentorshipTopics)
 class MentorshipTopicsAdmin(admin.ModelAdmin):
     list_display = ("id", "thematicfk", "shortname", "name", "nameeng", "namedari", "namepashto")
     list_filter = ("thematicfk",)
     search_fields = ("name", "shortname", "namedari", "namepashto", "nameeng")
-
 
 # =====================================================
 # STAFF ADMIN (Province restriction + popup facility prefill)
@@ -111,7 +107,6 @@ class StaffAdmin(admin.ModelAdmin):
             ).order_by("name") if prov_id else Facility.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # =====================================================
 # INLINE FORM VALIDATION:

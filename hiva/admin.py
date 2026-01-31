@@ -151,6 +151,7 @@ class ProvinceRestrictedAdminMixin:
 # ============================================================
 # Reusable filters
 # ============================================================
+
 class ProvinceFromFacilityFilter(admin.SimpleListFilter):
     title = "Province"
     parameter_name = "province"
@@ -532,10 +533,10 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
 # ============================================================
 # Facility Admin
 # ============================================================
+
 @admin.register(Facility)
 class FacilityAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
@@ -620,20 +621,19 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "facilityfk",
         "assessmenttype",
         "assessmentdate",
-        "assessmentend_date",
         "areafk",
         "assesorfk",
         "hqip_dashboard_button",
         "hqip_facility_button",
         "hqip_rca_button",
         "hqip_priority_button",
-        "assessmentteam",
         "created_at",
         "id",
     )
 
     list_filter = (HQIPProvinceFilter, "areafk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
+    list_per_page = 10
 
     # ---------------------------
     # Province restriction (mix-in requirement)
@@ -1465,7 +1465,6 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
 # ============================================================
 # User admin with Profile inline
 # ============================================================
@@ -1483,7 +1482,6 @@ class UserAdmin(BaseUserAdmin):
 
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
-
 
 # ============================================================
 # Register remaining simple models
