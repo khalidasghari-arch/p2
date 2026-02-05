@@ -194,17 +194,103 @@ class MentorshipdetailsInline(admin.TabularInline):
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", "mentorshipendtime")
+    list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", 
+    "mentorshipendtime", "get_mentors",  "ls_count",
+    "pc_count", "mc_count",
+    "mentees_count",
+    "thematics_count",
+    "topics_count",)
     list_filter = ("visitdate", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
+    list_per_page = 20
     inlines = (MentorshipdetailsInline,)
+
+    @admin.display(description="Clinical Mentor")
+    def get_mentors(self, obj):
+        mentors = (
+            obj.items
+            .select_related("mentor")
+            .values_list("mentor__name", flat=True)  # change if Assessor uses another field
+            .distinct()
+        )
+        return ", ".join([m for m in mentors if m]) if mentors else "-"
+    
+     # -----------------------------
+    # LS / PC / MC counts
+    # -----------------------------
+    @admin.display(description="Total-LS")
+    def ls_count(self, obj):
+        return obj.items.filter(ls=True).count()
+
+    @admin.display(description="Total-PC")
+    def pc_count(self, obj):
+        return obj.items.filter(pc=True).count()
+
+    @admin.display(description="Total-MC")
+    def mc_count(self, obj):
+        return obj.items.filter(mc=True).count()
+
+    # -----------------------------
+    # Performance optimization
+    # -----------------------------
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related("items", "items__mentor")
+    
+    # -----------------------------
+    # DISTINCT COUNTS (important)
+    # -----------------------------
+    @admin.display(description="Total-Mentee")
+    def mentees_count(self, obj):
+        return (
+            obj.items
+            .values("menteename")
+            .exclude(menteename__isnull=True)
+            .distinct()
+            .count()
+        )
+
+    @admin.display(description="Total-Thematic Areas")
+    def thematics_count(self, obj):
+        return (
+            obj.items
+            .values("thematicname")
+            .exclude(thematicname__isnull=True)
+            .distinct()
+            .count()
+        )
+
+    @admin.display(description="Total-Topics")
+    def topics_count(self, obj):
+        return (
+            obj.items
+            .values("topicname")
+            .exclude(topicname__isnull=True)
+            .distinct()
+            .count()
+        )
+
+    # -----------------------------
+    # Performance optimization
+    # -----------------------------
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related(
+            "items",
+            "items__mentor",
+            "items__menteename",
+            "items__thematicname",
+            "items__topicname",
+        )
 
     fieldsets = (
         ("Mentorship Visit", {
             "fields": (
                 "facilityfk",
-                ("visitdate", "visitround"),
-                ("mentorshipstarttime", "mentorshipendtime"),
+                "visitdate",
+                "visitround",
+                "mentorshipstarttime",
+                "mentorshipendtime"
             )
         }),
     )

@@ -82,7 +82,6 @@ class HQIPProvinceFilter(admin.SimpleListFilter):
         ).distinct().order_by(
             "facilityfk__districtfk__provincefk__name"
         )
-
         return [(pid, pname) for pid, pname in rows if pid]
 
     def queryset(self, request, queryset):
