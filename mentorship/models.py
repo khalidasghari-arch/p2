@@ -45,6 +45,7 @@ class Staff(models.Model):
     hfname = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
     firstname = models.CharField(max_length=100, verbose_name="First Name")
     lastname = models.CharField(max_length=100, blank=True, null=True, verbose_name="Last Name")
+    fathername = models.CharField(max_length=200, blank=True, null=True, verbose_name="Father Name")
     position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE, verbose_name="Position")
     tazkiranumber = models.CharField(max_length=100, blank=True, null=True, verbose_name="Tazkira Number", unique=True)
 

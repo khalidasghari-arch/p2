@@ -653,64 +653,157 @@ class aimpee(models.Model):
     shamsiyear = models.CharField()
     period = models.CharField()
     bl_progress = models.CharField()
-    aimfacilityname = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
+    aimfacilityname = models.ForeignKey(Facility, 
+    on_delete=models.CASCADE, verbose_name="Health Facility Name")
     gre_month =models.CharField()
     gre_year= models.CharField()
     afiat_flag = models.BooleanField()
 
-      # ANC / Pre-E core indicators
-    num_anc_preg_seen = models.BigIntegerField(default=0, verbose_name="Number of pregnant women seen in ANC")
-    num_anc_bp_taken = models.BigIntegerField(default=0, verbose_name="Number of ANC women who had their blood pressure taken")
-    num_anc_pree_dx = models.BigIntegerField(default=0, verbose_name="Number of ANC women with Pre-E diagnosed (BP>140/90, 2+ proteinuria)")
-    num_severe_pe_e_bp160 = models.BigIntegerField(default=0, verbose_name="Number of patients with Severe Pre-Eclampsia or Eclampsia WITH BP > 160 systolic OR 110 diastolic")
-    num_severe_pe_e_bp160_tx1h = models.BigIntegerField(default=0, verbose_name="Number of Severe Pre-E/E patients (BP >160/110) who received antihypertensive medication within one hour of diagnosis")
-    num_anc_pree_admit = models.BigIntegerField(default=0, verbose_name="Number of patients with Pre-E diagnosed in ANC clinic who required admission")
-    num_spe_admit_before_delivery = models.BigIntegerField(default=0, verbose_name="Number of patients admitted to HFs with Severe Pre-Eclampsia (SPE) before delivery")
-    num_eclampsia_admit_before_delivery = models.BigIntegerField(default=0, verbose_name="Number of patients admitted to HFs with Eclampsia before delivery")
-    num_spe_e_mgso4_1h = models.BigIntegerField(default=0, verbose_name="Number of patients with Severe Pre-E or Eclampsia who received Magnesium Sulfate within one hour of diagnosis")
-    num_spe_at_birth = models.BigIntegerField(default=0, verbose_name="Number of patients with Severe Pre-E at birth (including referrals in)")
-    num_eclampsia_at_birth = models.BigIntegerField(default=0, verbose_name="Number of patients with Eclampsia from ANC, Labor, PNC or referred in")
-    num_chronic_htn_superimposed_pe = models.BigIntegerField(default=0, verbose_name="Number of patients with chronic hypertension with superimposed pre-eclampsia")
-    num_gest_htn = models.BigIntegerField(default=0, verbose_name="Gestational hypertension")
-    num_spe_deliv_24h = models.BigIntegerField(default=0, verbose_name="Number of Severe Pre-E patients who delivered within 24 hours of admission")
-    num_eclampsia_deliv_12h = models.BigIntegerField(default=0, verbose_name="Number of Eclampsia patients who delivered within 12 hours of admission")
-    num_spe_e_fu_3d = models.BigIntegerField(default=0, verbose_name="Number of patients with SPE or Eclampsia who had a follow-up visit within 3 days after delivery discharge")
-    num_spe_e_pp_dx = models.BigIntegerField(default=0, verbose_name="Number of patients with SPE or Eclampsia diagnosed during the postpartum period")
+     # =========================
+    # ANC / OPD – Screening
+    # =========================
+    anc_total_seen = models.BigIntegerField(
+        default=0,
+        verbose_name="1. Number of pregnant women seen in ANC"
+    )
 
+    anc_bp_measured = models.BigIntegerField(
+        default=0,
+        verbose_name="2. Number of ANC women with blood pressure measured"
+    )
+
+    preeclampsia_diagnosed = models.BigIntegerField(
+        default=0,
+        verbose_name="3. Number of ANC women diagnosed with Pre-Eclampsia (BP >140/90 + proteinuria)"
+    )
+
+    # =========================
+    # Severe Pre-E / Eclampsia
+    # =========================
+    severe_pree_or_eclampsia = models.BigIntegerField(
+        default=0,
+        verbose_name="4. Number of patients with Severe Pre-Eclampsia or Eclampsia WITH BP > 160 Systolic OR 110 diastolic"
+    )
+
+    severe_pree_antihypertensive_within_1hr = models.BigIntegerField(
+        default=0,
+        verbose_name="5. Number of patients with Severe Pre-eclampsia or Eclampsia WITH BP > 160 Systolic OR 110 diastolic who received an antihypertensive medication within one hour of the diagnosis"
+    )
+
+    # =========================
+    # OPD / ANC Follow-up
+    # =========================
+    opd_pree_seen_by_md = models.BigIntegerField(
+        default=0,
+        verbose_name="6. Number of outpatients diagnosed in OPD with Pre-Eclampsia by MD(AAC member must check that the patient with high BP is seen by the MD in OPD)"
+    )
+
+    opd_pree_twice_weekly_followup = models.BigIntegerField(
+        default=0,
+        verbose_name="7. Number of outpatients seen in ANC/OPD ward with Pre-Eclampsia who returned to ANC/OPD ward twice a week"
+    )
+
+    opd_pree_weekly_lab_testing = models.BigIntegerField(
+        default=0,
+        verbose_name="8. Number of outpatients seen in ANC/OPD ward with Pre-Eclampsia who received weekly laboratory testing"
+    )
+
+    opd_pree_weekly_lab_testing_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name="9. Percentage of outpatients seen in ANC/OPD with Pre-Eclampsia who received weekly laboratory testing"
+    )
+
+    # =========================
+    # Admission & Case Severity
+    # =========================
+    pree_admitted_from_anc = models.BigIntegerField(
+        default=0,
+        verbose_name="10. Number of Patients with Pre-E diagnosed in ANC clinic who required admision (Admitted patients)"
+    )
+
+    spe_admissions_before_delivery = models.BigIntegerField(
+        default=0,
+        verbose_name="11. Number of patients admitted to HFs with SEVERE PRE-ECLAMPSIA (SPE) before delivery, birth (including referrals in)"
+    )
+
+    eclampsia_admissions_before_delivery = models.BigIntegerField(
+        default=0,
+        verbose_name="12. Number of patients admitted to a HFs with  Eclampsia before delivery, birth (including referrals in)"
+    )
+
+    magnesium_sulfate_within_1hr = models.BigIntegerField(
+        default=0,
+        verbose_name="13. Number of patients WITH SEVERE PRE-ECLAMPSIA or Eclampsia who received Magnesium Sulfate within one hour of the diagnosis"
+    )
+
+    # =========================
+    # Hypertension Types
+    # =========================
+    chronic_htn_superimposed_pree = models.BigIntegerField(
+        default=0,
+        verbose_name="14. Number of patients with chronic hypertension* with superimposed pre-eclampsia"
+    )
+
+    gestational_hypertension = models.BigIntegerField(
+        default=0,
+        verbose_name="15. Number of patients with Gestational hypertension*"
+    )
+
+    # =========================
+    # Delivery Timeliness
+    # =========================
+    spe_delivered_within_24hrs = models.BigIntegerField(
+        default=0,
+        verbose_name="16. Number of Severe Pre-eclampsia patients who delivered within 24 hours of admission"
+    )
+
+    eclampsia_delivered_within_12hrs = models.BigIntegerField(
+        default=0,
+        verbose_name="17. Number of Eclampsia patients who delivered within 12 hours of admission"
+    )
+
+    # =========================
+    # Postpartum Follow-up
+    # =========================
+    post_delivery_followup_3days = models.BigIntegerField(
+        default=0,
+        verbose_name="18. Number of patients with SPE or eclampsia who had a follow up visit within 3 days after the delivery discharge"
+    )
+
+    postpartum_pree_eclampsia = models.BigIntegerField(
+        default=0,
+        verbose_name="19. Number of patients with SPE or eclampsia diagnosed during the post-partum period"
+    )
+
+    # =========================
     # Complications
-    comp_renal_failure = models.BigIntegerField(default=0, verbose_name="Renal Failure (less than 30 ml/hr for 4 hours despite fluid challenge)")
-    comp_pulmonary_edema = models.BigIntegerField(default=0, verbose_name="Pulmonary edema")
-    comp_eclamptic_seizure = models.BigIntegerField(default=0, verbose_name="Eclamptic seizure")
-    comp_stroke = models.BigIntegerField(default=0, verbose_name="Stroke (Cerebral hemorrhage or blood clot in brain)")
-    comp_thrombocytopenia = models.BigIntegerField(default=0, verbose_name="Thrombocytopenia (not HELLP)")
-    comp_hellp = models.BigIntegerField(default=0, verbose_name="HELLP syndrome")
-    comp_pres = models.BigIntegerField(default=0, verbose_name="PRES (Posterior Reversible Encephalopathy Syndrome)")
-    comp_iufd = models.BigIntegerField(default=0, verbose_name="Intrauterine Fetal Death")
-    comp_placental_abruption = models.BigIntegerField(default=0, verbose_name="Placental abruption")
-    comp_eclamptic_coma = models.BigIntegerField(default=0, verbose_name="Eclamptic coma")
-    comp_total = models.BigIntegerField(default=0, verbose_name="Total complications due to SPE and Eclampsia")
-    maternal_death_spe_e = models.BigIntegerField(default=0, verbose_name="Maternal death due to SPE or Eclampsia")
+    # =========================
+    renal_failure = models.BigIntegerField(default=0, verbose_name="20. Renal Failure (LESS THAN 30 ml/hr for 4 hours despite fluid challenge)")
+    pulmonary_edema = models.BigIntegerField(default=0, verbose_name="21. Pulmonary edema")
+    eclamptic_seizure = models.BigIntegerField(default=0, verbose_name="22. Eclamptic seizure")
+    stroke = models.BigIntegerField(default=0, verbose_name="23. Stroke (Cerebral Hemorrhage or Blood clot in brain)")
+    thrombocytopenia = models.BigIntegerField(default=0, verbose_name="24. Thrombocytopenia (non-HELLP)")
+    hellp_syndrome = models.BigIntegerField(default=0, verbose_name="25. HELLP syndrome")
+    pres = models.BigIntegerField(default=0, verbose_name="26. PRES (Posterior Reversible Encephalopathy Syndrome)")
+    intrauterine_fetal_death = models.BigIntegerField(default=0, verbose_name="27. Intrauterine fetal death")
+    placental_abruption = models.BigIntegerField(default=0, verbose_name="28. Placental abruption")
+    eclamptic_coma = models.BigIntegerField(default=0, verbose_name="29. Eclamptic coma")
 
-    # Outpatient / OPD management
-    num_opd_pree_dx_md = models.BigIntegerField(default=0, verbose_name="Number of outpatients diagnosed in OPD with Pre-Eclampsia by MD")
-    num_opd_pree_twice_week = models.BigIntegerField(default=0, verbose_name="Number of outpatients with Pre-Eclampsia who returned to ANC/OPD twice a week")
-    num_opd_pree_weekly_labs = models.BigIntegerField(default=0, verbose_name="Number of outpatients with Pre-Eclampsia who received weekly laboratory testing")
-    pct_opd_pree_weekly_labs = models.BigIntegerField(default=0, verbose_name="Percentage of outpatients with Pre-Eclampsia who received weekly laboratory testing")
+    total_complications = models.BigIntegerField(
+        default=0,
+        verbose_name="30. Total complications due to SPE and Eclampsia"
+    )
 
-    # Advanced interventions
-    ai_aortic_compression = models.BigIntegerField(default=0, verbose_name="Aortic compression")
-    ai_ubt = models.BigIntegerField(default=0, verbose_name="UBT (condom catheter)")
-    ai_lac_repair = models.BigIntegerField(default=0, verbose_name="Repair of severe vaginal or cervical lacerations causing a PPH")
-    ai_blynch_ual = models.BigIntegerField(default=0, verbose_name="B-Lynch suture or uterine artery ligation")
-    ai_nasg = models.BigIntegerField(default=0, verbose_name="Anti-shock garment (NASG)")
-    ai_ruptured_uterus_repair = models.BigIntegerField(default=0, verbose_name="Repair ruptured uterus")
-    ai_pph_hysterectomy = models.BigIntegerField(default=0, verbose_name="Postpartum hysterectomy for hemorrhage")
-    ai_hysterectomy_other = models.BigIntegerField(default=0, verbose_name="Postpartum hysterectomy (other causes)")
-    ai_total = models.BigIntegerField(default=0, verbose_name="Total number of advanced interventions conducted")
-    
+    maternal_death = models.BigIntegerField(
+        default=0,
+        verbose_name="31. Maternal deaths due to SPE or Eclampsia"
+    )
+
     status = models.CharField(
     max_length=20,
-    choices=[("draft","Draft"), ("submitted","Submitted"), ("approved","Approved")],
+    choices=[("draft","Draft"), ("submitted","Submitted")],
     default="draft"
 )
 
@@ -734,41 +827,47 @@ class aimpph(models.Model):
     # Births and oxytocin
     total_births = models.BigIntegerField(
         default=0,
-        verbose_name="Number of ALL births (log book)"
+        verbose_name="1. Number of ALL births (log book)"
     )
     births_vaginal = models.BigIntegerField(
         default=0,
-        verbose_name="Number of births - by vaginal delivery"
+        verbose_name="2. Number of births - by vaginal delivery"
     )
     births_csection = models.BigIntegerField(
         default=0,
-        verbose_name="Number of births - by C-sections"
+        verbose_name="3. Number of births - by C-sections"
     )
     oxytocin_immediate = models.BigIntegerField(
         default=0,
-        verbose_name="Number of patients receiving oxytocin immediately after birth"
+        verbose_name="4. Number of patients receiving oxytocin immediately after birth"
     )
     antepartum_hemorrhage = models.BigIntegerField(
         default=0,
-        verbose_name="Number of Antepartum Hemorrhage (Abruption, Placenta Previa)"
+        verbose_name="5. Number of Antepartum Hemorrhage (Abruption, Placenta Previa)"
     )
 
     # PPH by mode of delivery / referrals
     pph_vaginal_501_999 = models.BigIntegerField(
         default=0,
-        verbose_name="Number of Postpartum Hemorrhage (PPH) - after vaginal delivery (501–999 cc)"
+        verbose_name="6. Number of Postpartum Hemorrhage (PPH) - after vaginal delivery (501–999 cc)"
     )
     pph_cs_1000_plus = models.BigIntegerField(
         default=0,
-        verbose_name="Number of Postpartum Hemorrhage (PPH) - after Cesarean delivery (≥1000 cc)"
+        verbose_name="7. Number of Postpartum Hemorrhage (PPH) - after Cesarean delivery (≥1000 cc)"
     )
     pph_referral_in_outside_aim = models.BigIntegerField(
         default=0,
-        verbose_name="Number of Postpartum Hemorrhage (PPH) referrals in from outside of AIM facilities"
+        verbose_name="8. Number of Postpartum Hemorrhage (PPH) referrals in from outside of AIM facilities"
     )
     pph_referral_in_aim = models.BigIntegerField(
         default=0,
-        verbose_name="Number of Postpartum Hemorrhage (PPH) referrals in from AIM facilities"
+        verbose_name="9. Number of Postpartum Hemorrhage (PPH) referrals in from AIM facilities"
+    )
+
+    # ✅ NEW: Total PPH (as requested)
+    pph_total = models.BigIntegerField(
+        default=0,
+        verbose_name="10. Total number of PPH cases (sum of indicators 6–9)"
     )
 
     # QBL (quantitative blood loss) categories
@@ -869,6 +968,12 @@ class aimpph(models.Model):
         verbose_name="TOTAL causes of PPH (may be more than 100%)"
     )
 
+    # ✅ NEW: PPH management by medication (uterotonic)
+    pph_medication_uterotonic = models.BigIntegerField(
+        default=0,
+        verbose_name="PPH management by medication (uterotonic)"
+    )
+
     # Advanced interventions for PPH
     ai_uterine_compression = models.BigIntegerField(
         default=0,
@@ -917,7 +1022,7 @@ class aimpph(models.Model):
 
     status = models.CharField(
     max_length=20,
-    choices=[("draft","Draft"), ("submitted","Submitted"), ("approved","Approved")],
+    choices=[("draft","Draft"), ("submitted","Submitted")],
     default="draft")
 
     class Meta:

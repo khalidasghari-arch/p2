@@ -224,23 +224,21 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "gre_year",
         "gre_month",
         "afiat_flag",
-        "num_anc_preg_seen",
-        "num_anc_bp_taken",
-        "num_anc_pree_dx",
-        "num_severe_pe_e_bp160",
-        "num_severe_pe_e_bp160_tx1h",
-        "num_anc_pree_admit",
-        "num_spe_admit_before_delivery",
-        "num_eclampsia_admit_before_delivery",
-        "num_spe_e_mgso4_1h",
-        "num_spe_at_birth",
-        "num_eclampsia_at_birth",
-        "num_chronic_htn_superimposed_pe",
-        "num_gest_htn",
-        "num_spe_deliv_24h",
-        "num_eclampsia_deliv_12h",
-        "num_spe_e_fu_3d",
-        "num_spe_e_pp_dx",
+         # ANC Screening
+        "anc_total_seen",
+        "anc_bp_measured",
+        "preeclampsia_diagnosed",
+        # Severe cases & treatment
+        "severe_pree_or_eclampsia",
+        "severe_pree_antihypertensive_within_1hr",
+        "magnesium_sulfate_within_1hr",
+        # Admissions
+        "spe_admissions_before_delivery",
+        "eclampsia_admissions_before_delivery",
+        # Outcomes
+        "total_complications",
+        "maternal_death",
+        #"created_at", 
     )
 
     list_filter = (DistrictFilter, AimpeeFacilityFilter)
