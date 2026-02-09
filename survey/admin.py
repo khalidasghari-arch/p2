@@ -6,7 +6,6 @@ from django.utils.html import format_html
 from . import models
 from hiva.admin_utils import user_province
 
-
 # ============================================================
 # Filters
 # ============================================================
@@ -45,7 +44,6 @@ class ProvinceFilter(SimpleListFilter):
             return queryset.filter(facility__districtfk__provincefk__id=self.value())
         return queryset
 
-
 # ============================================================
 # WorkArea
 # ============================================================
@@ -54,7 +52,6 @@ class WorkAreaAdmin(admin.ModelAdmin):
     list_display = ("id", "work_area_name")
     search_fields = ("work_area_name",)
     ordering = ("work_area_name",)
-
 
 # ============================================================
 # Inline: PatientSafetyDetails (professional layout + guidance)
@@ -256,7 +253,6 @@ class PatientSafetyDetailsInline(admin.StackedInline):
             ))
         return tuple(new_fs)
 
-
 # ============================================================
 # Header Admin (your same logic + clean UX)
 # ============================================================
@@ -371,7 +367,6 @@ class PatientSafetyHeaderAdmin(admin.ModelAdmin):
             actions.pop("approve_selected", None)
             actions.pop("reject_selected", None)
         return actions
-
 
 # ============================================================
 # Details Admin (view-only list)

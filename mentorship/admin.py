@@ -43,7 +43,7 @@ class MentorshipTopicsAdmin(admin.ModelAdmin):
 
 @admin.register(Staff)
 class StaffAdmin(admin.ModelAdmin):
-    list_display = ("id", "hfname", "tazkiranumber", "firstname", "lastname", "position", "gender", "status")
+    list_display = ("id", "hfname", "tazkiranumber", "firstname", "lastname", "fathername", "position", "gender", "status")
     list_filter = ("hfname", "status", "position")
     search_fields = ("firstname", "lastname", "tazkiranumber")
 

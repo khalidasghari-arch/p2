@@ -51,7 +51,7 @@ ENGLISH_MONTH_CHOICES = [
 ]
 
 # English Years (define the range you want)
-YEAR_CHOICES = [(str(y), str(y)) for y in range(2025, 2026)]
+YEAR_CHOICES = [(str(y), str(y)) for y in [2025, 2026, 2027]]
 
 class AimpeeAdminForm(forms.ModelForm):
     shamsiyear = forms.ChoiceField(label="Shamsi Year", choices=AFGHAN_YEAR_CHOICES)
@@ -59,8 +59,7 @@ class AimpeeAdminForm(forms.ModelForm):
     period = forms.ChoiceField(label="Period", choices=AFGHAN_PY_CHOICES)
     bl_progress = forms.ChoiceField(label="BL_and_Progress", choices=AFGHAN_BL_CHOICES)
     gre_month = forms.ChoiceField(label="Calender Month", choices=ENGLISH_MONTH_CHOICES)
-    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES, 
-    )                                  
+    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES)                                  
     
     class Meta:
         model = aimpee
@@ -72,8 +71,7 @@ class AimpphAdminForm(forms.ModelForm):
     period = forms.ChoiceField(label="Period", choices=AFGHAN_PY_CHOICES)
     bl_progress = forms.ChoiceField(label="BL_and_Progress", choices=AFGHAN_BL_CHOICES)
     gre_month = forms.ChoiceField(label="Calender Month", choices=ENGLISH_MONTH_CHOICES)
-    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES, 
-    )                                  
+    gre_year = forms.ChoiceField(label="Calender Year", choices=YEAR_CHOICES)                                  
     
     class Meta:
         model = aimpee

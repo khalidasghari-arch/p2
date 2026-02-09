@@ -1,7 +1,6 @@
 from django.db import models
 from django.conf import settings
 
-
 class PatientSafetyHeader(models.Model):
     ENGLISH_MONTH_CHOICES = [
         ("1", "January"), ("2", "February"), ("3", "March"), ("4", "April"),
