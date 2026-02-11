@@ -132,7 +132,6 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 
         return cleaned
 
-
 # =====================================================
 # DETAILS INLINE:
 # - Mentee filtered by visit facility
@@ -182,7 +181,6 @@ class MentorshipdetailsInline(admin.TabularInline):
             )
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # =====================================================
 # MENTORSHIP VISIT ADMIN:
