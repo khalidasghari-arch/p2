@@ -8,10 +8,11 @@ class PatientSafetyHeader(models.Model):
         ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
     ]
     YEAR_CHOICES = [("2025", "2025"), ("2026", "2026"), ("2027", "2027")]
+    KEY_INTERVENTION_CHOICES = [("AIM", "AIM"),("SAFE_SURGERY", "SAFE_SURGERY")]
 
     surveymonth = models.CharField(max_length=2, choices=ENGLISH_MONTH_CHOICES)
     surveyyear = models.CharField(max_length=4, choices=YEAR_CHOICES)
-    key_intervention_name = models.CharField(max_length=255, null=True, blank=True)
+    key_intervention_name = models.CharField(max_length=255, default="AIM", choices=KEY_INTERVENTION_CHOICES)
 
     facility = models.ForeignKey("hiva.Facility", on_delete=models.PROTECT, related_name="patientsafety_headers")
     assessor = models.ForeignKey("hiva.Assessor", on_delete=models.PROTECT, related_name="patientsafety_assessments")
