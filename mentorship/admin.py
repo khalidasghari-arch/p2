@@ -192,16 +192,21 @@ class MentorshipdetailsInline(admin.TabularInline):
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    list_display = ("id", "facilityfk", "visitdate", "visitround", "mentorshipstarttime", 
+    list_display = ("facilityfk", "visitdate", "visitround", "mentorshipstarttime", 
     "mentorshipendtime", "get_mentors",  "ls_count",
     "pc_count", "mc_count",
     "mentees_count",
     "thematics_count",
-    "topics_count",)
+    "topics_count","id", )
     list_filter = ("visitdate", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
     list_per_page = 20
     inlines = (MentorshipdetailsInline,)
+
+    def get_list_filter(self, request):
+        if request.user.is_superuser:
+            return self.list_filter
+        return ()  # No filters for Clinical Mentors
 
     @admin.display(description="Clinical Mentor")
     def get_mentors(self, obj):
