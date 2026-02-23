@@ -5,19 +5,6 @@ from hiva.models import HQIPAssessmentHeader
 from hiva.admin import AssessmentHeaderAdmin
 from django.contrib.admin.sites import site
 
-# ============================================================
-# 1️⃣ HQIP PRIORITY CALCULATION (MATCHES DASHBOARD LOGIC)
-# ============================================================
-AREA_TO_TRACK = {
-    "SICK NEWBORN CARE": "SNC",
-    "FAMILY PLANNING": "FP",
-    "MANAGEMENT OF OBSTETRIC COMPLICATIONS": "MOC",
-    "ANTENATAL CARE": "ANC",
-    "POSTNATAL CARE": "PNC",
-    "INFECTION PREVENTION": "IP",
-    "NORMAL LABOR, CHILDBIRTH, AND IMMEDIATE NEWBORN CARE": "NL",
-}
-
 def get_facility_area_priorities(facility_id: int):
     """
     Returns lowest 3 HQIP areas using EXACT SAME logic
@@ -45,16 +32,9 @@ def get_facility_area_priorities(facility_id: int):
     # Sort lowest first
     scored_sorted = sorted(scored, key=lambda x: x["percent"])
 
-    # Return top 3 lowest shortnames
-    priority_tracks = []
+    # Return top 3 lowest FULL area names (must match MentorshipTopics.track)
+    return [x["area"].strip() for x in scored_sorted[:3]]
 
-    for x in scored_sorted[:3]:
-        area_name = x["area"].strip().upper()
-        track_code = AREA_TO_TRACK.get(area_name)
-        if track_code:
-            priority_tracks.append(track_code)
-
-    return priority_tracks
 # ============================================================
 # 2️⃣ FIRST NON-COMPETENT TOPIC IN TRACK
 # ============================================================
