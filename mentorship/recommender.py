@@ -41,10 +41,23 @@ def get_facility_area_priorities(facility_id: int):
 
 def get_first_not_competent_topic(mentee_id: int, track: str):
 
-    # Get unique seq_no values only
+    # Convert short code to full area name
+    TRACK_NAME_MAP = {
+        "SNC": "SICK NEWBORN CARE",
+        "FP": "FAMILY PLANNING",
+        "MOC": "MANAGEMENT OF OBSTETRIC COMPLICATIONS",
+        "ANC": "ANTENATAL CARE",
+        "PNC": "POSTNATAL CARE",
+        "IP": "INFECTION PREVENTION",
+        "NL": "NORMAL LABOR, CHILDBIRTH, AND IMMEDIATE NEWBORN CARE",
+    }
+
+    full_track_name = TRACK_NAME_MAP.get(track, track)
+
+    # Use full track name
     seq_numbers = (
         MentorshipTopics.objects
-        .filter(track=track)
+        .filter(track=full_track_name)
         .values_list("seq_no", flat=True)
         .distinct()
         .order_by("seq_no")
@@ -52,10 +65,9 @@ def get_first_not_competent_topic(mentee_id: int, track: str):
 
     for seq in seq_numbers:
 
-        # Pick canonical topic (lowest id) for this seq_no
         topic = (
             MentorshipTopics.objects
-            .filter(track=track, seq_no=seq)
+            .filter(track=full_track_name, seq_no=seq)
             .order_by("id")
             .first()
         )
@@ -65,7 +77,7 @@ def get_first_not_competent_topic(mentee_id: int, track: str):
 
         is_competent = MenteeTopicStatus.objects.filter(
             mentee_id=mentee_id,
-            topic__track=track,
+            topic__track=full_track_name,
             topic__seq_no=seq,
             status="COMPETENT",
         ).exists()
