@@ -13,7 +13,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.WARNING("Rebuilding MenteeTopicStatus..."))
 
-        # Clear existing status safely
+        # Clear existing state safely
         MenteeTopicStatus.objects.all().delete()
 
         details = (
@@ -36,12 +36,12 @@ class Command(BaseCommand):
                 }
             )
 
-            # Learning Session
-            if d.learningsession:
+            # ---- Learning Session ----
+            if d.ls:
                 status.consecutive_ls += 1
 
-            # Competency achieved
-            if d.patientcompetent or d.modelcompetent:
+            # ---- Competency ----
+            if d.pc or d.mc:
                 status.status = "COMPETENT"
                 status.consecutive_ls = 0
 
