@@ -43,7 +43,7 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 INSTALLED_APPS = [
     'hiva',
     'km_dashboard',
-    'mentorship',
+    'mentorship.apps.MentorshipConfig',
     'product.apps.ProductConfig',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -107,7 +107,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         # Use environment variables if they exist (Render),
         # otherwise fall back to your current local settings.
-        'NAME': os.environ.get('DB_NAME', 'pmp'),
+        'NAME': os.environ.get('DB_NAME', 'iqocdb_20260222'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', '12345'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),

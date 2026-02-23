@@ -3,10 +3,13 @@ from django.contrib import admin
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
-    ThematicMentorship, MentorshipTopics,
+    ThematicMentorship, MentorshipTopics, MenteeTopicStatus,
     Mentorshipvisit, Mentorshipdetails, Staff
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
+from django.utils.html import format_html
+from mentorship.recommender import recommend_next_for_staff_in_facility
+from django.db.models import Count, Q
 
 # =====================================================
 # Helpers
@@ -192,35 +195,137 @@ class MentorshipdetailsInline(admin.TabularInline):
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    list_display = ("facilityfk", "visitdate", "visitround", "mentorshipstarttime", 
-    "mentorshipendtime", "get_mentors",  "ls_count",
-    "pc_count", "mc_count",
-    "mentees_count",
-    "thematics_count",
-    "topics_count","id", )
+
+    list_display = (
+        "facilityfk",
+        "visitdate",
+        "visitround",
+        "mentorshipstarttime",
+        "mentorshipendtime",
+        "get_mentors",
+        "ls_count",
+        "pc_count",
+        "mc_count",
+        "mentees_count",
+        "thematics_count",
+        "topics_count",
+        "ai_recommendation",
+        "id",
+    )
+
     list_filter = ("visitdate", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
+    readonly_fields = ("ai_recommendation",)
     list_per_page = 20
     inlines = (MentorshipdetailsInline,)
 
-    def get_list_filter(self, request):
-        if request.user.is_superuser:
-            return self.list_filter
-        return ()  # No filters for Clinical Mentors
+    # -------------------------------------------------
+    # AI RECOMMENDATION (FIXED)
+    # -------------------------------------------------
+    @admin.display(description="Recommendation")
+    def ai_recommendation(self, obj):
+        """
+        Dynamic AI recommendation with:
+        - Color-coded LS / PC tags
+        - Support flag indicator
+        - Competency performance % per mentee
+        """
 
+        # Dynamically detect reverse relation to Mentorshipdetails
+        detail_manager = None
+        for rel in obj._meta.related_objects:
+            if rel.related_model.__name__ == "Mentorshipdetails":
+                detail_manager = getattr(obj, rel.get_accessor_name())
+                break
+
+        if not detail_manager:
+            return "No mentorship details relation found."
+
+        details = detail_manager.select_related("menteename")
+
+        if not details.exists():
+            return "No mentee selected."
+
+        results = []
+
+        for detail in details:
+            mentee = detail.menteename
+            if not mentee:
+                continue
+
+            rec = recommend_next_for_staff_in_facility(
+                mentee.id,
+                obj.facilityfk_id
+            )
+
+            # 🔹 SESSION TYPE BADGE
+            if rec["session_type"] == "LS":
+                session_badge = '<span style="background:#2196F3;color:white;padding:2px 6px;border-radius:4px;">LS</span>'
+            elif rec["session_type"] == "PC":
+                session_badge = '<span style="background:#FF9800;color:white;padding:2px 6px;border-radius:4px;">PC</span>'
+            else:
+                session_badge = "-"
+
+            # 🔹 SUPPORT FLAG BADGE
+            if rec["support_flag"]:
+                support_badge = '<span style="background:#F44336;color:white;padding:2px 6px;border-radius:4px;">YES</span>'
+            else:
+                support_badge = '<span style="background:#4CAF50;color:white;padding:2px 6px;border-radius:4px;">NO</span>'
+
+            # 🔹 PERFORMANCE INDICATOR
+            total_topics = MentorshipTopics.objects.count()
+
+            competent_count = MenteeTopicStatus.objects.filter(
+                mentee_id=mentee.id,
+                status="COMPETENT"
+            ).count()
+
+            progress_percent = 0
+            if total_topics > 0:
+                progress_percent = round((competent_count / total_topics) * 100)
+
+            # 🔹 Progress color logic
+            if progress_percent >= 80:
+                progress_color = "#4CAF50"  # green
+            elif progress_percent >= 50:
+                progress_color = "#FFC107"  # amber
+            else:
+                progress_color = "#F44336"  # red
+
+            progress_badge = f'<span style="background:{progress_color};color:white;padding:2px 6px;border-radius:4px;">{progress_percent}%</span>'
+
+            # 🔹 Final formatted output
+            results.append(
+                f"""
+                <div style="margin-bottom:6px;">
+                    <strong>{mentee}</strong><br>
+                    Track: {rec['track']} |
+                    Next: {rec['topic'].shortname if rec['topic'] else '-'} |
+                    Session: {session_badge} |
+                    Support: {support_badge} |
+                    Progress: {progress_badge}
+                </div>
+                """
+            )
+
+        return format_html("".join(results))
+
+    # -------------------------------------------------
+    # CLINICAL MENTOR DISPLAY
+    # -------------------------------------------------
     @admin.display(description="Clinical Mentor")
     def get_mentors(self, obj):
         mentors = (
             obj.items
             .select_related("mentor")
-            .values_list("mentor__name", flat=True)  # change if Assessor uses another field
+            .values_list("mentor__name", flat=True)
             .distinct()
         )
         return ", ".join([m for m in mentors if m]) if mentors else "-"
-    
-     # -----------------------------
-    # LS / PC / MC counts
-    # -----------------------------
+
+    # -------------------------------------------------
+    # LS / PC / MC COUNTS
+    # -------------------------------------------------
     @admin.display(description="Total-LS")
     def ls_count(self, obj):
         return obj.items.filter(ls=True).count()
@@ -233,16 +338,9 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def mc_count(self, obj):
         return obj.items.filter(mc=True).count()
 
-    # -----------------------------
-    # Performance optimization
-    # -----------------------------
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.prefetch_related("items", "items__mentor")
-    
-    # -----------------------------
-    # DISTINCT COUNTS (important)
-    # -----------------------------
+    # -------------------------------------------------
+    # DISTINCT COUNTS
+    # -------------------------------------------------
     @admin.display(description="Total-Mentee")
     def mentees_count(self, obj):
         return (
@@ -273,9 +371,9 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .count()
         )
 
-    # -----------------------------
-    # Performance optimization
-    # -----------------------------
+    # -------------------------------------------------
+    # PERFORMANCE OPTIMIZATION (SINGLE VERSION)
+    # -------------------------------------------------
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.prefetch_related(
@@ -286,6 +384,9 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "items__topicname",
         )
 
+    # -------------------------------------------------
+    # FIELDSETS
+    # -------------------------------------------------
     fieldsets = (
         ("Mentorship Visit", {
             "fields": (
@@ -293,11 +394,15 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "visitdate",
                 "visitround",
                 "mentorshipstarttime",
-                "mentorshipendtime"
+                "mentorshipendtime",
+                "ai_recommendation",
             )
         }),
     )
 
+    # -------------------------------------------------
+    # PROVINCE RESTRICTION
+    # -------------------------------------------------
     def province_filter_kwargs(self, request):
         prov_id = _prov_id(request)
         return {"facilityfk__districtfk__provincefk_id": prov_id} if prov_id else {"pk__in": []}

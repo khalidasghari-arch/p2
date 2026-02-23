@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 class ThematicMentorship(models.Model):
@@ -19,14 +20,38 @@ class MentorshipTopics(models.Model):
     namedari = models.TextField(null=True, blank=True)
     namepashto = models.TextField(null=True, blank=True)
     nameeng = models.TextField(null=True, blank=True)
+    track = models.CharField(max_length=20, blank=True, default="")
+    seq_no = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         verbose_name = "MENTORSHIP TOPIC"
         verbose_name_plural = "MENTORSHIP TOPIC"
+        ordering = ["track", "seq_no"]
 
     def __str__(self):
         return self.name
+    
+class MenteeTopicStatus(models.Model):
+    STATUS_CHOICES = [
+        ("NOT_STARTED", "Not started"),
+        ("IN_PROGRESS", "In progress"),
+        ("COMPETENT", "Competent"),
+    ]
 
+    mentee = models.ForeignKey("mentorship.Staff", on_delete=models.CASCADE)
+    topic = models.ForeignKey("mentorship.MentorshipTopics", on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="NOT_STARTED")
+    consecutive_ls = models.PositiveSmallIntegerField(default=0)
+    last_session_type = models.CharField(max_length=2, blank=True, default="")  # LS/PC/MC
+    last_date = models.DateField(null=True, blank=True)
+    competent_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("mentee", "topic")
+
+    def __str__(self):
+        return f"{self.mentee} - {self.topic} ({self.status})"
+    
 class Mentorshipvisit(models.Model):
     facilityfk = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
     visitdate = models.DateField(verbose_name="Visit Date")
@@ -48,7 +73,6 @@ class Staff(models.Model):
     fathername = models.CharField(max_length=200, blank=True, null=True, verbose_name="Father Name")
     position = models.ForeignKey('hiva.Position', on_delete=models.CASCADE, verbose_name="Position")
     tazkiranumber = models.CharField(max_length=100, blank=True, null=True, verbose_name="Tazkira Number", unique=True)
-
     gender = models.BooleanField(
         choices=[(True, "Female"), (False, "Male")],
         default=True,
@@ -69,7 +93,6 @@ class Staff(models.Model):
     def __str__(self):
         full = f"{self.firstname} {self.lastname or ''}".strip()
         return full
-
 
 class Mentorshipdetails(models.Model):
     mentorshipvistfk = models.ForeignKey(
