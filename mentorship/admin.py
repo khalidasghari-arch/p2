@@ -207,8 +207,8 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "pc_count",
         "mc_count",
         "mentees_count",
-        "thematics_count",
-        "topics_count",
+        #"thematics_count",
+        #"topics_count",
         "ai_recommendation",
         "id",
     )
