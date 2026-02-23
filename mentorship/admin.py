@@ -213,10 +213,10 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "id",
     )
 
-    list_filter = ("visitdate", "facilityfk")
+    #list_filter = ("visitdate", "facilityfk")
     search_fields = ("facilityfk__name", "facilityfk__hfcode")
     readonly_fields = ("ai_recommendation",)
-    list_per_page = 20
+    list_per_page = 10
     inlines = (MentorshipdetailsInline,)
 
     # -------------------------------------------------

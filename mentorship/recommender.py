@@ -40,23 +40,38 @@ def get_facility_area_priorities(facility_id: int):
 # ============================================================
 
 def get_first_not_competent_topic(mentee_id: int, track: str):
-    topics = (
+
+    # Get unique seq_no values only
+    seq_numbers = (
         MentorshipTopics.objects
         .filter(track=track)
+        .values_list("seq_no", flat=True)
+        .distinct()
         .order_by("seq_no")
     )
 
-    competent_ids = set(
-        MenteeTopicStatus.objects.filter(
+    for seq in seq_numbers:
+
+        # Pick canonical topic (lowest id) for this seq_no
+        topic = (
+            MentorshipTopics.objects
+            .filter(track=track, seq_no=seq)
+            .order_by("id")
+            .first()
+        )
+
+        if not topic:
+            continue
+
+        is_competent = MenteeTopicStatus.objects.filter(
             mentee_id=mentee_id,
             topic__track=track,
+            topic__seq_no=seq,
             status="COMPETENT",
-        ).values_list("topic_id", flat=True)
-    )
+        ).exists()
 
-    for t in topics:
-        if t.id not in competent_ids:
-            return t
+        if not is_competent:
+            return topic
 
     return None
 
