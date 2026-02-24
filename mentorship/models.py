@@ -5,6 +5,15 @@ from django.core.exceptions import ValidationError
 class ThematicMentorship(models.Model):
     name = models.CharField(max_length=255, verbose_name="Mentorship Thematic Area")
     shortname = models.CharField(max_length=50, blank=True, null=True)
+    # ✅ NEW: links mentorship thematic area to HQIP Area
+    hqip_area = models.ForeignKey(
+        "hiva.Area",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="mentorship_thematics",
+        verbose_name="Mapped HQIP Thematic Area",
+    )
 
     class Meta:
         verbose_name = "MENTORSHIP THEMATIC AREA"

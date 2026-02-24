@@ -1,199 +1,211 @@
-from django.db.models import Q
+from collections import defaultdict
+from django.db.models import Count, Q
 from hiva.models import HQIPAssessmentHeader
-from mentorship.models import MentorshipTopics, MenteeTopicStatus
-from hiva.models import HQIPAssessmentHeader
-from hiva.admin import AssessmentHeaderAdmin
-from django.contrib.admin.sites import site
+from hiva.models import HQIPAssessment  # adjust import if HQIPAssessment model is elsewhere
+from mentorship.models import MentorshipTopics, MenteeTopicStatus, ThematicMentorship
+
+# --- score IDs in your HQIP setup (confirm: YES=1, NO=2, NA=3) ---
+SCORE_YES_ID = 1
+SCORE_NO_ID = 2
+SCORE_NA_ID = 3
+LS_BEFORE_PC = 4  # ✅ your requirement
+
+def _round2(x):
+    return round(float(x), 2)
+
+def _pct(yes, applicable):
+    if not applicable:
+        return None
+    return _round2((yes / applicable) * 100.0)
 
 def get_facility_area_priorities(facility_id: int):
     """
-    Returns lowest 3 HQIP areas using EXACT SAME logic
-    as admin dashboards (hierarchical averaging).
+    Returns lowest 3 HQIP Area IDs for a facility using hierarchical averaging:
+    Standard % = YES / (YES+NO)
+    Section %  = average(Standard %)
+    Area %     = average(Section %)
+    NA excluded (scorefk_id=3 not counted)
     """
-
-    headers = HQIPAssessmentHeader.objects.filter(
-        facilityfk_id=facility_id
-    )
-
-    if not headers.exists():
+    headers_qs = HQIPAssessmentHeader.objects.filter(facilityfk_id=facility_id)
+    if not headers_qs.exists():
         return []
 
-    # Create admin instance to access shared method
-    admin_instance = AssessmentHeaderAdmin(
-        HQIPAssessmentHeader,
-        site
-    )
-
-    _std, _sec, area_results = admin_instance._compute_hqip_rollups(headers)
-
-    # Remove None
-    scored = [x for x in area_results if x["percent"] is not None]
-
-    # Sort lowest first
-    scored_sorted = sorted(scored, key=lambda x: x["percent"])
-
-    # Return top 3 lowest FULL area names (must match MentorshipTopics.track)
-    return [x["area"].strip() for x in scored_sorted[:3]]
-
-# ============================================================
-# 2️⃣ FIRST NON-COMPETENT TOPIC IN TRACK
-# ============================================================
-
-def get_first_not_competent_topic(mentee_id: int, track: str):
-
-    # Convert short code to full area name
-    TRACK_NAME_MAP = {
-        "SNC": "SICK NEWBORN CARE",
-        "FP": "FAMILY PLANNING",
-        "MOC": "MANAGEMENT OF OBSTETRIC COMPLICATIONS",
-        "ANC": "ANTENATAL CARE",
-        "PNC": "POSTNATAL CARE",
-        "IP": "INFECTION PREVENTION",
-        "NL": "NORMAL LABOR, CHILDBIRTH, AND IMMEDIATE NEWBORN CARE",
-    }
-
-    full_track_name = TRACK_NAME_MAP.get(track, track)
-
-    # Use full track name
-    seq_numbers = (
-        MentorshipTopics.objects
-        .filter(track=full_track_name)
-        .values_list("seq_no", flat=True)
-        .distinct()
-        .order_by("seq_no")
-    )
-
-    for seq in seq_numbers:
-
-        topic = (
-            MentorshipTopics.objects
-            .filter(track=full_track_name, seq_no=seq)
-            .order_by("id")
-            .first()
+    # --- Standard-level rollup (includes Area + Section) ---
+    std_rows = (
+        HQIPAssessment.objects
+        .filter(header__in=headers_qs)
+        .values(
+            "criteriafk__standardfk__id",
+            "criteriafk__standardfk__sectionfk__id",
+            "criteriafk__standardfk__sectionfk__areafk__id",
         )
+        .annotate(
+            yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+            applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+        )
+    )
 
-        if not topic:
+    # section_key = (area_id, section_id)
+    section_to_std_percents = defaultdict(list)
+
+    for r in std_rows:
+        area_id = r["criteriafk__standardfk__sectionfk__areafk__id"]
+        section_id = r["criteriafk__standardfk__sectionfk__id"]
+        sec_key = (area_id, section_id)
+
+        p = _pct(r["yes"], r["applicable"])
+        if p is not None:
+            section_to_std_percents[sec_key].append(p)
+
+    # --- Section % = average(Standard %) ---
+    area_to_sec_percents = defaultdict(list)
+    for (area_id, _section_id), percents in section_to_std_percents.items():
+        if not percents:
             continue
+        sec_percent = _round2(sum(percents) / len(percents))
+        area_to_sec_percents[area_id].append(sec_percent)
 
-        is_competent = MenteeTopicStatus.objects.filter(
+    # --- Area % = average(Section %) ---
+    area_percents = []
+    for area_id, percents in area_to_sec_percents.items():
+        if not percents:
+            continue
+        area_percent = _round2(sum(percents) / len(percents))
+        area_percents.append((area_id, area_percent))
+
+    # lowest 3 areas
+    area_percents.sort(key=lambda x: x[1])
+    return [area_id for area_id, _p in area_percents[:3]]
+
+def get_first_not_competent_topic(mentee_id: int, thematic_id: int):
+    """
+    Returns first topic (by seq_no then id) in this thematic area that is NOT competent yet.
+    """
+    topics = (
+        MentorshipTopics.objects
+        .filter(thematicfk_id=thematic_id)
+        .order_by("seq_no", "id")
+    )
+
+    competent_topic_ids = set(
+        MenteeTopicStatus.objects.filter(
             mentee_id=mentee_id,
-            topic__track=full_track_name,
-            topic__seq_no=seq,
+            topic__thematicfk_id=thematic_id,
             status="COMPETENT",
-        ).exists()
+        ).values_list("topic_id", flat=True)
+    )
 
-        if not is_competent:
-            return topic
-
+    for t in topics:
+        if t.id not in competent_topic_ids:
+            return t
     return None
-
-# ============================================================
-# 3️⃣ MAIN RECOMMENDATION ENGINE
-# ============================================================
 
 def recommend_next_for_staff_in_facility(staff_id: int, facility_id: int):
     """
-    Uses HQIP lowest 3 thematic areas.
-    Applies professional LS → PC → progression logic.
-
-    Rules:
-    - Minimum 3 LS required before PC
-    - After COMPETENT → move to next topic by seq_no
+    Professional rules:
+    - HQIP chooses lowest 3 HQIP Area IDs
+    - Those map to mentorship thematic areas via ThematicMentorship.hqip_area_id
+    - Topic selection uses thematicfk + seq_no order
+    - NOT competent:
+        - if consecutive_ls < 4 -> LS
+        - else -> PC (support_flag True)
+    - COMPETENT -> next topic by seq_no
     """
-
-    tracks = get_facility_area_priorities(facility_id)
-
-    if not tracks:
+    priority_area_ids = get_facility_area_priorities(facility_id)
+    if not priority_area_ids:
         return {
-            "topic": None,
-            "track": None,
-            "session_type": None,
+            "topic": None, "track": None, "session_type": None,
             "support_flag": False,
-            "reason": "No HQIP data available for this facility.",
+            "reason": "No HQIP assessments found for this facility.",
         }
 
-    selected_topic = None
-    selected_track = None
+    # map HQIP areas -> mentorship thematics (must be configured in admin)
+    thematics = list(
+        ThematicMentorship.objects.filter(hqip_area_id__in=priority_area_ids).select_related("hqip_area")
+    )
 
-    # 1️⃣ Find first not-competent topic from priority tracks
-    for tr in tracks:
-        topic = get_first_not_competent_topic(staff_id, tr)
+    if not thematics:
+        return {
+            "topic": None, "track": None, "session_type": None,
+            "support_flag": False,
+            "reason": "No mentorship thematic areas mapped to HQIP areas. Please map ThematicMentorship.hqip_area.",
+        }
+
+    # keep thematics in the SAME priority order of HQIP (lowest first)
+    thematic_by_area = {t.hqip_area_id: t for t in thematics}
+    ordered_thematics = [thematic_by_area[a] for a in priority_area_ids if a in thematic_by_area]
+
+    selected_topic = None
+    selected_thematic = None
+
+    for th in ordered_thematics:
+        topic = get_first_not_competent_topic(staff_id, th.id)
         if topic:
             selected_topic = topic
-            selected_track = tr
+            selected_thematic = th
             break
 
     if not selected_topic:
         return {
-            "topic": None,
-            "track": None,
-            "session_type": None,
+            "topic": None, "track": None, "session_type": None,
             "support_flag": False,
-            "reason": "Mentee competent in all priority tracks.",
+            "reason": "Mentee competent in all topics under the facility’s priority thematic areas.",
         }
 
-    # 2️⃣ Get status object
-    status_obj = MenteeTopicStatus.objects.filter(
+    st = MenteeTopicStatus.objects.filter(
         mentee_id=staff_id,
-        topic=selected_topic
+        topic_id=selected_topic.id
     ).first()
 
-    # 3️⃣ No previous status → start LS
-    if not status_obj:
+    # no history -> start LS
+    if not st:
         return {
             "topic": selected_topic,
-            "track": selected_track,
+            "track": selected_thematic.name,
             "session_type": "LS",
             "support_flag": False,
-            "reason": f"HQIP gap in {selected_track}. Start LS (1/3).",
+            "reason": f"Priority area: {selected_thematic.name}. Start LS (1/{LS_BEFORE_PC}).",
         }
 
-    # 4️⃣ NOT competent yet
-    if status_obj.status != "COMPETENT":
-
-        # Require minimum 3 LS before PC
-        if status_obj.consecutive_ls < 3:
+    # not competent -> LS until threshold, then PC
+    if st.status != "COMPETENT":
+        if st.consecutive_ls < LS_BEFORE_PC:
             return {
                 "topic": selected_topic,
-                "track": selected_track,
+                "track": selected_thematic.name,
                 "session_type": "LS",
                 "support_flag": False,
-                "reason": f"Continue LS ({status_obj.consecutive_ls}/3 required before PC).",
+                "reason": f"Continue LS ({st.consecutive_ls}/{LS_BEFORE_PC}) before PC.",
             }
-
-        # After 3 LS → escalate to PC
         return {
             "topic": selected_topic,
-            "track": selected_track,
+            "track": selected_thematic.name,
             "session_type": "PC",
             "support_flag": True,
-            "reason": "3 consecutive LS completed → competency assessment required (PC).",
+            "reason": f"{LS_BEFORE_PC} consecutive LS completed → recommend PC assessment.",
         }
 
-    # 5️⃣ If COMPETENT → move to next topic in same track
+    # competent -> next topic in same thematic area (SNC-1 -> SNC-2)
     next_topic = (
         MentorshipTopics.objects
-        .filter(
-            track=selected_topic.track,
-            seq_no__gt=selected_topic.seq_no
-        )
-        .order_by("seq_no")
+        .filter(thematicfk_id=selected_topic.thematicfk_id, seq_no__gt=selected_topic.seq_no)
+        .order_by("seq_no", "id")
         .first()
     )
 
     if not next_topic:
         return {
             "topic": None,
-            "track": selected_track,
+            "track": selected_thematic.name,
             "session_type": None,
             "support_flag": False,
-            "reason": f"All topics completed in {selected_track}.",
+            "reason": f"All topics completed in {selected_thematic.name}.",
         }
 
     return {
         "topic": next_topic,
-        "track": selected_track,
+        "track": selected_thematic.name,
         "session_type": "LS",
         "support_flag": False,
-        "reason": f"Advance to next topic {next_topic.shortname}.",
+        "reason": f"Competent → advance to next topic {next_topic.name}.",
     }

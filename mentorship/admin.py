@@ -10,6 +10,7 @@ from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 from django.utils.html import format_html
 from mentorship.recommender import recommend_next_for_staff_in_facility
 from django.db.models import Count, Q
+from django.utils.safestring import mark_safe
 
 # =====================================================
 # Helpers
@@ -31,7 +32,7 @@ def _prov_id(request):
 
 @admin.register(ThematicMentorship)
 class ThematicMentorshipAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "shortname")
+    list_display = ("id", "name", "shortname", "hqip_area")
     search_fields = ("name", "shortname")
 
 @admin.register(MentorshipTopics)
@@ -224,91 +225,104 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # -------------------------------------------------
     @admin.display(description="Recommendation")
     def ai_recommendation(self, obj):
-        """
-        Dynamic AI recommendation with:
-        - Color-coded LS / PC tags
-        - Support flag indicator
-        - Competency performance % per mentee
-        """
 
-        # Dynamically detect reverse relation to Mentorshipdetails
-        detail_manager = None
-        for rel in obj._meta.related_objects:
-            if rel.related_model.__name__ == "Mentorshipdetails":
-                detail_manager = getattr(obj, rel.get_accessor_name())
-                break
+        # Get unique mentees in this visit
+        mentee_ids = (
+            obj.items
+            .values_list("menteename_id", flat=True)
+            .distinct()
+        )
 
-        if not detail_manager:
-            return "No mentorship details relation found."
+        if not mentee_ids:
+            return "—"
 
-        details = detail_manager.select_related("menteename")
+        rows = []
 
-        if not details.exists():
-            return "No mentee selected."
-
-        results = []
-
-        for detail in details:
-            mentee = detail.menteename
-            if not mentee:
-                continue
+        for mentee_id in mentee_ids:
 
             rec = recommend_next_for_staff_in_facility(
-                mentee.id,
-                obj.facilityfk_id
+                staff_id=mentee_id,
+                facility_id=obj.facilityfk_id
             )
 
-            # 🔹 SESSION TYPE BADGE
-            if rec["session_type"] == "LS":
-                session_badge = '<span style="background:#2196F3;color:white;padding:2px 6px;border-radius:4px;">LS</span>'
-            elif rec["session_type"] == "PC":
-                session_badge = '<span style="background:#FF9800;color:white;padding:2px 6px;border-radius:4px;">PC</span>'
-            else:
-                session_badge = "-"
+            topic = rec["topic"]
+            track = rec["track"]
+            session = rec["session_type"]
+            support = rec["support_flag"]
 
-            # 🔹 SUPPORT FLAG BADGE
-            if rec["support_flag"]:
-                support_badge = '<span style="background:#F44336;color:white;padding:2px 6px;border-radius:4px;">YES</span>'
-            else:
-                support_badge = '<span style="background:#4CAF50;color:white;padding:2px 6px;border-radius:4px;">NO</span>'
-
-            # 🔹 PERFORMANCE INDICATOR
-            total_topics = MentorshipTopics.objects.count()
+            # --- progress calculation ---
+            total_topics = MentorshipTopics.objects.filter(
+                thematicfk__name=track
+            ).count()
 
             competent_count = MenteeTopicStatus.objects.filter(
-                mentee_id=mentee.id,
+                mentee_id=mentee_id,
                 status="COMPETENT"
             ).count()
 
-            progress_percent = 0
+            progress = 0
             if total_topics > 0:
-                progress_percent = round((competent_count / total_topics) * 100)
+                progress = round((competent_count / total_topics) * 100)
 
-            # 🔹 Progress color logic
-            if progress_percent >= 80:
-                progress_color = "#4CAF50"  # green
-            elif progress_percent >= 50:
-                progress_color = "#FFC107"  # amber
+            # --- session badge ---
+            session_badge = ""
+            if session == "LS":
+                session_badge = '<span style="background:#1f77b4;color:white;padding:2px 6px;border-radius:4px;">LS</span>'
+            elif session == "PC":
+                session_badge = '<span style="background:#ff7f0e;color:white;padding:2px 6px;border-radius:4px;">PC</span>'
+            elif session == "MC":
+                session_badge = '<span style="background:#2ca02c;color:white;padding:2px 6px;border-radius:4px;">MC</span>'
+
+            support_badge = ""
+            if support:
+                support_badge = '<span style="background:#d62728;color:white;padding:2px 6px;border-radius:4px;">YES</span>'
             else:
-                progress_color = "#F44336"  # red
+                support_badge = '<span style="background:#2ca02c;color:white;padding:2px 6px;border-radius:4px;">NO</span>'
 
-            progress_badge = f'<span style="background:{progress_color};color:white;padding:2px 6px;border-radius:4px;">{progress_percent}%</span>'
+            progress_color = "#d62728"
+            if progress >= 70:
+                progress_color = "#2ca02c"
+            elif progress >= 40:
+                progress_color = "#ff7f0e"
 
-            # 🔹 Final formatted output
-            results.append(
-                f"""
-                <div style="margin-bottom:6px;">
-                    <strong>{mentee}</strong><br>
-                    Track: {rec['track']} |
-                    Next: {rec['topic'].shortname if rec['topic'] else '-'} |
-                    Session: {session_badge} |
-                    Support: {support_badge} |
-                    Progress: {progress_badge}
-                </div>
-                """
+            progress_badge = f'<span style="background:{progress_color};color:white;padding:2px 6px;border-radius:4px;">{progress}%</span>'
+
+            mentee_name = str(
+                obj.items.filter(menteename_id=mentee_id).first().menteename
             )
 
-        return format_html("".join(results))
+            rows.append(f"""
+                <tr>
+                    <td><strong>{mentee_name}</strong></td>
+                    <td>{track or '-'}</td>
+                    <td>{topic.name if topic else '-'}</td>
+                    <td>{session_badge}</td>
+                    <td>{support_badge}</td>
+                    <td>{progress_badge}</td>
+                </tr>
+            """)
+
+        table = f"""
+            <table style="border-collapse:collapse;width:100%;">
+                <thead>
+                    <tr style="background:#f5f5f5;">
+                        <th style="padding:4px;border:1px solid #ddd;">Mentee</th>
+                        <th style="padding:4px;border:1px solid #ddd;">Track</th>
+                        <th style="padding:4px;border:1px solid #ddd;">Next Topic</th>
+                        <th style="padding:4px;border:1px solid #ddd;">Session</th>
+                        <th style="padding:4px;border:1px solid #ddd;">Support</th>
+                        <th style="padding:4px;border:1px solid #ddd;">Progress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(rows)}
+                </tbody>
+            </table>
+        """
+
+        return mark_safe(table)
+
+    ai_recommendation.short_description = "AI Recommendation"
 
     # -------------------------------------------------
     # CLINICAL MENTOR DISPLAY

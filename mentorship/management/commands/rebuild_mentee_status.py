@@ -1,50 +1,71 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from mentorship.models import (
-    Mentorshipdetails,
-    MenteeTopicStatus,
-)
+from mentorship.models import Mentorshipdetails, MenteeTopicStatus
 
 class Command(BaseCommand):
-    help = "Rebuild MenteeTopicStatus from Mentorshipdetails (Production Safe)"
+    help = "Rebuild MenteeTopicStatus from Mentorshipdetails (Chronological + Safe)"
 
     @transaction.atomic
     def handle(self, *args, **kwargs):
 
         self.stdout.write(self.style.WARNING("Rebuilding MenteeTopicStatus..."))
 
-        # Clear existing state safely
+        # Clear safely
         MenteeTopicStatus.objects.all().delete()
 
+        # Group details by (mentee, topic)
         details = (
             Mentorshipdetails.objects
-            .select_related("menteename", "topicname")
-            .order_by("id")
+            .select_related("menteename", "topicname", "mentorshipvistfk")
+            .filter(menteename__isnull=False, topicname__isnull=False)
+            .order_by(
+                "menteename_id",
+                "topicname_id",
+                "mentorshipvistfk__visitdate",
+                "id"
+            )
         )
+
+        current_key = None
+        consecutive_ls = 0
+        final_status = "NOT_STARTED"
 
         for d in details:
 
-            if not d.menteename or not d.topicname:
-                continue
+            key = (d.menteename_id, d.topicname_id)
 
-            status, created = MenteeTopicStatus.objects.get_or_create(
-                mentee=d.menteename,
-                topic=d.topicname,
-                defaults={
-                    "status": "IN_PROGRESS",
-                    "consecutive_ls": 0,
-                }
-            )
+            # When topic changes, save previous state
+            if current_key and key != current_key:
+                mentee_id, topic_id = current_key
+                MenteeTopicStatus.objects.create(
+                    mentee_id=mentee_id,
+                    topic_id=topic_id,
+                    status=final_status,
+                    consecutive_ls=consecutive_ls if final_status != "COMPETENT" else 0,
+                )
+                consecutive_ls = 0
+                final_status = "NOT_STARTED"
 
-            # ---- Learning Session ----
+            current_key = key
+
+            # ---- LS logic ----
             if d.ls:
-                status.consecutive_ls += 1
+                consecutive_ls += 1
+                final_status = "IN_PROGRESS"
 
-            # ---- Competency ----
+            # ---- Competency logic ----
             if d.pc or d.mc:
-                status.status = "COMPETENT"
-                status.consecutive_ls = 0
+                final_status = "COMPETENT"
+                consecutive_ls = 0
 
-            status.save()
+        # Save last group
+        if current_key:
+            mentee_id, topic_id = current_key
+            MenteeTopicStatus.objects.create(
+                mentee_id=mentee_id,
+                topic_id=topic_id,
+                status=final_status,
+                consecutive_ls=consecutive_ls if final_status != "COMPETENT" else 0,
+            )
 
         self.stdout.write(self.style.SUCCESS("Rebuild complete."))

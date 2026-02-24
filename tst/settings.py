@@ -107,7 +107,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         # Use environment variables if they exist (Render),
         # otherwise fall back to your current local settings.
-        'NAME': os.environ.get('DB_NAME', 'iqocdb_20260222'),
+        'NAME': os.environ.get('DB_NAME', 'iqocdb_20260223'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', '12345'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
