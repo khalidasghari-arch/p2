@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+
+<h2>Facility Mentorship Dashboard</h2>
+<div style="display:flex; gap:40px; margin-bottom:20px;">
+  <div>
+    <h3>Total Active Mentees</h3>
+    <h1>{{ total_mentees }}</h1>
+  </div>
+  <div>
+    <h3>Overall Competency</h3>
+    <h1>{{ competency_rate }}%</h1>
+  </div>
+</div>
+<hr>
+
+<h3>Thematic Area Performance</h3>
+
+<table class="admin-table" style="width:100%; border-collapse:collapse;">
+  <tr>
+    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Thematic Area</th>
+    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Completion %</th>
+  </tr>
+
+  {% for th in thematic_stats %}
+  <tr>
+    <td style="padding:8px; border-bottom:1px solid #eee;">{{ th.name }}</td>
+    <td style="padding:8px; border-bottom:1px solid #eee;">
+    <div style="background:#eee; width:260px; border-radius:6px;">
+    <div style="background:#2ca02c; height:18px; border-radius:6px;"
+       data-width="{{ th.percent }}">
+    </div>
+    </div>
+    <span>{{ th.percent }}%</span>
+    </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<hr>
+
+<h3>Escalation Needed (LS ≥ 4 and NOT competent)</h3>
+
+<table class="admin-table" style="width:100%; border-collapse:collapse;">
+  <tr>
+    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Mentee</th>
+    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Topic</th>
+    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">LS Count</th>
+  </tr>
+
+  {% for e in escalations %}
+  <tr style="background:#ffefef;">
+    <td style="padding:8px; border-bottom:1px solid #eee;">{{ e.mentee }}</td>
+    <td style="padding:8px; border-bottom:1px solid #eee;">{{ e.topic }}</td>
+    <td style="padding:8px; border-bottom:1px solid #eee;">{{ e.consecutive_ls }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="3" style="padding:12px;">No escalation cases.</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}

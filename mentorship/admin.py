@@ -11,6 +11,8 @@ from django.utils.html import format_html
 from mentorship.recommender import recommend_next_for_staff_in_facility
 from django.db.models import Count, Q
 from django.utils.safestring import mark_safe
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 
 # =====================================================
 # Helpers
@@ -193,9 +195,84 @@ class MentorshipdetailsInline(admin.TabularInline):
 # - NO custom URLs
 # - NO JS Media
 # =====================================================
+class MentorshipDashboardMixin:
+    """
+    Adds: /admin/mentorship/mentorshipvisit/facility-dashboard/<facility_id>/
+    """
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "facility-dashboard/<int:facility_id>/",
+                self.admin_site.admin_view(self.facility_dashboard_view),
+                name="facility_mentorship_dashboard",
+            ),
+        ]
+        return custom_urls + urls
+
+    def facility_dashboard_view(self, request, facility_id):
+        # Active mentees in this facility
+        mentees = Staff.objects.filter(hfname_id=facility_id, status=True)
+        total_mentees = mentees.count()
+
+        # All topics
+        total_topics = MentorshipTopics.objects.count()
+
+        # All statuses for mentees in this facility
+        statuses = MenteeTopicStatus.objects.filter(mentee__hfname_id=facility_id)
+
+        competent_count = statuses.filter(status="COMPETENT").count()
+
+        # Overall competency rate (competent topics / total possible)
+        competency_rate = 0
+        total_possible = total_mentees * total_topics
+        if total_possible > 0:
+            competency_rate = round((competent_count / total_possible) * 100)
+
+        # Thematic breakdown
+        thematic_stats = []
+        thematics = ThematicMentorship.objects.all().order_by("name")
+
+        for th in thematics:
+            topic_count = MentorshipTopics.objects.filter(thematicfk=th).count()
+
+            competent = MenteeTopicStatus.objects.filter(
+                mentee__hfname_id=facility_id,
+                topic__thematicfk=th,
+                status="COMPETENT",
+            ).count()
+
+            total_possible_th = topic_count * total_mentees
+            percent = 0
+            if total_possible_th > 0:
+                percent = round((competent / total_possible_th) * 100)
+
+            thematic_stats.append({
+                "name": th.name,
+                "percent": percent,
+            })
+
+        # Escalation: LS >= 4 and not competent
+        escalations = MenteeTopicStatus.objects.filter(
+            mentee__hfname_id=facility_id,
+            consecutive_ls__gte=4
+        ).exclude(status="COMPETENT").select_related("mentee", "topic")
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="Facility Mentorship Dashboard",
+            total_mentees=total_mentees,
+            competency_rate=competency_rate,
+            thematic_stats=thematic_stats,
+            escalations=escalations,
+            facility_id=facility_id,
+        )
+        return TemplateResponse(request, "admin/mentorship/facility_dashboard.html", context)
+    
 @admin.register(Mentorshipvisit)
-class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, 
+MentorshipDashboardMixin, admin.ModelAdmin):
 
     list_display = (
         "facilityfk",
@@ -208,8 +285,7 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "pc_count",
         "mc_count",
         "mentees_count",
-        #"thematics_count",
-        #"topics_count",
+        "facility_dashboard_btn",
         "ai_recommendation",
         "id",
     )
@@ -219,6 +295,11 @@ class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     readonly_fields = ("ai_recommendation",)
     list_per_page = 10
     inlines = (MentorshipdetailsInline,)
+
+    @admin.display(description="Dashboard")
+    def facility_dashboard_btn(self, obj):
+        url = reverse("admin:facility_mentorship_dashboard", args=[obj.facilityfk_id])
+        return format_html('<a class="button" href="{}">Dashboard</a>', url)
 
     # -------------------------------------------------
     # AI RECOMMENDATION (FIXED)
