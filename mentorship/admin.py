@@ -274,48 +274,46 @@ class MentorshipDashboardMixin:
         )
         return TemplateResponse(request, "admin/mentorship/facility_dashboard.html", context)
     
-# =====================================================
-# EXCEL EXPORT FOR MENTORSHIP
-# =====================================================
-
-def _autosize(ws, max_width=50):
-    for column in ws.columns:
-        max_length = 0
-        col_letter = get_column_letter(column[0].column)
-
-        for cell in column:
-            try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
-
-        ws.column_dimensions[col_letter].width = min(max_length + 2, max_width)
-
-
-def export_selected_mentorship(modeladmin, request, queryset):
+def export_selected_mentorship_large(modeladmin, request, queryset):
     """
-    Export selected mentorship visits + details into Excel.
+    Large-data safe export:
+    - Uses write_only workbook (low memory)
+    - Uses values_list + iterator (fast, avoids ORM object explosion)
+    - Exports one row per Mentorshipdetails line (recommended)
     """
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Mentorship Data"
+    # If user selects visits: export details under those visits
+    visit_ids = list(queryset.values_list("id", flat=True))
+    if not visit_ids:
+        # No selection: return empty file (or you can raise message)
+        wb = Workbook(write_only=True)
+        ws = wb.create_sheet("Mentorship")
+        ws.append(["No data selected"])
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="mentorship_empty.xlsx"'
+        wb.save(response)
+        return response
+
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet(title="Mentorship")
 
     headers = [
+        "Detail ID",
         "Visit ID",
-        "Province",
-        "District",
-        "Facility",
-        "Facility Code",
         "Visit Date",
         "Visit Round",
         "Start Time",
         "End Time",
+        "Province",
+        "District",
+        "Facility",
+        "Facility Code",
         "Mentee",
-        "Position",
-        "Gender",
-        "Tazkira",
+        "Mentee Position",
+        "Mentee Gender",
+        "Mentee Tazkira",
         "Mentor",
         "Thematic Area",
         "Topic Code",
@@ -323,72 +321,121 @@ def export_selected_mentorship(modeladmin, request, queryset):
         "PC",
         "MC",
     ]
-
     ws.append(headers)
 
-    # Optimize queries
-    visits = queryset.select_related(
-        "facilityfk__districtfk__provincefk"
-    ).prefetch_related(
-        "items__menteename__position",
-        "items__mentor",
-        "items__thematicname",
-        "items__topicname",
+    # IMPORTANT:
+    # Replace these field names ONLY if your hiva models use different names:
+    # districtfk, provincefk, hfcode
+    rows = (
+        Mentorshipdetails.objects
+        .filter(mentorshipvistfk_id__in=visit_ids)
+        .values_list(
+            "id",
+            "mentorshipvistfk_id",
+            "mentorshipvistfk__visitdate",
+            "mentorshipvistfk__visitround",
+            "mentorshipvistfk__mentorshipstarttime",
+            "mentorshipvistfk__mentorshipendtime",
+
+            "mentorshipvistfk__facilityfk__districtfk__provincefk__name",
+            "mentorshipvistfk__facilityfk__districtfk__name",
+            "mentorshipvistfk__facilityfk__name",
+            "mentorshipvistfk__facilityfk__hfcode",
+
+            "menteename__firstname",
+            "menteename__lastname",
+            "menteename__position__name",
+            "menteename__gender",
+            "menteename__tazkiranumber",
+
+            # mentor is hiva.Assessor. In your admin you used mentor__name,
+            # but if your Assessor uses full_name or firstname/lastname, adjust here.
+            "mentor__name",
+
+            "thematicname__name",
+            "topicname__name",
+
+            "ls",
+            "pc",
+            "mc",
+        )
+        .iterator(chunk_size=2000)
     )
 
-    for visit in visits:
+    for r in rows:
+        (
+            detail_id,
+            visit_id,
+            visit_date,
+            visit_round,
+            start_time,
+            end_time,
 
-        facility = visit.facilityfk
-        district = getattr(facility, "districtfk", None)
-        province = getattr(district, "provincefk", None)
+            province_name,
+            district_name,
+            facility_name,
+            facility_code,
 
-        for detail in visit.items.all():
+            mentee_first,
+            mentee_last,
+            mentee_position,
+            mentee_gender,
+            mentee_tazkira,
 
-            mentee = detail.menteename
-            mentor = detail.mentor
-            thematic = detail.thematicname
-            topic = detail.topicname
+            mentor_name,
+            thematic_name,
+            topic_code,
 
-            ws.append([
-                visit.id,
-                province.name if province else "",
-                district.name if district else "",
-                facility.name if facility else "",
-                getattr(facility, "hfcode", ""),
-                visit.visitdate,
-                visit.visitround,
-                visit.mentorshipstarttime,
-                visit.mentorshipendtime,
-                str(mentee) if mentee else "",
-                str(mentee.position) if mentee and mentee.position else "",
-                "Female" if mentee and mentee.gender else "Male" if mentee else "",
-                mentee.tazkiranumber if mentee else "",
-                getattr(mentor, "name", ""),
-                thematic.name if thematic else "",
-                topic.name if topic else "",
-                "YES" if detail.ls else "",
-                "YES" if detail.pc else "",
-                "YES" if detail.mc else "",
-            ])
+            ls,
+            pc,
+            mc,
+        ) = r
 
-    _autosize(ws)
+        mentee_full = " ".join([x for x in [mentee_first, mentee_last] if x]) if (mentee_first or mentee_last) else ""
+        gender_txt = ""
+        if mentee_gender is True:
+            gender_txt = "Female"
+        elif mentee_gender is False:
+            gender_txt = "Male"
+
+        ws.append([
+            detail_id,
+            visit_id,
+            visit_date,
+            visit_round,
+            start_time,
+            end_time,
+            province_name or "",
+            district_name or "",
+            facility_name or "",
+            facility_code or "",
+            mentee_full,
+            mentee_position or "",
+            gender_txt,
+            mentee_tazkira or "",
+            mentor_name or "",
+            thematic_name or "",
+            topic_code or "",
+            1 if ls else 0,
+            1 if pc else 0,
+            1 if mc else 0,
+        ])
 
     filename = f"mentorship_export_{timezone.now().strftime('%Y%m%d_%H%M')}.xlsx"
-
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     wb.save(response)
-
     return response
 
-export_selected_mentorship.short_description = "Export selected mentorship visits to Excel"
+
+export_selected_mentorship_large.short_description = "Export selected visits (Large/fast Excel)"
 
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, 
 MentorshipDashboardMixin, admin.ModelAdmin):
-    actions = [export_selected_mentorship]
+    actions = [export_selected_mentorship_large]
     list_display = (
         "facilityfk",
         "visitdate",
