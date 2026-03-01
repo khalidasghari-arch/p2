@@ -13,6 +13,10 @@ from django.db.models import Count, Q
 from django.utils.safestring import mark_safe
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.http import HttpResponse
+from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 # =====================================================
 # Helpers
@@ -270,10 +274,121 @@ class MentorshipDashboardMixin:
         )
         return TemplateResponse(request, "admin/mentorship/facility_dashboard.html", context)
     
+# =====================================================
+# EXCEL EXPORT FOR MENTORSHIP
+# =====================================================
+
+def _autosize(ws, max_width=50):
+    for column in ws.columns:
+        max_length = 0
+        col_letter = get_column_letter(column[0].column)
+
+        for cell in column:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+
+        ws.column_dimensions[col_letter].width = min(max_length + 2, max_width)
+
+
+def export_selected_mentorship(modeladmin, request, queryset):
+    """
+    Export selected mentorship visits + details into Excel.
+    """
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Mentorship Data"
+
+    headers = [
+        "Visit ID",
+        "Province",
+        "District",
+        "Facility",
+        "Facility Code",
+        "Visit Date",
+        "Visit Round",
+        "Start Time",
+        "End Time",
+        "Mentee",
+        "Position",
+        "Gender",
+        "Tazkira",
+        "Mentor",
+        "Thematic Area",
+        "Topic Code",
+        "LS",
+        "PC",
+        "MC",
+    ]
+
+    ws.append(headers)
+
+    # Optimize queries
+    visits = queryset.select_related(
+        "facilityfk__districtfk__provincefk"
+    ).prefetch_related(
+        "items__menteename__position",
+        "items__mentor",
+        "items__thematicname",
+        "items__topicname",
+    )
+
+    for visit in visits:
+
+        facility = visit.facilityfk
+        district = getattr(facility, "districtfk", None)
+        province = getattr(district, "provincefk", None)
+
+        for detail in visit.items.all():
+
+            mentee = detail.menteename
+            mentor = detail.mentor
+            thematic = detail.thematicname
+            topic = detail.topicname
+
+            ws.append([
+                visit.id,
+                province.name if province else "",
+                district.name if district else "",
+                facility.name if facility else "",
+                getattr(facility, "hfcode", ""),
+                visit.visitdate,
+                visit.visitround,
+                visit.mentorshipstarttime,
+                visit.mentorshipendtime,
+                str(mentee) if mentee else "",
+                str(mentee.position) if mentee and mentee.position else "",
+                "Female" if mentee and mentee.gender else "Male" if mentee else "",
+                mentee.tazkiranumber if mentee else "",
+                getattr(mentor, "name", ""),
+                thematic.name if thematic else "",
+                topic.name if topic else "",
+                "YES" if detail.ls else "",
+                "YES" if detail.pc else "",
+                "YES" if detail.mc else "",
+            ])
+
+    _autosize(ws)
+
+    filename = f"mentorship_export_{timezone.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+
+    return response
+
+export_selected_mentorship.short_description = "Export selected mentorship visits to Excel"
+
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, 
 MentorshipDashboardMixin, admin.ModelAdmin):
-
+    actions = [export_selected_mentorship]
     list_display = (
         "facilityfk",
         "visitdate",
