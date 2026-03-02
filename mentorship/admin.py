@@ -124,6 +124,12 @@ class StaffAdmin(admin.ModelAdmin):
 # (REMOVED: topic-thematic matching rule)
 # =====================================================
 
+# =====================================================
+# INLINE FORM VALIDATION:
+# - Required fields
+# - Only ONE of LS/PC/MC
+# =====================================================
+
 class MentorshipdetailsInlineForm(forms.ModelForm):
     class Meta:
         model = Mentorshipdetails
@@ -132,11 +138,28 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
 
+        # Required FK fields
+        required_fields = [
+            "mentor",
+            "menteename",
+            "thematicname",
+            "topicname",
+        ]
+
+        for field in required_fields:
+            if not cleaned.get(field):
+                self.add_error(field, "This field is required.")
+
+        # Only ONE of LS / PC / MC
         selected = sum([
             bool(cleaned.get("ls")),
             bool(cleaned.get("pc")),
             bool(cleaned.get("mc")),
         ])
+
+        if selected == 0:
+            raise ValidationError("Select ONE of (LS, PC, MC).")
+
         if selected > 1:
             raise ValidationError("Only ONE of (LS, PC, MC) can be selected.")
 
@@ -152,7 +175,9 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 class MentorshipdetailsInline(admin.TabularInline):
     model = Mentorshipdetails
     form = MentorshipdetailsInlineForm
-    extra = 0
+    extra = 1
+    min_num = 1
+    validate_min = True
 
     def get_extra(self, request, obj=None, **kwargs):
         return 1 if obj else 0
@@ -199,6 +224,7 @@ class MentorshipdetailsInline(admin.TabularInline):
 # - NO custom URLs
 # - NO JS Media
 # =====================================================
+
 class MentorshipDashboardMixin:
     """
     Adds: /admin/mentorship/mentorshipvisit/facility-dashboard/<facility_id>/
@@ -336,12 +362,10 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
             "mentorshipvistfk__visitround",
             "mentorshipvistfk__mentorshipstarttime",
             "mentorshipvistfk__mentorshipendtime",
-
             "mentorshipvistfk__facilityfk__districtfk__provincefk__name",
             "mentorshipvistfk__facilityfk__districtfk__name",
             "mentorshipvistfk__facilityfk__name",
             "mentorshipvistfk__facilityfk__hfcode",
-
             "menteename__firstname",
             "menteename__lastname",
             "menteename__position__name",
@@ -429,12 +453,45 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
     wb.save(response)
     return response
 
-
 export_selected_mentorship_large.short_description = "Export selected visits (Large/fast Excel)"
 
+# =====================================================
+# VISIT ADMIN FORM (ADMIN-LEVEL REQUIRED VALIDATION)
+# =====================================================
+
+class MentorshipVisitAdminForm(forms.ModelForm):
+    class Meta:
+        model = Mentorshipvisit
+        fields = "__all__"
+
+    def clean(self):
+        cleaned = super().clean()
+
+        required_fields = [
+            "facilityfk",
+            "visitdate",
+            "visitround",
+            "mentorshipstarttime",
+            "mentorshipendtime",
+        ]
+
+        for field in required_fields:
+            if not cleaned.get(field):
+                self.add_error(field, "This field is required.")
+
+        # Validate time logic
+        start = cleaned.get("mentorshipstarttime")
+        end = cleaned.get("mentorshipendtime")
+
+        if start and end and end <= start:
+            raise ValidationError("End time must be after start time.")
+
+        return cleaned
+    
 @admin.register(Mentorshipvisit)
 class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, 
 MentorshipDashboardMixin, admin.ModelAdmin):
+    form = MentorshipVisitAdminForm   # 👈 ADD THIS
     actions = [export_selected_mentorship_large]
     list_display = (
         "facilityfk",
@@ -673,3 +730,10 @@ MentorshipDashboardMixin, admin.ModelAdmin):
             ).order_by("name") if prov_id else Facility.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        obj = form.instance
+        if not obj.items.exists():
+            raise ValidationError("At least one mentorship detail is required.")
