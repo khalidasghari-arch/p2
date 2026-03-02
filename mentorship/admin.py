@@ -216,6 +216,9 @@ class MentorshipdetailsInline(admin.TabularInline):
             )
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    class Media:
+            js = ("admin/js/topic_filter.js",)
 
 # =====================================================
 # MENTORSHIP VISIT ADMIN:
@@ -731,9 +734,26 @@ MentorshipDashboardMixin, admin.ModelAdmin):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
+    # -------------------------------------------------
+    # DYNAMIC TOPIC FILTER ENDPOINT
+    # -------------------------------------------------
 
-        obj = form.instance
-        if not obj.items.exists():
-            raise ValidationError("At least one mentorship detail is required.")
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "get-topics/<int:thematic_id>/",
+                self.admin_site.admin_view(self.get_topics_by_thematic),
+                name="mentorship_get_topics",
+            ),
+        ]
+        return custom_urls + urls
+
+    def get_topics_by_thematic(self, request, thematic_id):
+        from django.http import JsonResponse
+
+        topics = MentorshipTopics.objects.filter(
+            thematicfk_id=thematic_id
+        ).values("id", "name").order_by("name")
+
+        return JsonResponse(list(topics), safe=False)
