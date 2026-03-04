@@ -219,11 +219,9 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "aimfacilityname",
         "shamsiyear",
         "shamsimonth",
-        "period",
         "bl_progress",
         "gre_year",
         "gre_month",
-        "afiat_flag",
          # ANC Screening
         "anc_total_seen",
         "anc_bp_measured",
@@ -243,6 +241,7 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     list_filter = (DistrictFilter, AimpeeFacilityFilter)
     search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    list_per_page = 10
 
     @admin.display(description="Province")
     def get_province(self, obj):
@@ -270,11 +269,9 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "aimfacilityname",
         "shamsiyear",
         "shamsimonth",
-        "period",
         "bl_progress",
         "gre_year",
         "gre_month",
-        "afiat_flag",
         "total_births",
         "births_vaginal",
         "births_csection",
@@ -286,6 +283,7 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     list_filter = (DistrictFilter, AimpeeFacilityFilter)
     search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    list_per_page = 10
 
     @admin.display(description="Province")
     def get_province(self, obj):
@@ -461,7 +459,6 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "aimfacilityname",
         "shamsiyear",
         "shamsimonth",
-        "period",
         "total_cs",
         "total_deliv",
         "cs_rate",
@@ -1422,7 +1419,7 @@ class MyModelqicdataset(admin.ModelAdmin):
         "qicmenteelogbookupdatedvalue", "qicmetwithhealthshuravalue",
         "qichealthshurainvolvedincorractvalue", "qictotalquestions", "image",
     ]
-    list_filter = ["qicfacility", QICMonthFilter, "qicfacility__districtfk__provincefk"]
+    list_filter = ["qicfacility__districtfk__provincefk", "qicfacility", QICMonthFilter]
     list_per_page = 20
 
 class Trainingdetails(admin.StackedInline):
