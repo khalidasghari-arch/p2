@@ -398,7 +398,204 @@ class Training(models.Model):
 
     def __str__(self):
         return self.firstname
-    
+
+class FacilityStaff(models.Model):
+
+    GENDER_CHOICES = [
+        ("Female", "Female"),
+        ("Male", "Male"),
+    ]
+
+    first_name = models.CharField(
+        max_length=100,
+        verbose_name="First Name"
+    )
+
+    last_name = models.CharField(
+        max_length=100,
+        verbose_name="Last Name"
+    )
+
+    father_name = models.CharField(
+        max_length=100,
+        verbose_name="Father_name"
+    )
+
+    gender = models.CharField(
+        max_length=7,
+        choices=GENDER_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name="Gender"
+    )
+
+    email = models.EmailField(
+        blank=True,
+        null=True,
+        verbose_name="Email"
+    )
+
+    phone = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name="Phone"
+    )
+
+    position = models.ForeignKey(
+        "hiva.Position",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="facility_staff_positions",
+        verbose_name="Position"
+    )
+
+    facility = models.ForeignKey(
+        "hiva.Facility",
+        on_delete=models.PROTECT,
+        related_name="facility_staffs",
+        verbose_name="Facility"
+    )
+
+    code = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="Staff Code"
+    )
+
+    tazkira_number = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="Tazkira Number"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Is Active"
+    )
+
+    year_of_birth = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Year of Birth"
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True, editable=False,
+        related_name="created_%(class)s_records"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Created At"
+    )
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True, editable=False,
+        related_name="updated_%(class)s_records"
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Updated At"
+    )
+
+    record_status = models.IntegerField(
+        default=1, editable=False,
+        verbose_name="Record Status"
+    )
+
+    verified = models.BooleanField(
+        default=True, editable=False,
+        verbose_name="Verified"
+    )
+
+    class Meta:
+        #abstract = True
+        db_table = "FacilityStaffs"
+        verbose_name = "FACILITY STAFF"
+        verbose_name_plural = "FACILITY STAFF"
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+class QICommittee(models.Model):
+
+    ROLE_CHOICES = [
+        ("Head", "Head"),
+        ("Member", "Member"),
+        ("Focalpoint", "Focalpoint"),
+        ("Other", "Other"),
+    ]
+
+    facility = models.ForeignKey(
+        "hiva.Facility",
+        on_delete=models.PROTECT,
+        related_name="qi_committees",
+        verbose_name="HEALTH FACILITY"
+    )
+
+    facility_staff = models.ForeignKey(
+        "hiva.FacilityStaff",
+        on_delete=models.PROTECT,
+        related_name="qi_committee_memberships",
+        verbose_name="HEALTH FACILITY STAFF"
+    )
+
+    role = models.CharField(
+        max_length=50,
+        choices=ROLE_CHOICES,
+        verbose_name="Committee Role"
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True, editable=False,
+        related_name="created_%(class)s_records"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Created At"
+    )
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True, editable=False,
+        related_name="updated_%(class)s_records"
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Updated At"
+    )
+
+    record_status = models.IntegerField(
+        default=1, editable=False,
+        verbose_name="Record Status"
+    )
+
+    class Meta:
+        db_table = "QICommittee"
+        verbose_name = "QIC MEMBERS"
+        verbose_name_plural = "QIC MEMBERS"
+
+    def __str__(self):
+        return f"{self.facility} - {self.facility_staff} ({self.role})"
+
 class Qicdataset(models.Model):
     qiccommdate = models.DateField()
     qicfacility = models.ForeignKey(Facility, on_delete=models.CASCADE)

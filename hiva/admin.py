@@ -57,6 +57,7 @@ from .models import (
     Participationtype,
     Position,
     WhoChildbirthChecklistMonthly,
+    QICommittee, FacilityStaff,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -187,6 +188,23 @@ class DistrictFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(aimfacilityname__districtfk__id=self.value())
         return queryset
+    
+class WhodistrictFilter(admin.SimpleListFilter):
+    title = "District"
+    parameter_name = "district"
+
+    def lookups(self, request, model_admin):
+        qs = model_admin.get_queryset(request)
+        districts = qs.values_list(
+            "facility_name__districtfk__id",
+            "facility_name__districtfk__name",
+        ).distinct()
+        return [(did, dname) for did, dname in districts if did is not None]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(facility_name__districtfk__id=self.value())
+        return queryset
 
 class AimpeeFacilityFilter(admin.SimpleListFilter):
     title = "Facility"
@@ -205,7 +223,25 @@ class AimpeeFacilityFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(aimfacilityname__id=self.value())
         return queryset
+    
+class FacilityFilter(admin.SimpleListFilter):
+    title = "Facility"
+    parameter_name = "facility"
 
+    def lookups(self, request, model_admin):
+        qs = model_admin.get_queryset(request)
+        prov_id = request.GET.get("province")
+        if prov_id:
+            qs = qs.filter(facilityname__districtfk__provincefk__id=prov_id)
+
+        facilities = qs.values_list("facility_name__id", "facility_name__name").distinct().order_by("facility_name__name")
+        return [(fid, fname) for fid, fname in facilities if fid]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(facilityname__id=self.value())
+        return queryset
+    
 # ============================================================
 # AIM-PEE
 # ============================================================
@@ -300,17 +336,6 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-
-    """
-    Same admin logic pattern as your SafeSurgery admin:
-    - province-restricted facility dropdown
-    - list_display includes key ratios
-    - save_model computes ratios (stored fields OR assigns to attrs if you later add DB fields)
-    """
-
-    # If you have a dedicated form, use it here
-    # form = WhoChildbirthChecklistMonthlyAdminForm
-
     list_display = (
         "id",
         "get_province",
@@ -359,9 +384,39 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
     )
 
     # Keep your existing filters pattern (replace if you have a different facility filter)
-    #list_filter = (DistrictFilter, AimpeeFacilityFilter)
-    search_fields = ("facility_name",)
+    list_filter = (WhodistrictFilter, FacilityFilter)
+    search_fields = ("facility__name", "facility_name__hfcode")
+    list_per_page = 10
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "facility_name",
+            "facility_name__districtfk",
+            "facility_name__districtfk__provincefk",
+        )
+
+    @admin.display(description="Province")
+    def get_province(self, obj):
+        if obj.facility_name and obj.facility_name.districtfk and obj.facility_name.districtfk.provincefk:
+            return obj.facility_name.districtfk.provincefk.name
+        return "-"
+
+    def province_filter_kwargs(self, request):
+        prov = user_province(request)
+        if not prov:
+            return {}
+        return {"facility_name__districtfk__provincefk_id": prov.id}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "facility_name" and not request.user.is_superuser:
+            prov = user_province(request)
+            kwargs["queryset"] = (
+                Facility.objects.filter(districtfk__provincefk=prov)
+                if prov else Facility.objects.none()
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
     # -------------------------
     # Shared percent helper
     # -------------------------
@@ -388,7 +443,6 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         setattr(obj, "sec2_completeness_ratio_calc", self._pct(obj.sec2_complete, obj.files_selected))
         setattr(obj, "sec3_completeness_ratio_calc", self._pct(obj.sec3_complete, obj.files_selected))
         setattr(obj, "sec4_completeness_ratio_calc", self._pct(obj.sec4_complete, obj.files_selected))
-
         setattr(obj, "partograph_use_ge4_rate_calc", self._pct(obj.partograph_started_ge4, obj.cervix_ge4_admission))
         setattr(obj, "newborn_supplies_5_ratio_calc", self._pct(obj.newborn_supplies_5_available, obj.total_deliveries))
         setattr(obj, "bf_s2s_first_hour_ratio_calc", self._pct(obj.bf_s2s_first_hour, obj.total_deliveries))
@@ -396,40 +450,6 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         setattr(obj, "all4_sections_completeness_ratio_calc", self._pct(obj.all4_sections_complete, obj.files_selected))
 
         super().save_model(request, obj, form, change)
-
-    # -------------------------
-    # Province display + rules
-    # -------------------------
-    @admin.display(description="Province")
-    def get_province(self, obj):
-        """
-        If you change facility_name to a FK (recommended), then replace this with:
-        return obj.facility.districtfk.provincefk.name
-        """
-        # If facility_name is just text, province cannot be derived.
-        # Return "-" to avoid crashing admin.
-        return "-"
-
-    def province_filter_kwargs(self, request):
-        """
-        If you change facility_name to a FK, update filter kwargs accordingly.
-        """
-        # Example (when you change to facility FK):
-        # return {"facility__districtfk__provincefk": user_province(request)}
-        return {}
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """
-        Only applies if you replace facility_name with a FK field like 'facility'.
-        Keep the same logic style as your SafeSurgery admin.
-        """
-        # Example (when you change to facility FK):
-        # if db_field.name == "facility" and not request.user.is_superuser:
-        #     prov = user_province(request)
-        #     kwargs["queryset"] = (
-        #         Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
-        #     )
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     # -------------------------
     # Extra guard in admin UI
@@ -1408,9 +1428,69 @@ class QICMonthFilter(admin.SimpleListFilter):
             year, month = self.value().split('-')
             return queryset.filter(qiccommdate__year=year, qiccommdate__month=month)
         return queryset
+    
+@admin.register(QICommittee)
+class QICommitteeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "facility",
+        "facility_staff",
+        "role",
+        "created_at",
+        "record_status",
+    )
+
+    list_filter = ("role", "facility")
+    search_fields = ("facility__name", "facility_staff__name")
+
+    def province_filter_kwargs(self, request):
+        return {"facility__districtfk__provincefk": user_province(request)}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "facility" and not request.user.is_superuser:
+            prov = user_province(request)
+            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+@admin.register(FacilityStaff)
+class FacilityStaffAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "first_name",
+        "last_name",
+        "father_name",
+        "facility",
+        "position",
+        "gender",
+        "phone",
+        "is_active",
+        "verified",
+    )
+
+    list_filter = (
+        "facility",
+        "position",
+        "gender",
+        "verified",
+    )
+
+    search_fields = (
+        "first_name",
+        "last_name",
+        "phone",
+        "tazkira_number",
+    )
+
+    def province_filter_kwargs(self, request):
+        return {"facility__districtfk__provincefk": user_province(request)}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "facility" and not request.user.is_superuser:
+            prov = user_province(request)
+            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 @admin.register(Qicdataset)
-class MyModelqicdataset(admin.ModelAdmin):
+class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
         "id", "qiccommdate", "qicfacility", "qicdatacollector", "qicimplementor",
         "qictoravailvalue", "qiclastmonthvalue", "qicmmavialvalue", "qicmmsignedvalue",
@@ -1421,6 +1501,15 @@ class MyModelqicdataset(admin.ModelAdmin):
     ]
     list_filter = ["qicfacility__districtfk__provincefk", "qicfacility", QICMonthFilter]
     list_per_page = 20
+
+    def province_filter_kwargs(self, request):
+        return {"qicfacility__districtfk__provincefk": user_province(request)}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "faciqicfacility" and not request.user.is_superuser:
+            prov = user_province(request)
+            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 class Trainingdetails(admin.StackedInline):
     model = Training
@@ -1458,6 +1547,13 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             prov = user_province(request)
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+class AutoUserAdminMixin:
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
 
 # ============================================================
 # User admin with Profile inline
