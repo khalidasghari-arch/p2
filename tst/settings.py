@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'survey',
     'hmis',
     'rest_framework',
+    'indicator'
 ]
 
 REST_FRAMEWORK = {
