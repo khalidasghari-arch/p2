@@ -14,9 +14,9 @@ urlpatterns = [
     #path("dashboard/", include("dashboard.urls")),
     #path("", include("hiva.urls")),   # if you have app urls
     # path("", include("survey.urls")), # if you have
-    path('dashboard/', include('product.urls')),  # Add this line
+    path('api/product/', include('product.api.urls')),  # Add this line
     # path('hiva/', include('hiva.urls')),  # Add this line
-    path('', include('authentication.urls')),  # Add this line
+    # path('', include('authentication.urls')),  # Add this line
     # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
 ]
 
