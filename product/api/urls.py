@@ -4,6 +4,7 @@ from .views import (
     DashboardSummaryAPI,
     DashboardTrendsAPI,
     DashboardByProvinceAPI,
+    TopFacilitiesAPI,
 )
 
 urlpatterns = [
@@ -11,4 +12,5 @@ urlpatterns = [
     path("dashboard/summary/", DashboardSummaryAPI.as_view(), name="dashboard-summary"),
     path("dashboard/trends/", DashboardTrendsAPI.as_view(), name="dashboard-trends"),
     path("dashboard/by-province/", DashboardByProvinceAPI.as_view(), name="dashboard-by-province"),
+    path("dashboard/top-facilities/", TopFacilitiesAPI.as_view(), name="dashboard-top-facilities"),
 ]

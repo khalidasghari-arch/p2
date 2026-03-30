@@ -4,6 +4,7 @@ from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from mentorship.models import Mentorshipvisit
 from hiva.models import Province, District, Facility
+from django.core.cache import cache
 
 class DashboardFilterOptionsAPI(APIView):
     def get(self, request):
@@ -45,7 +46,6 @@ class DashboardFilterOptionsAPI(APIView):
             "years": years,
         })
 
-
 class DashboardSummaryAPI(APIView):
     def get(self, request):
         province_id = request.GET.get("province")
@@ -83,7 +83,6 @@ class DashboardSummaryAPI(APIView):
             "total_facilities": total_facilities,
             "reporting_rate": reporting_rate,
         })
-
 
 class DashboardTrendsAPI(APIView):
     def get(self, request):
@@ -125,9 +124,9 @@ class DashboardTrendsAPI(APIView):
 
 class DashboardByProvinceAPI(APIView):
     def get(self, request):
-        district_id = request.GET.get("district")
-        facility_id = request.GET.get("facility")
-        year = request.GET.get("year")
+        district_id = request.GET.get("district") or None
+        facility_id = request.GET.get("facility") or None
+        year = request.GET.get("year") or None
 
         qs = Mentorshipvisit.objects.all()
 
@@ -155,3 +154,52 @@ class DashboardByProvinceAPI(APIView):
         ]
 
         return Response(data)
+    
+class TopFacilitiesAPI(APIView):
+    def get(self, request):
+        province = request.GET.get("province")
+        district = request.GET.get("district")
+        year = request.GET.get("year")
+
+        cache_key = f"top_facilities:{province}:{district}:{year}"
+        data = cache.get(cache_key)
+
+        if data:
+            return Response(data)
+
+        queryset = Mentorshipvisit.objects.select_related(
+            "facilityfk__districtfk__provincefk"
+        )
+
+        if province:
+            queryset = queryset.filter(
+                facilityfk__districtfk__provincefk__name=province
+            )
+
+        if district:
+            queryset = queryset.filter(
+                facilityfk__districtfk__name=district
+            )
+
+        if year:
+            queryset = queryset.filter(
+                visitdate__year=year
+            )
+
+        data = (
+            queryset.values("facilityfk__name")
+            .annotate(total_visits=Count("id"))
+            .order_by("-total_visits")[:10]
+        )
+
+        result = [
+            {
+                "facility": item["facilityfk__name"],
+                "visits": item["total_visits"],
+            }
+            for item in data
+        ]
+
+        cache.set(cache_key, result, 300)
+
+        return Response(result)

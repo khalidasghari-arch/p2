@@ -11,6 +11,7 @@ import {
 import KpiCard from '../components/common/KpiCard';
 import TrendChart from '../components/common/TrendChart';
 import ProvinceBarChart from '../components/common/ProvinceBarChart';
+import TopFacilitiesChart from '../components/common/TopFacilitiesChart';
 import DashboardFilters from '../components/common/DashboardFilters';
 
 import {
@@ -18,6 +19,7 @@ import {
   useDashboardSummary,
   useDashboardTrends,
   useDashboardByProvince,
+  useTopFacilities,
 } from '../hooks/useDashboardData';
 
 export default function DashboardPage() {
@@ -30,6 +32,7 @@ export default function DashboardPage() {
   const summaryQuery = useDashboardSummary(province, district, facility, year);
   const trendsQuery = useDashboardTrends(province, district, facility, year);
   const provinceQuery = useDashboardByProvince(province, district, facility, year);
+  const topFacilitiesQuery = useTopFacilities(province, district, facility, year);
 
   useEffect(() => {
     setDistrict('');
@@ -44,13 +47,15 @@ export default function DashboardPage() {
     filtersQuery.isLoading ||
     summaryQuery.isLoading ||
     trendsQuery.isLoading ||
-    provinceQuery.isLoading;
+    provinceQuery.isLoading ||
+    topFacilitiesQuery.isLoading;
 
   const isError =
     filtersQuery.isError ||
     summaryQuery.isError ||
     trendsQuery.isError ||
-    provinceQuery.isError;
+    provinceQuery.isError ||
+    topFacilitiesQuery.isError;
 
   if (isLoading) {
     return (
@@ -68,6 +73,7 @@ export default function DashboardPage() {
   const summary = summaryQuery.data;
   const trends = trendsQuery.data;
   const provinceData = provinceQuery.data;
+  const topFacilities = topFacilitiesQuery.data;
 
   return (
     <Stack spacing={3}>
@@ -140,6 +146,8 @@ export default function DashboardPage() {
         <TrendChart data={trends} />
         <ProvinceBarChart data={provinceData} />
       </Box>
+
+      <TopFacilitiesChart data={topFacilities} />
     </Stack>
   );
 }

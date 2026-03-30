@@ -27,3 +27,10 @@ export const getDashboardByProvince = async (province, district, facility, year)
   });
   return res.data;
 };
+
+export const getTopFacilities = async (province, district, facility, year) => {
+  const res = await client.get('/product/dashboard/top-facilities/', {
+    params: { province, district, facility, year },
+  });
+  return res.data;
+};

@@ -4,6 +4,7 @@ import {
   getDashboardSummary,
   getDashboardTrends,
   getDashboardByProvince,
+  getTopFacilities,
 } from '../api/dashboardApi';
 
 export function useDashboardFilters(province, district) {
@@ -31,5 +32,12 @@ export function useDashboardByProvince(province, district, facility, year) {
   return useQuery({
     queryKey: ['dashboard-by-province', province, district, facility, year],
     queryFn: () => getDashboardByProvince(province, district, facility, year),
+  });
+}
+
+export function useTopFacilities(province, district, facility, year) {
+  return useQuery({
+    queryKey: ['dashboard-top-facilities', province, district, facility, year],
+    queryFn: () => getTopFacilities(province, district, facility, year),
   });
 }
