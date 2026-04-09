@@ -114,4 +114,29 @@ class HMISMonthlySummary(models.Model):
 
     def __str__(self):
         return f"{self.hf} {self.periodcode}"
+    
+class IndicatorMetadata(models.Model):
+    indicator_code = models.CharField(max_length=100)
+    indicator_name = models.CharField(max_length=255)
+    indicator_short_name = models.CharField(max_length=255, blank=True, null=True)
+    indicator_group = models.CharField(max_length=100, blank=True, null=True)
+    indicator_domain = models.CharField(max_length=100, blank=True, null=True)
+    indicator_description = models.TextField(blank=True, null=True)
+    numerator_definition = models.TextField(blank=True, null=True)
+    denominator_definition = models.TextField(blank=True, null=True)
+    unit_of_measure = models.CharField(max_length=50, blank=True, null=True)
+    reporting_level = models.CharField(max_length=100, blank=True, null=True)
+    data_source = models.CharField(max_length=50, default="HMIS")
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hmis_indicator_metadata"
+        unique_together = ("indicator_code", "indicator_name")
+        ordering = ["sort_order", "indicator_name"]
+
+    def __str__(self):
+        return f"{self.indicator_name} ({self.indicator_code})"
 

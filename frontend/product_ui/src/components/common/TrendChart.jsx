@@ -15,7 +15,7 @@ export default function TrendChart({ data }) {
   return (
     <Paper sx={{ p: 3, height: '100%' }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>
-        Monthly Trend
+        Mentorship Monthly Trend
       </Typography>
 
       <Box sx={{ width: '100%', height: 420 }}>

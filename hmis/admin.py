@@ -1,8 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.utils.html import format_html
-from hmis.models import HMISMonthlySummary
-from hmis.models import HMISRawUpload, HMISFact
+from hmis.models import HMISRawUpload, HMISFact, IndicatorMetadata, HMISMonthlySummary
 from hmis.services.pipeline import run_import
 
 @admin.register(HMISRawUpload)
@@ -87,3 +86,18 @@ class HMISMonthlySummaryAdmin(admin.ModelAdmin):
     def period_readable(self, obj):
         p = obj.periodcode or ""
         return f"{p[:4]}-{p[4:6]}" if len(p) == 6 else p
+
+@admin.register(IndicatorMetadata)
+class IndicatorMetadataAdmin(admin.ModelAdmin):
+    list_display = (
+        "indicator_code",
+        "indicator_name",
+        "indicator_short_name",
+        "indicator_group",
+        "indicator_domain",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("indicator_group", "indicator_domain", "is_active")
+    search_fields = ("indicator_code", "indicator_name", "indicator_short_name")
+    ordering = ("sort_order", "indicator_name")
