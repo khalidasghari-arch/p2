@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'hmis',
     'rest_framework',
     'indicator',
+    'gancgpnc',
 ]
 
 REST_FRAMEWORK = {
