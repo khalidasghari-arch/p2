@@ -48,7 +48,7 @@ class Gancenrollment(models.Model):
     enrollmentid= models.IntegerField(blank=True, null=True, verbose_name="Register Number")
     name = models.CharField(max_length=255, verbose_name="Name")
     fathername = models.CharField(max_length=255, verbose_name="Father Name")
-    contactnumber = models.CharField(max_length=255, verbose_name="Contract Number")
+    contactnumber = models.CharField(max_length=255, verbose_name="Contact Number")
     address = models.CharField(max_length=255, verbose_name="Address")
     education_level = models.CharField(max_length=255, verbose_name="Education Level", blank=True, null=True)
     gravida = models.PositiveIntegerField(verbose_name="Gravida", blank=True, null=True)

@@ -235,18 +235,34 @@ class GancenrollmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "get_province",
         "enrollmentid",
         "contactnumber",
+        "education_level",
+        "gravida",
         "gafirstanc",
         "edd",
+        "age_years",
+        "transfer_in",
     )
-    list_filter = (EnrollmentProvinceFilter, "cohortname", "edd")
+
+    list_filter = (
+        EnrollmentProvinceFilter,
+        "cohortname",
+        "edd",
+        "education_level",
+        "transfer_in",
+    )
+
     search_fields = (
         "name",
         "fathername",
         "contactnumber",
         "address",
+        "education_level",
         "cohortname__cohortname",
         "cohortname__facility__name",
+        "cohortname__facility__district__name",
+        "cohortname__facility__district__province__name",
     )
+
     list_per_page = 20
 
     fieldsets = (
@@ -258,12 +274,26 @@ class GancenrollmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "fathername",
                 "contactnumber",
                 "address",
+            )
+        }),
+        ("Pregnancy Information", {
+            "fields": (
+                "gravida",
                 "gafirstanc",
                 "edd",
+                "age_years",
+                "transfer_in",
+            )
+        }),
+        ("Background Information", {
+            "fields": (
+                "education_level",
             )
         }),
         ("Other Information", {
-            "fields": ("remarks",)
+            "fields": (
+                "remarks",
+            )
         }),
     )
 
