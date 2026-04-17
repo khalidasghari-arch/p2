@@ -633,10 +633,148 @@ MONTH_CHOICES = [
         ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
     ]
 YCHOICES = [(2026, "2026"), (2026, "2026"), (2027, "2027")]
-    
+
+MATERNAL_DEATH_CAUSE_CATEGORY_CHOICES = [
+    ("hemorrhage", "Obstetric hemorrhage"),
+    ("hypertensive", "Hypertensive disorders in pregnancy"),
+    ("sepsis", "Sepsis / infection"),
+    ("obstructed_rupture", "Obstructed labor / uterine rupture"),
+    ("abortion", "Abortion-related complications"),
+    ("embolism", "Embolism"),
+    ("indirect", "Indirect medical cause"),
+    ("unknown", "Unknown / under investigation"),
+    ("other", "Other specified cause"),
+]
+
+MATERNAL_DEATH_SPECIFIC_CAUSE_CHOICES = [
+    ("pph", "Postpartum hemorrhage (PPH)"),
+    ("uterine_atony", "Uterine atony"),
+    ("abruptio_placenta", "Abruptio placenta"),
+    ("placenta_previa", "Placenta previa"),
+    ("retained_placenta", "Retained placenta"),
+    ("other_hemorrhage", "Other obstetric hemorrhage"),
+
+    ("severe_pre_eclampsia", "Severe pre-eclampsia"),
+    ("eclampsia", "Eclampsia"),
+    ("hellp", "HELLP syndrome"),
+    ("other_hypertensive", "Other hypertensive disorder"),
+
+    ("puerperal_sepsis", "Puerperal sepsis"),
+    ("post_abortion_sepsis", "Post-abortion sepsis"),
+    ("postoperative_infection", "Postoperative infection"),
+    ("other_sepsis", "Other maternal infection"),
+
+    ("obstructed_labor", "Obstructed labor"),
+    ("prolonged_labor", "Prolonged labor"),
+    ("uterine_rupture", "Uterine rupture"),
+    ("other_obstructed_rupture", "Other labor-related complication"),
+
+    ("abortion_hemorrhage", "Hemorrhage after abortion"),
+    ("unsafe_abortion", "Unsafe abortion complication"),
+    ("incomplete_abortion", "Incomplete abortion complication"),
+    ("other_abortion", "Other abortion-related complication"),
+
+    ("pulmonary_embolism", "Pulmonary embolism"),
+    ("amniotic_fluid_embolism", "Amniotic fluid embolism"),
+    ("other_embolism", "Other embolism"),
+
+    ("severe_anemia", "Severe anemia"),
+    ("cardiac_disease", "Cardiac disease"),
+    ("respiratory_disease", "Respiratory disease / COPD"),
+    ("liver_disease_pregnancy", "Liver disease in pregnancy"),
+    ("renal_disease", "Renal disease"),
+    ("malaria", "Malaria"),
+    ("tuberculosis", "Tuberculosis"),
+    ("diabetes", "Diabetes complication"),
+    ("other_indirect", "Other indirect medical cause"),
+
+    ("unknown_under_investigation", "Unknown / under investigation"),
+    ("other_specified", "Other specified cause"),
+]
+
+MATERNAL_DEATH_CONTRIBUTING_FACTOR_CHOICES = [
+    ("delay_seek_care", "Delay in deciding to seek care"),
+    ("delay_reach_facility", "Delay in reaching facility"),
+    ("delay_receive_care", "Delay in receiving appropriate care"),
+    ("lack_medicines", "Lack of essential medicines"),
+    ("lack_blood", "Lack of blood / transfusion service"),
+    ("lack_equipment", "Lack of equipment / supplies"),
+    ("referral_delay", "Referral delay"),
+    ("staffing_gap", "Human resource / staffing gap"),
+    ("monitoring_gap", "Monitoring / early detection gap"),
+    ("clinical_management_gap", "Gap in timely clinical management"),
+    ("documentation_gap", "Documentation gap"),
+    ("community_awareness_gap", "Community awareness gap"),
+    ("other_system_gap", "Other system gap"),
+]
+
+MATERNAL_DEATH_PREVENTABILITY_CHOICES = [
+    ("likely_preventable", "Likely preventable"),
+    ("possibly_preventable", "Possibly preventable"),
+    ("not_preventable", "Not preventable"),
+    ("unclear", "Unclear"),
+]
+
+MATERNAL_DEATH_TIMING_CHOICES = [
+    ("during_pregnancy", "During pregnancy"),
+    ("during_labor", "During labor / childbirth"),
+    ("within_24h_postpartum", "Within 24 hours postpartum"),
+    ("day_2_7_postpartum", "2–7 days postpartum"),
+    ("day_8_42_postpartum", "8–42 days postpartum"),
+    ("unknown", "Unknown"),
+]
+
+MATERNAL_DEATH_PLACE_CHOICES = [
+    ("home", "At home"),
+    ("in_transit", "On the way / in transit"),
+    ("facility", "Health facility"),
+    ("referral_facility", "Referral facility"),
+    ("unknown", "Unknown"),
+]
+
+SPECIFIC_CAUSE_CATEGORY_MAP = {
+    "pph": "hemorrhage",
+    "uterine_atony": "hemorrhage",
+    "abruptio_placenta": "hemorrhage",
+    "placenta_previa": "hemorrhage",
+    "retained_placenta": "hemorrhage",
+    "other_hemorrhage": "hemorrhage",
+    "severe_pre_eclampsia": "hypertensive",
+    "eclampsia": "hypertensive",
+    "hellp": "hypertensive",
+    "other_hypertensive": "hypertensive",
+    "puerperal_sepsis": "sepsis",
+    "post_abortion_sepsis": "sepsis",
+    "postoperative_infection": "sepsis",
+    "other_sepsis": "sepsis",
+    "obstructed_labor": "obstructed_rupture",
+    "prolonged_labor": "obstructed_rupture",
+    "uterine_rupture": "obstructed_rupture",
+    "other_obstructed_rupture": "obstructed_rupture",
+    "abortion_hemorrhage": "abortion",
+    "unsafe_abortion": "abortion",
+    "incomplete_abortion": "abortion",
+    "other_abortion": "abortion",
+    "pulmonary_embolism": "embolism",
+    "amniotic_fluid_embolism": "embolism",
+    "other_embolism": "embolism",
+    "severe_anemia": "indirect",
+    "cardiac_disease": "indirect",
+    "respiratory_disease": "indirect",
+    "liver_disease_pregnancy": "indirect",
+    "renal_disease": "indirect",
+    "malaria": "indirect",
+    "tuberculosis": "indirect",
+    "diabetes": "indirect",
+    "other_indirect": "indirect",
+    "unknown_under_investigation": "unknown",
+    "other_specified": "other",
+}
+
 class Mpdsr(models.Model):
-    yearmpdsr = models.IntegerField(default=2026, choices=YCHOICES, verbose_name="Year")
-    # IMPORTANT: default must match the *value* in MONTH_CHOICES (e.g. "1"), not the label "January"
+    yearmpdsr = models.IntegerField(
+        default=2026, choices=YCHOICES, 
+        verbose_name="Year")
     monthmpdsr = models.CharField(
         max_length=2,
         choices=MONTH_CHOICES,
@@ -650,24 +788,85 @@ class Mpdsr(models.Model):
         verbose_name="Health Facility Name"
     )
 
-    n_mpdsrcommittee = models.IntegerField(default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
-    n_maternaldeathreported = models.IntegerField(default=0, verbose_name="Number of Maternal Death reported")
-    n_maternaldeathreviewed = models.IntegerField(default=0, verbose_name="Number of Maternal Death reviewed")
-    causeofmaternaldeaths_m = models.TextField(max_length=200, verbose_name="Cause of maternal deaths")
+    n_mpdsrcommittee = models.IntegerField(
+        default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
+    n_maternaldeathreported = models.IntegerField(
+        default=0, verbose_name="Number of Maternal Death reported")
+    n_maternaldeathreviewed = models.IntegerField(
+        default=0, verbose_name="Number of Maternal Death reviewed")
+    causeofmaternaldeaths_m = models.TextField(
+        max_length=200, blank=True, null=True, verbose_name="Cause of maternal deaths")
+    nastillbirthreportedreported = models.IntegerField(
+        default=0, verbose_name="Number of antepartum Still birth reported")
+    nastillbirthreportedreviewed = models.IntegerField(
+        default=0, verbose_name="Number of antepartum Still birth reviewed")
+    nistillbirthreported = models.IntegerField(
+        default=0, verbose_name="Number of intrapartum Still birth reported")
+    nistillbirthreviewed = models.IntegerField(
+        default=0, verbose_name="Number of intrapartum Still birth reviewed")
+    nndeath_afteralivebirth_reported = models.IntegerField(
+        default=0, verbose_name="Number of Neonatal Death (after a live birth) reported")
+    nndeath_afteralivebirth_reviewed = models.IntegerField(
+        default=0, verbose_name="Number of neonatal Death (after a live birth) reviewed")
+    causeofneonataldeath_n = models.TextField(
+        max_length=200, blank=True, null=True, verbose_name="Cause of neonatal death")
+    interventionperformed = models.TextField(
+        max_length=200, blank=True, null=True, verbose_name="Intervention performed")
+    recfromMPDSRcommittee = models.TextField(
+        max_length=500, blank=True, null=True, verbose_name="Recommendation from MPDSR committee")
+    remarks = models.TextField(
+        max_length=500, blank=True, null=True)
 
-    nastillbirthreportedreported = models.IntegerField(default=0, verbose_name="Number of antepartum Still birth reported")
-    nastillbirthreportedreviewed = models.IntegerField(default=0, verbose_name="Number of antepartum Still birth reviewed")
+    maternal_death_cause_category = models.CharField(
+        max_length=40,
+        choices=MATERNAL_DEATH_CAUSE_CATEGORY_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Maternal death cause category",
+        help_text="Structured category for new records. Leave blank if no maternal death reported."
+    )
 
-    nistillbirthreported = models.IntegerField(default=0, verbose_name="Number of intrapartum Still birth reported")
-    nistillbirthreviewed = models.IntegerField(default=0, verbose_name="Number of intrapartum Still birth reviewed")
+    maternal_death_specific_cause = models.CharField(
+        max_length=50,
+        choices=MATERNAL_DEATH_SPECIFIC_CAUSE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Maternal death specific cause",
+        help_text="Specific structured cause for new records. Leave blank if no maternal death reported."
+    )
 
-    nndeath_afteralivebirth_reported = models.IntegerField(default=0, verbose_name="Number of Neonatal Death (after a live birth) reported")
-    nndeath_afteralivebirth_reviewed = models.IntegerField(default=0, verbose_name="Number of neonatal Death (after a live birth) reviewed")
+    maternal_death_contributing_factor = models.CharField(
+        max_length=50,
+        choices=MATERNAL_DEATH_CONTRIBUTING_FACTOR_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Maternal death contributing factor",
+        help_text="Main contributing factor identified through no-blame MPDSR review."
+    )
 
-    causeofneonataldeath_n = models.TextField(max_length=200, verbose_name="Cause of neonatal death")
-    interventionperformed = models.TextField(max_length=200, verbose_name="Intervention performed")
-    recfromMPDSRcommittee = models.TextField(max_length=500, verbose_name="Recommendation from MPDSR committee")
-    remarks = models.TextField(max_length=500, blank=True, null=True)
+    maternal_death_preventability = models.CharField(
+        max_length=30,
+        choices=MATERNAL_DEATH_PREVENTABILITY_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Maternal death preventability"
+    )
+
+    maternal_death_timing = models.CharField(
+        max_length=30,
+        choices=MATERNAL_DEATH_TIMING_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Timing of maternal death"
+    )
+
+    maternal_death_place = models.CharField(
+        max_length=30,
+        choices=MATERNAL_DEATH_PLACE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name="Place of maternal death"
+    )
 
     # ✅ many users can create records; uniqueness is not by user
     created_by = models.ForeignKey(
@@ -678,8 +877,12 @@ class Mpdsr(models.Model):
         related_name="mpdsr_created",
         editable=False
     )
-    created_at = models.DateTimeField(auto_now_add=True, 
-        null=True, blank=True,editable=False)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True,
+        editable=False
+    )
 
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -703,12 +906,77 @@ class Mpdsr(models.Model):
         ]
 
     def clean(self):
-        # Optional: data integrity checks
+        super().clean()
+
+        # Existing integrity checks
         if self.n_maternaldeathreviewed > self.n_maternaldeathreported:
-            raise ValidationError({"n_maternaldeathreviewed": "Reviewed cannot be greater than reported."})
+            raise ValidationError({
+                "n_maternaldeathreviewed": "Reviewed cannot be greater than reported."
+            })
 
         if self.nndeath_afteralivebirth_reviewed > self.nndeath_afteralivebirth_reported:
-            raise ValidationError({"nndeath_afteralivebirth_reviewed": "Reviewed cannot be greater than reported."})
+            raise ValidationError({
+                "nndeath_afteralivebirth_reviewed": "Reviewed cannot be greater than reported."
+            })
+
+        if self.nastillbirthreportedreviewed > self.nastillbirthreportedreported:
+            raise ValidationError({
+                "nastillbirthreportedreviewed": "Reviewed cannot be greater than reported."
+            })
+
+        if self.nistillbirthreviewed > self.nistillbirthreported:
+            raise ValidationError({
+                "nistillbirthreviewed": "Reviewed cannot be greater than reported."
+            })
+
+        deaths_reported = self.n_maternaldeathreported or 0
+
+        # New structured-field validation
+        # These checks only apply to the NEW optional fields and do not disturb legacy data
+        structured_fields_used = any([
+            self.maternal_death_cause_category,
+            self.maternal_death_specific_cause,
+            self.maternal_death_contributing_factor,
+            self.maternal_death_preventability,
+            self.maternal_death_timing,
+            self.maternal_death_place,
+        ])
+
+        if deaths_reported == 0 and structured_fields_used:
+            errors = {}
+            if self.maternal_death_cause_category:
+                errors["maternal_death_cause_category"] = "Leave blank when no maternal death is reported."
+            if self.maternal_death_specific_cause:
+                errors["maternal_death_specific_cause"] = "Leave blank when no maternal death is reported."
+            if self.maternal_death_contributing_factor:
+                errors["maternal_death_contributing_factor"] = "Leave blank when no maternal death is reported."
+            if self.maternal_death_preventability:
+                errors["maternal_death_preventability"] = "Leave blank when no maternal death is reported."
+            if self.maternal_death_timing:
+                errors["maternal_death_timing"] = "Leave blank when no maternal death is reported."
+            if self.maternal_death_place:
+                errors["maternal_death_place"] = "Leave blank when no maternal death is reported."
+            if errors:
+                raise ValidationError(errors)
+
+        if deaths_reported > 0:
+            # Only require category/specific cause if user starts using the new structured fields
+            if self.maternal_death_specific_cause and not self.maternal_death_cause_category:
+                raise ValidationError({
+                    "maternal_death_cause_category": "Please select the maternal death cause category."
+                })
+
+            if self.maternal_death_cause_category and not self.maternal_death_specific_cause:
+                raise ValidationError({
+                    "maternal_death_specific_cause": "Please select the maternal death specific cause."
+                })
+
+        if self.maternal_death_specific_cause and self.maternal_death_cause_category:
+            expected_category = SPECIFIC_CAUSE_CATEGORY_MAP.get(self.maternal_death_specific_cause)
+            if expected_category and expected_category != self.maternal_death_cause_category:
+                raise ValidationError({
+                    "maternal_death_specific_cause": "Selected specific cause does not match the selected category."
+                })
 
     def __str__(self):
         return f"{self.facilityname} - {self.yearmpdsr}/{int(self.monthmpdsr):02d}"

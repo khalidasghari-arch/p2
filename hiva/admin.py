@@ -1530,14 +1530,107 @@ class MpdsrProvinceFilter(ProvinceFromFacilityFilter):
 @admin.register(Mpdsr)
 class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
-        "id", "yearmpdsr", "monthmpdsr", "facilityname",
-        "n_mpdsrcommittee", "n_maternaldeathreported", "n_maternaldeathreviewed",
-        "causeofmaternaldeaths_m", "nastillbirthreportedreported",
-        "nastillbirthreportedreviewed", "nistillbirthreported", "nistillbirthreviewed",
-        "nndeath_afteralivebirth_reported", "nndeath_afteralivebirth_reviewed",
+        "id",
+        "yearmpdsr",
+        "monthmpdsr",
+        "facilityname",
+        "n_mpdsrcommittee",
+        "n_maternaldeathreported",
+        "n_maternaldeathreviewed",
+        #"causeofmaternaldeaths_m",
+        "maternal_death_cause_category_display",
+        "maternal_death_specific_cause_display",
+        "nastillbirthreportedreported",
+        "nastillbirthreportedreviewed",
+        "nistillbirthreported",
+        "nistillbirthreviewed",
+        "nndeath_afteralivebirth_reported",
+        "nndeath_afteralivebirth_reviewed",
     ]
-    list_filter = [MpdsrProvinceFilter, "monthmpdsr"]
-    search_fields = ("facilityname__name", "facilityname__districtfk__name", "facilityname__districtfk__provincefk__name")
+
+    list_filter = [
+        MpdsrProvinceFilter,
+        "monthmpdsr",
+        "maternal_death_cause_category",
+        "maternal_death_specific_cause",
+        "maternal_death_contributing_factor",
+        "maternal_death_preventability",
+        "maternal_death_timing",
+        "maternal_death_place",
+    ]
+
+    search_fields = (
+        "facilityname__name",
+        "facilityname__districtfk__name",
+        "facilityname__districtfk__provincefk__name",
+        "causeofmaternaldeaths_m",
+        "causeofneonataldeath_n",
+        "interventionperformed",
+        "recfromMPDSRcommittee",
+    )
+
+    fieldsets = (
+        ("Basic Information", {
+            "fields": (
+                "yearmpdsr",
+                "monthmpdsr",
+                "facilityname",
+            )
+        }),
+        ("MPDSR Committee", {
+            "fields": (
+                "n_mpdsrcommittee",
+            )
+        }),
+        ("Maternal Death Summary", {
+            "fields": (
+                "n_maternaldeathreported",
+                "n_maternaldeathreviewed",
+            )
+        }),
+        ("Structured Maternal Death Review (For New Records)", {
+            "fields": (
+                "maternal_death_cause_category",
+                "maternal_death_specific_cause",
+                "maternal_death_contributing_factor",
+                "maternal_death_preventability",
+                "maternal_death_timing",
+                "maternal_death_place",
+            ),
+            "description": (
+                "Use these structured dropdown fields for new maternal death records. "
+                "Leave them blank when no maternal death is reported."
+            ),
+        }),
+        ("Legacy Maternal Death Cause", {
+            "fields": (
+                "causeofmaternaldeaths_m",
+            ),
+            "description": (
+                "Existing free-text field kept for historical data. "
+                "For new records, prefer the structured maternal death review fields above."
+            ),
+            "classes": ("collapse",),
+        }),
+        ("Stillbirth and Neonatal Death Summary", {
+            "fields": (
+                "nastillbirthreportedreported",
+                "nastillbirthreportedreviewed",
+                "nistillbirthreported",
+                "nistillbirthreviewed",
+                "nndeath_afteralivebirth_reported",
+                "nndeath_afteralivebirth_reviewed",
+                "causeofneonataldeath_n",
+            )
+        }),
+        ("Response and Recommendations", {
+            "fields": (
+                "interventionperformed",
+                "recfromMPDSRcommittee",
+                "remarks",
+            )
+        }),
+    )
 
     def province_filter_kwargs(self, request):
         return {"facilityname__districtfk__provincefk": user_province(request)}
@@ -1545,8 +1638,18 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "facilityname" and not request.user.is_superuser:
             prov = user_province(request)
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+            kwargs["queryset"] = Facility.objects.filter(
+                districtfk__provincefk=prov
+            ) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description="Maternal cause category")
+    def maternal_death_cause_category_display(self, obj):
+        return obj.get_maternal_death_cause_category_display() if obj.maternal_death_cause_category else "-"
+
+    @admin.display(description="Maternal specific cause")
+    def maternal_death_specific_cause_display(self, obj):
+        return obj.get_maternal_death_specific_cause_display() if obj.maternal_death_specific_cause else "-"
     
 class AutoUserAdminMixin:
     def save_model(self, request, obj, form, change):
@@ -1572,10 +1675,6 @@ class UserAdmin(BaseUserAdmin):
 
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
-
-# ============================================================
-# Register remaining simple models
-# ============================================================
 admin.site.register(Score)
 admin.site.register(Criteria)
 admin.site.register(Section)
