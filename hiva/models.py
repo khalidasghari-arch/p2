@@ -597,35 +597,198 @@ class QICommittee(models.Model):
         return f"{self.facility} - {self.facility_staff} ({self.role})"
 
 class Qicdataset(models.Model):
-    qiccommdate = models.DateField()
-    qicfacility = models.ForeignKey(Facility, on_delete=models.CASCADE)
-    qicdatacollector = models.ForeignKey(Assessor, on_delete=models.CASCADE)
-    qicimplementor = models.ForeignKey(Implementor, on_delete=models.CASCADE, blank=True, null=True)
-    qictoravailvalue = models.IntegerField(default=0, verbose_name="1. Are the Terms of Reference (TOR) of QI focal point and QI committee available at HF?")
-    qiclastmonthvalue = models.IntegerField(default=0, verbose_name="2. Was the QI committee’s meeting conducted in last month?")
-    qicmmavialvalue = models.IntegerField(default=0, verbose_name="3. Are the meeting minutes of QI committee’s last month’s meeting available.")
-    qicmmsignedvalue = models.IntegerField(default=0, verbose_name="4. Did the participants of the QI committee sign the meeting minutes of last month meeting?")
-    qicmmdatausevalue = models.IntegerField(default=0, verbose_name="5. Were data use discussed in the last month QI committee’s meeting? Please refer to the meeting minutes of last month")
-    qichqiptollavailvalue = models.IntegerField(default=0, verbose_name="6. Is a copy of the Harmonized Quality Improvement Program (HQIP) tool available and accessible at the HF? ")
-    qicpipavailvalue = models.IntegerField(default=0, verbose_name="7. Is a Performance Improvement Plan (PIP available at the HF?")
-    qicpipupdatedvalue = models.IntegerField(default=0, verbose_name="8. Has the PIP been updated in last month QI committee’s meeting? Write number of completed corrective actions")
-    qicngoinvolvedvalue = models.IntegerField(default=0, verbose_name="9. Has the NGO been involved in the corrective actions completed in last month?")
-    qicpeertopeeravailvalue = models.IntegerField(default=0, verbose_name="10. Have peer to peer learning sessions been conducted within the health facility during the last month? i.e. learning sessions conducted by QI focal point or QI committee members for the HF staff")
-    qicmenteelogbookavialvalue = models.IntegerField(default=0, verbose_name="11. Is the mentee logbook available in the HF?")
-    qicmenteelogbookupdatedvalue = models.IntegerField(default=0, verbose_name="12. Has the mentee logbook been updated with the learning sessions conducted in last month and signed by the mentors of the HF?")
-    qicmetwithhealthshuravalue = models.IntegerField(default=0, verbose_name="13. Has the QI committee met the HF Shura-e-Sihie in last month? Please refer to the related meeting minutes")
-    qichealthshurainvolvedincorractvalue = models.IntegerField(default=0, verbose_name="14. Has the HF Shura-e-Sihie been involved in the completion of the corrective actions in last month?")
-    qictotalquestions = models.IntegerField(default=0)
+    qiccommdate = models.DateField(verbose_name="Date")
+    qicfacility = models.ForeignKey(
+        "Facility",
+        on_delete=models.CASCADE,
+        verbose_name="Facility"
+    )
+    qicdatacollector = models.ForeignKey(
+        "Assessor",
+        on_delete=models.CASCADE
+    )
+    qicimplementor = models.ForeignKey(
+        "Implementor",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True
+    )
+
+    # =========================
+    # Legacy integer fields
+    # =========================
+    qictoravailvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 1. Are the Terms of Reference (TOR) of QI focal point and QI committee available at HF?"
+    )
+    qiclastmonthvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 2. Was the QI committee’s meeting conducted in last month?"
+    )
+    qicmmavialvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 3. Are the meeting minutes of QI committee’s last month’s meeting available."
+    )
+    qicmmsignedvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 4. Did the participants of the QI committee sign the meeting minutes of last month meeting?"
+    )
+    qicmmdatausevalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 5. Were data use discussed in the last month QI committee’s meeting?"
+    )
+    qichqiptollavailvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 6. Is a copy of the Harmonized Quality Improvement Program (HQIP) tool available and accessible at the HF?"
+    )
+    qicpipavailvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 7. Is a Performance Improvement Plan (PIP) available at the HF?"
+    )
+    qicpipupdatedvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 8. Has the PIP been updated in last month QI committee’s meeting?"
+    )
+    qicngoinvolvedvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 9. Has the NGO been involved in the corrective actions completed in last month?"
+    )
+    qicpeertopeeravailvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 10. Have peer to peer learning sessions been conducted within the health facility during the last month?"
+    )
+    qicmenteelogbookavialvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 11. Is the mentee logbook available in the HF?"
+    )
+    qicmenteelogbookupdatedvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 12. Has the mentee logbook been updated with the learning sessions conducted in last month and signed by the mentors of the HF?"
+    )
+    qicmetwithhealthshuravalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 13. Has the QI committee met the HF Shura-e-Sihie in last month?"
+    )
+    qichealthshurainvolvedincorractvalue = models.IntegerField(
+        default=0,
+        verbose_name="Legacy - 14. Has the HF Shura-e-Sihie been involved in the completion of the corrective actions in last month?"
+    )
+
+    # =========================
+    # New boolean fields
+    # =========================
+    qictoravail_bool = models.BooleanField(
+        default=False,
+        verbose_name="1. Are the Terms of Reference (TOR) of QI focal point and QI committee available at HF?"
+    )
+    qiclastmonth_bool = models.BooleanField(
+        default=False,
+        verbose_name="2. Was the QI committee’s meeting conducted in last month?"
+    )
+    qicmmavial_bool = models.BooleanField(
+        default=False,
+        verbose_name="3. Are the meeting minutes of QI committee’s last month’s meeting available?"
+    )
+    qicmmsigned_bool = models.BooleanField(
+        default=False,
+        verbose_name="4. Did the participants of the QI committee sign the meeting minutes of last month meeting?"
+    )
+    qicmmdatause_bool = models.BooleanField(
+        default=False,
+        verbose_name="5. Were data use discussed in the last month QI committee’s meeting? Please refer to the meeting minutes of last month"
+    )
+    qichqiptollavail_bool = models.BooleanField(
+        default=False,
+        verbose_name="6. Is a copy of the Harmonized Quality Improvement Program (HQIP) tool available and accessible at the HF?"
+    )
+    qicpipavail_bool = models.BooleanField(
+        default=False,
+        verbose_name="7. Is a Performance Improvement Plan (PIP) available at the HF?"
+    )
+    qicpipupdated_bool = models.BooleanField(
+        default=False,
+        verbose_name="8. Has the PIP been updated in last month QI committee’s meeting?"
+    )
+    qicngoinvolved_bool = models.BooleanField(
+        default=False,
+        verbose_name="9. Has the NGO been involved in the corrective actions completed in last month?"
+    )
+    qicpeertopeeravail_bool = models.BooleanField(
+        default=False,
+        verbose_name="10. Have peer to peer learning sessions been conducted within the health facility during the last month?"
+    )
+    qicmenteelogbookavial_bool = models.BooleanField(
+        default=False,
+        verbose_name="11. Is the mentee logbook available in the HF?"
+    )
+    qicmenteelogbookupdated_bool = models.BooleanField(
+        default=False,
+        verbose_name="12. Has the mentee logbook been updated with the learning sessions conducted in last month and signed by the mentors of the HF?"
+    )
+    qicmetwithhealthshura_bool = models.BooleanField(
+        default=False,
+        verbose_name="13. Has the QI committee met the HF Shura-e-Sihie in last month? Please refer to the related meeting minutes"
+    )
+    qichealthshurainvolvedincorract_bool = models.BooleanField(
+        default=False,
+        verbose_name="14. Has the HF Shura-e-Sihie been involved in the completion of the corrective actions in last month?"
+    )
+
+    # =========================
+    # Quality summary fields
+    # =========================
+    qictotalquestions = models.PositiveIntegerField(default=0)
+    qicpercentscore = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     remarks = models.TextField(blank=True, null=True)
-    image = models.FileField(upload_to='qic-minutes/', null=True, blank=True)  # Files are stored in the media directory by default
-    uploaded_at = models.DateField(auto_now_add=True, null=True, blank=True)
+
+    # =========================
+    # Suggested important committee fields
+    # =========================
+    qiccommittee_members_count = models.PositiveIntegerField(default=0, blank=True, null=True)
+    qicmeeting_quorum_met = models.BooleanField(default=False, verbose_name="Was quorum met in the last QIC meeting?")
+    qicaction_points_count = models.PositiveIntegerField(default=0, blank=True, null=True)
+    qicactions_completed_count = models.PositiveIntegerField(default=0, blank=True, null=True)
+    qicnext_meeting_date = models.DateField(blank=True, null=True)
+    qicfollowup_required = models.BooleanField(default=False)
+    qicvalidated_by_supervisor = models.BooleanField(default=False)
+    qicdata_quality_issue_note = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     class Meta:
         verbose_name = "QIC"
         verbose_name_plural = "QIC"
+        ordering = ["-qiccommdate", "qicfacility"]
 
     def __str__(self):
-        return f"{self.qicfacility} {self.qiccommdate}" 
+        return f"{self.qicfacility} {self.qiccommdate}"
+
+    def save(self, *args, **kwargs):
+        boolean_fields = [
+            self.qictoravail_bool,
+            self.qiclastmonth_bool,
+            self.qicmmavial_bool,
+            self.qicmmsigned_bool,
+            self.qicmmdatause_bool,
+            self.qichqiptollavail_bool,
+            self.qicpipavail_bool,
+            self.qicpipupdated_bool,
+            self.qicngoinvolved_bool,
+            self.qicpeertopeeravail_bool,
+            self.qicmenteelogbookavial_bool,
+            self.qicmenteelogbookupdated_bool,
+            self.qicmetwithhealthshura_bool,
+            self.qichealthshurainvolvedincorract_bool,
+        ]
+
+        total_yes = sum(1 for value in boolean_fields if value)
+        total_questions = len(boolean_fields)
+
+        self.qictotalquestions = total_yes
+        self.qicpercentscore = round((total_yes / total_questions) * 100, 2) if total_questions > 0 else 0
+
+        super().save(*args, **kwargs)
     
 MONTH_CHOICES = [
         ("1", "January"), ("2", "February"), ("3", "March"), ("4", "April"),

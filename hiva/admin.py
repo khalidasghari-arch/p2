@@ -1492,23 +1492,181 @@ class FacilityStaffAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 @admin.register(Qicdataset)
 class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
-        "id", "qiccommdate", "qicfacility", "qicdatacollector", "qicimplementor",
-        "qictoravailvalue", "qiclastmonthvalue", "qicmmavialvalue", "qicmmsignedvalue",
-        "qicmmdatausevalue", "qichqiptollavailvalue", "qicpipavailvalue", "qicpipupdatedvalue",
-        "qicngoinvolvedvalue", "qicpeertopeeravailvalue", "qicmenteelogbookavialvalue",
-        "qicmenteelogbookupdatedvalue", "qicmetwithhealthshuravalue",
-        "qichealthshurainvolvedincorractvalue", "qictotalquestions", "image",
+        "id",
+        "qiccommdate",
+        "qicfacility",
+        "qictotalquestions",
+        "qicpercentscore",
+        "qictoravail_bool",
+        "qiclastmonth_bool",
+        "qicmmavial_bool",
+        "qicmmsigned_bool",
+        "qicmmdatause_bool",
+        "qichqiptollavail_bool",
+        "qicpipavail_bool",
+        "qicpipupdated_bool",
+        "qicngoinvolved_bool",
+        "qicpeertopeeravail_bool",
+        "qicmenteelogbookavial_bool",
+        "qicmenteelogbookupdated_bool",
+        "qicmetwithhealthshura_bool",
+        "qichealthshurainvolvedincorract_bool",
     ]
-    list_filter = ["qicfacility__districtfk__provincefk", "qicfacility", QICMonthFilter]
+
+    list_filter = [
+        "qicfacility__districtfk__provincefk",
+        "qicfacility",
+        QICMonthFilter,
+        "qictoravail_bool",
+        "qiclastmonth_bool",
+        "qicmmavial_bool",
+        "qicmmsigned_bool",
+        "qicmmdatause_bool",
+        "qichqiptollavail_bool",
+        "qicpipavail_bool",
+        "qicpipupdated_bool",
+        "qicngoinvolved_bool",
+        "qicpeertopeeravail_bool",
+        "qicmenteelogbookavial_bool",
+        "qicmenteelogbookupdated_bool",
+        "qicmetwithhealthshura_bool",
+        "qichealthshurainvolvedincorract_bool",
+        "qicmeeting_quorum_met",
+        "qicfollowup_required",
+        "qicvalidated_by_supervisor",
+    ]
+
+    search_fields = [
+        "qicfacility__name",
+        "qicfacility__districtfk__name",
+        "qicfacility__districtfk__provincefk__name",
+        "remarks",
+        "qicdata_quality_issue_note",
+    ]
+
+    readonly_fields = [
+        "qictotalquestions",
+        "qicpercentscore",
+        "created_at",
+        "updated_at",
+
+        # legacy integer fields
+        "qictoravailvalue",
+        "qiclastmonthvalue",
+        "qicmmavialvalue",
+        "qicmmsignedvalue",
+        "qicmmdatausevalue",
+        "qichqiptollavailvalue",
+        "qicpipavailvalue",
+        "qicpipupdatedvalue",
+        "qicngoinvolvedvalue",
+        "qicpeertopeeravailvalue",
+        "qicmenteelogbookavialvalue",
+        "qicmenteelogbookupdatedvalue",
+        "qicmetwithhealthshuravalue",
+        "qichealthshurainvolvedincorractvalue",
+    ]
+
+    fieldsets = (
+        ("Basic Information", {
+            "fields": (
+                "qiccommdate",
+                "qicfacility",
+                "qicdatacollector",
+                "qicimplementor",
+            )
+        }),
+
+        ("Current Boolean Data Entry", {
+            "fields": (
+                "qictoravail_bool",
+                "qiclastmonth_bool",
+                "qicmmavial_bool",
+                "qicmmsigned_bool",
+                "qicmmdatause_bool",
+                "qichqiptollavail_bool",
+                "qicpipavail_bool",
+                "qicpipupdated_bool",
+                "qicngoinvolved_bool",
+                "qicpeertopeeravail_bool",
+                "qicmenteelogbookavial_bool",
+                "qicmenteelogbookupdated_bool",
+                "qicmetwithhealthshura_bool",
+                "qichealthshurainvolvedincorract_bool",
+            )
+        }),
+
+        ("QIC Score Summary", {
+            "fields": (
+                "qictotalquestions",
+                "qicpercentscore",
+            )
+        }),
+
+        ("Additional QIC Monitoring Fields", {
+            "classes": ("collapse",),
+            "fields": (
+                "qiccommittee_members_count",
+                "qicmeeting_quorum_met",
+                "qicaction_points_count",
+                "qicactions_completed_count",
+                "qicnext_meeting_date",
+                "qicfollowup_required",
+                "qicvalidated_by_supervisor",
+                "qicdata_quality_issue_note",
+            )
+        }),
+
+        ("Remarks", {
+            "fields": (
+                "remarks",
+            )
+        }),
+
+        ("System Information", {
+            "classes": ("collapse",),
+            "fields": (
+                "created_at",
+                "updated_at",
+            )
+        }),
+
+        ("Legacy Integer Values (Read Only)", {
+            "classes": ("collapse",),
+            "fields": (
+                "qictoravailvalue",
+                "qiclastmonthvalue",
+                "qicmmavialvalue",
+                "qicmmsignedvalue",
+                "qicmmdatausevalue",
+                "qichqiptollavailvalue",
+                "qicpipavailvalue",
+                "qicpipupdatedvalue",
+                "qicngoinvolvedvalue",
+                "qicpeertopeeravailvalue",
+                "qicmenteelogbookavialvalue",
+                "qicmenteelogbookupdatedvalue",
+                "qicmetwithhealthshuravalue",
+                "qichealthshurainvolvedincorractvalue",
+            )
+        }),
+    )
+
     list_per_page = 20
+    ordering = ["-qiccommdate", "-id"]
 
     def province_filter_kwargs(self, request):
         return {"qicfacility__districtfk__provincefk": user_province(request)}
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "faciqicfacility" and not request.user.is_superuser:
+        if not request.user.is_superuser:
             prov = user_province(request)
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+
+            if db_field.name == "qicfacility":
+                kwargs["queryset"] = Facility.objects.filter(
+                    districtfk__provincefk=prov
+                ) if prov else Facility.objects.none()
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 class Trainingdetails(admin.StackedInline):
