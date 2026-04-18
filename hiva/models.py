@@ -737,7 +737,7 @@ class Qicdataset(models.Model):
     # =========================
     # Quality summary fields
     # =========================
-    qictotalquestions = models.PositiveIntegerField(default=0)
+    qictotalquestions = models.PositiveIntegerField(default=0, verbose_name="Total")
     qicpercentscore = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     remarks = models.TextField(blank=True, null=True)
 

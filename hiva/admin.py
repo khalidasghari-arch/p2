@@ -1489,28 +1489,24 @@ class FacilityStaffAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+from django.contrib import admin
+from django.utils.html import format_html
+
 @admin.register(Qicdataset)
 class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
-        "id",
+        #"id",
         "qiccommdate",
         "qicfacility",
+        "progress_bar",
         "qictotalquestions",
-        "qicpercentscore",
-        "qictoravail_bool",
-        "qiclastmonth_bool",
-        "qicmmavial_bool",
-        "qicmmsigned_bool",
-        "qicmmdatause_bool",
-        "qichqiptollavail_bool",
-        "qicpipavail_bool",
-        "qicpipupdated_bool",
-        "qicngoinvolved_bool",
-        "qicpeertopeeravail_bool",
-        "qicmenteelogbookavial_bool",
-        "qicmenteelogbookupdated_bool",
-        "qicmetwithhealthshura_bool",
-        "qichealthshurainvolvedincorract_bool",
+        "tor_status",
+        "meeting_status",
+        "minutes_status",
+        "pip_status",
+        "ngo_status",
+        "peer_status",
+        "shura_status",
     ]
 
     list_filter = [
@@ -1520,17 +1516,10 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "qictoravail_bool",
         "qiclastmonth_bool",
         "qicmmavial_bool",
-        "qicmmsigned_bool",
-        "qicmmdatause_bool",
-        "qichqiptollavail_bool",
         "qicpipavail_bool",
-        "qicpipupdated_bool",
         "qicngoinvolved_bool",
         "qicpeertopeeravail_bool",
-        "qicmenteelogbookavial_bool",
-        "qicmenteelogbookupdated_bool",
         "qicmetwithhealthshura_bool",
-        "qichealthshurainvolvedincorract_bool",
         "qicmeeting_quorum_met",
         "qicfollowup_required",
         "qicvalidated_by_supervisor",
@@ -1655,6 +1644,11 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_per_page = 20
     ordering = ["-qiccommdate", "-id"]
 
+    class Media:
+        css = {
+            "all": ("admin/css/qic_admin.css",)
+        }
+
     def province_filter_kwargs(self, request):
         return {"qicfacility__districtfk__provincefk": user_province(request)}
 
@@ -1668,6 +1662,81 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 ) if prov else Facility.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def progress_bar(self, obj):
+        percent = float(obj.qicpercentscore or 0)
+
+        if percent >= 80:
+            color = "#2e7d32"
+        elif percent >= 50:
+            color = "#f9a825"
+        else:
+            color = "#c62828"
+
+        return format_html(
+            """
+            <div style="width:140px;">
+                <div style="
+                    background:#e0e0e0;
+                    border-radius:10px;
+                    height:18px;
+                    overflow:hidden;
+                    position:relative;
+                ">
+                    <div style="
+                        width:{}%;
+                        background:{};
+                        height:18px;
+                        border-radius:10px;
+                    "></div>
+                </div>
+                <div style="font-size:11px; margin-top:2px; text-align:center;">
+                    {}%
+                </div>
+            </div>
+            """,
+            percent,
+            color,
+            round(percent, 1)
+        )
+    progress_bar.short_description = "QIC Progress"
+
+    def yes_no_badge(self, value):
+        if value:
+            return format_html(
+                '<span style="color:#fff; background:#2e7d32; padding:2px 8px; border-radius:10px; font-size:11px;">Yes</span>'
+            )
+        return format_html(
+            '<span style="color:#fff; background:#c62828; padding:2px 8px; border-radius:10px; font-size:11px;">No</span>'
+        )
+
+    def tor_status(self, obj):
+        return self.yes_no_badge(obj.qictoravail_bool)
+    tor_status.short_description = "TOR"
+
+    def meeting_status(self, obj):
+        return self.yes_no_badge(obj.qiclastmonth_bool)
+    meeting_status.short_description = "Meeting"
+
+    def minutes_status(self, obj):
+        return self.yes_no_badge(obj.qicmmavial_bool)
+    minutes_status.short_description = "Minutes"
+
+    def pip_status(self, obj):
+        return self.yes_no_badge(obj.qicpipavail_bool)
+    pip_status.short_description = "PIP"
+
+    def ngo_status(self, obj):
+        return self.yes_no_badge(obj.qicngoinvolved_bool)
+    ngo_status.short_description = "NGO"
+
+    def peer_status(self, obj):
+        return self.yes_no_badge(obj.qicpeertopeeravail_bool)
+    peer_status.short_description = "Peer Learning"
+
+    def shura_status(self, obj):
+        return self.yes_no_badge(obj.qicmetwithhealthshura_bool)
+    shura_status.short_description = "Shura"
 
 class Trainingdetails(admin.StackedInline):
     model = Training
