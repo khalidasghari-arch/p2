@@ -774,12 +774,7 @@ class Qicdataset(models.Model):
     class Meta:
         verbose_name = "QIC"
         verbose_name_plural = "QIC"
-        ordering = ["-qiccommdate", "qicfacility"]
-        # constraints = [
-        # models.UniqueConstraint(
-        #     fields=["qicfacility", "yearqic", "monthqic"],
-        #     name="unique_qic_per_facility_month_year"
-        # )]
+        ordering = ["-created_at", "qicfacility"]
 
     def __str__(self):
         return f"{self.qicfacility} {self.qiccommdate}"
