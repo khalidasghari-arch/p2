@@ -241,6 +241,7 @@ class GancenrollmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "edd",
         "age_years",
         "transfer_in",
+        "numerof_ancvisits",
     )
 
     list_filter = (
@@ -283,6 +284,7 @@ class GancenrollmentAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "edd",
                 "age_years",
                 "transfer_in",
+                "numerof_ancvisits",
             )
         }),
         ("Background Information", {

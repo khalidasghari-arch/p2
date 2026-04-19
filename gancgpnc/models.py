@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Gancohort(models.Model):
     STATUS_CHOICES = [
@@ -52,10 +53,15 @@ class Gancenrollment(models.Model):
     address = models.CharField(max_length=255, verbose_name="Address")
     education_level = models.CharField(max_length=255, verbose_name="Education Level", blank=True, null=True)
     gravida = models.PositiveIntegerField(verbose_name="Gravida", blank=True, null=True)
-    gafirstanc = models.PositiveIntegerField(verbose_name="Gestational Age - ANC")
+    gafirstanc = models.PositiveIntegerField(verbose_name="G-Age",
+        validators=[
+            MinValueValidator(20),
+            MaxValueValidator(24)
+        ])
     edd = models.DateField(verbose_name="Expected Date of Delivery")
     age_years = models.PositiveIntegerField(verbose_name="Age (Year)", blank=True, null=True)
     transfer_in = models.BooleanField(default=True, verbose_name="Transfer In", blank=True, null=True)
+    numerof_ancvisits = models.PositiveSmallIntegerField(default=0, blank=True, null=True,verbose_name="Individual-ANC-Visits")
     remarks = models.TextField(blank=True, null=True)
 
     class Meta:
