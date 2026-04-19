@@ -597,7 +597,22 @@ class QICommittee(models.Model):
         return f"{self.facility} - {self.facility_staff} ({self.role})"
 
 class Qicdataset(models.Model):
-    qiccommdate = models.DateField(verbose_name="Date")
+    MONTH_CHOICES = [
+        ("1", "January"), ("2", "February"), ("3", "March"), ("4", "April"),
+        ("5", "May"), ("6", "June"), ("7", "July"), ("8", "August"),
+        ("9", "September"), ("10", "October"), ("11", "November"), ("12", "December"),
+    ]
+    CHOICES = [(2026, "2026"), (2026, "2026"), (2027, "2027")]
+    qiccommdate = models.DateField(verbose_name="Date", blank=True, null=True)
+    yearqic = models.IntegerField(
+        default=2027, choices=CHOICES, 
+        verbose_name="Year")
+    monthqic = models.CharField(
+        max_length=2,
+        choices=MONTH_CHOICES,
+        default="1",
+        verbose_name="Month"
+    )
     qicfacility = models.ForeignKey(
         "Facility",
         on_delete=models.CASCADE,
@@ -760,6 +775,11 @@ class Qicdataset(models.Model):
         verbose_name = "QIC"
         verbose_name_plural = "QIC"
         ordering = ["-qiccommdate", "qicfacility"]
+        constraints = [
+        models.UniqueConstraint(
+            fields=["qicfacility", "yearqic", "monthqic"],
+            name="unique_qic_per_facility_month_year"
+        )]
 
     def __str__(self):
         return f"{self.qicfacility} {self.qiccommdate}"

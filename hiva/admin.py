@@ -1496,8 +1496,10 @@ from django.utils.html import format_html
 class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
         #"id",
-        "qiccommdate",
         "qicfacility",
+        "yearqic",
+        "monthqic",
+        "qiccommdate",
         "progress_bar",
         "qictotalquestions",
         "tor_status",
@@ -1538,7 +1540,6 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "qicpercentscore",
         "created_at",
         "updated_at",
-
         # legacy integer fields
         "qictoravailvalue",
         "qiclastmonthvalue",
@@ -1560,6 +1561,8 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ("Basic Information", {
             "fields": (
                 "qiccommdate",
+                "yearqic",
+                "monthqic",
                 "qicfacility",
                 "qicdatacollector",
                 "qicimplementor",
@@ -1642,7 +1645,7 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     )
 
     list_per_page = 20
-    ordering = ["-qiccommdate", "-id"]
+    ordering = ["-created_at", "-id"]
 
     class Media:
         css = {
@@ -1699,7 +1702,7 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             color,
             round(percent, 1)
         )
-    progress_bar.short_description = "QIC Progress"
+    progress_bar.short_description = "Progress"
 
     def yes_no_badge(self, value):
         if value:
