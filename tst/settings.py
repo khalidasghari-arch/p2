@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'indicator',
     'gancgpnc',
+    'skill_lab',
 ]
 
 REST_FRAMEWORK = {
