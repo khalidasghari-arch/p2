@@ -22,7 +22,6 @@ class ThematicArea(models.Model):
     def __str__(self):
         return self.name
 
-
 class SkillLabTopic(models.Model):
     thematicfk = models.ForeignKey(
         ThematicArea,
@@ -53,7 +52,6 @@ class SkillLabTopic(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class SkillLab(models.Model):
     STATUS_CHOICES = [
@@ -107,7 +105,6 @@ class SkillLab(models.Model):
             return self.facility.districtfk
         return None
 
-
 class Skill_Lab_Mentee(models.Model):
     hfname = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
     firstname = models.CharField(max_length=100, verbose_name="First Name")
@@ -144,13 +141,10 @@ class Skill_Lab_Mentee(models.Model):
     def __str__(self):
         return f"{self.firstname} {self.lastname or ''}".strip()
 
-
 class SkillLabSession(models.Model):
     SESSION_TYPE_CHOICES = [
-        ("LS", "Learning Session"),
-        ("MC", "Mentoring/Coaching"),
-        ("PC", "Practice/Coaching"),
-        ("OTHER", "Other"),
+        ("Group", "Group"),
+        ("Individual", "Individual"),
     ]
 
     skill_lab = models.ForeignKey(
@@ -169,8 +163,16 @@ class SkillLabSession(models.Model):
         choices=SESSION_TYPE_CHOICES,
         verbose_name="Session Type",
     )
+    
+    mentor_name = models.ForeignKey(
+    "hiva.Assessor",
+    on_delete=models.PROTECT,
+    related_name="skilllab_sessions",
+    blank=True,
+    null=True,
+    verbose_name="Clinical Mentor",
+    )
 
-    mentor_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="Mentor")
     mentor_org = models.ForeignKey(
         "hiva.Implementor",
         on_delete=models.PROTECT,
@@ -189,7 +191,6 @@ class SkillLabSession(models.Model):
     challenges = models.TextField(blank=True, null=True)
     action_points = models.TextField(blank=True, null=True)
     followup_needed = models.BooleanField(default=False)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -262,12 +263,6 @@ class SkillLabParticipantRecord(models.Model):
         on_delete=models.PROTECT,
         related_name="skill_lab_records",
         verbose_name="Mentee Name",
-    )
-    profession = models.ForeignKey(
-        "hiva.Position",
-        on_delete=models.PROTECT,
-        related_name="skilllab_participant_records",
-        verbose_name="Profession",
     )
 
     thematic_area = models.ForeignKey(

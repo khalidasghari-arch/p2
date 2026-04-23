@@ -2,7 +2,6 @@ from django.contrib import admin, messages
 from django import forms
 from django.db.models import Count
 from django.utils.html import format_html
-
 from .models import (
     ThematicArea,
     SkillLabTopic,
@@ -22,13 +21,11 @@ except Exception:
     def user_province(request):
         return None
 
-
 class SkillLabAdminMediaMixin:
     class Media:
         css = {
             "all": ("skilllab/admin/skilllab_admin.css",)
         }
-
 
 class SkillLabProvinceFilter(admin.SimpleListFilter):
     title = "Province"
@@ -43,7 +40,6 @@ class SkillLabProvinceFilter(admin.SimpleListFilter):
             return queryset.filter(facility__districtfk__provincefk_id=self.value())
         return queryset
 
-
 class SkillLabSessionProvinceFilter(admin.SimpleListFilter):
     title = "Province"
     parameter_name = "province"
@@ -57,7 +53,6 @@ class SkillLabSessionProvinceFilter(admin.SimpleListFilter):
             return queryset.filter(skill_lab__facility__districtfk__provincefk_id=self.value())
         return queryset
 
-
 class ParticipantProvinceFilter(admin.SimpleListFilter):
     title = "Province"
     parameter_name = "province"
@@ -70,7 +65,6 @@ class ParticipantProvinceFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(session__skill_lab__facility__districtfk__provincefk_id=self.value())
         return queryset
-
 
 class SkillLabParticipantRecordForm(forms.ModelForm):
     class Meta:
@@ -86,7 +80,7 @@ class SkillLabParticipantRecordForm(forms.ModelForm):
         if "ls" in self.fields:
             self.fields["ls"].label = "Learning Session (LS)"
         if "mc" in self.fields:
-            self.fields["mc"].label = "Mentoring / Coaching (MC)"
+            self.fields["mc"].label = "MODEL COMPOTENT(MC)"
 
         if "topic" in self.fields:
             if "thematic_area" in self.data:
@@ -106,7 +100,6 @@ class SkillLabParticipantRecordForm(forms.ModelForm):
                     "track", "seq_no", "name"
                 )
 
-
 class SkillLabSessionAdminForm(forms.ModelForm):
     class Meta:
         model = SkillLabSession
@@ -118,7 +111,6 @@ class SkillLabSessionAdminForm(forms.ModelForm):
             "action_points": forms.Textarea(attrs={"rows": 2}),
         }
 
-
 class SkillLabParticipantRecordInline(admin.TabularInline):
     model = SkillLabParticipantRecord
     form = SkillLabParticipantRecordForm
@@ -127,11 +119,10 @@ class SkillLabParticipantRecordInline(admin.TabularInline):
     classes = ("tabular-inline-modern",)
 
     autocomplete_fields = ("thematic_area", "topic")
-    raw_id_fields = ("mentee_name", "profession")
+    raw_id_fields = ("mentee_name",)
 
     fields = (
         "mentee_name",
-        "profession",
         "thematic_area",
         "topic",
         "ls",
@@ -144,7 +135,6 @@ class SkillLabParticipantRecordInline(admin.TabularInline):
     verbose_name = "Participant Record"
     verbose_name_plural = "Participant Records"
 
-
 @admin.register(ThematicArea)
 class ThematicAreaAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
     list_display = ("name", "shortname", "hqip_area")
@@ -155,11 +145,10 @@ class ThematicAreaAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
 
 @admin.register(SkillLabTopic)
 class SkillLabTopicAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
-    list_display = ("name", "shortname", "thematicfk", "track", "seq_no", "nameeng")
-    search_fields = ("name", "shortname", "nameeng", "namedari", "namepashto", "thematicfk__name")
-    list_filter = ("thematicfk", "track")
+    list_display = ("name", "shortname", "thematicfk", "nameeng")
+    search_fields = ("name", "shortname", "thematicfk__name")
+    list_filter = ("thematicfk",)
     autocomplete_fields = ("thematicfk",)
-
 
 @admin.register(SkillLab)
 class SkillLabAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
@@ -241,16 +230,14 @@ class SkillLabAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin
         cls = css_map.get(obj.status, "sl-badge")
         return format_html('<span class="{}">{}</span>', cls, obj.get_status_display())
 
-
 @admin.register(SkillLabSession)
 class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     form = SkillLabSessionAdminForm
     inlines = [SkillLabParticipantRecordInline]
 
     list_display = (
-        "id",
         "skill_lab",
-        "get_facility",
+        #"get_facility",
         "get_province",
         "session_date",
         "lab_round",
@@ -266,10 +253,6 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
         "skill_lab__facility__name",
         "skill_lab__facility__districtfk__name",
         "skill_lab__facility__districtfk__provincefk__name",
-        "mentor_name",
-        "mentor_org__name",
-        "session_notes",
-        "objectives",
     )
     list_filter = (
         SkillLabSessionProvinceFilter,
@@ -408,14 +391,13 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
             return "-"
         return f"{obj.duration_hours} hours"
 
-
 @admin.register(SkillLabParticipantRecord)
 class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     form = SkillLabParticipantRecordForm
 
     list_display = (
         "mentee_name",
-        "get_profession",
+        #"get_profession",
         "get_skill_lab",
         "get_session_date",
         "get_province",
@@ -435,7 +417,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
         "topic__name",
         "topic__nameeng",
         "thematic_area__name",
-        "profession__name",
     )
     list_filter = (
         ParticipantProvinceFilter,
@@ -443,7 +424,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
         "ls",
         "mc",
         "thematic_area",
-        "profession",
     )
     list_select_related = (
         "session",
@@ -451,7 +431,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
         "session__skill_lab__facility",
         "session__skill_lab__facility__districtfk",
         "session__skill_lab__facility__districtfk__provincefk",
-        "profession",
         "thematic_area",
         "topic",
         "mentee_name",
@@ -459,14 +438,13 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
     list_per_page = 50
 
     autocomplete_fields = ("session", "thematic_area", "topic")
-    raw_id_fields = ("mentee_name", "profession")
+    raw_id_fields = ("mentee_name",)
 
     fieldsets = (
         ("Participant Information", {
             "fields": (
                 "session",
                 "mentee_name",
-                ("profession"),
             ),
             "classes": ("wide", "skilllab-card"),
         }),
@@ -474,7 +452,7 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
             "fields": (
                 ("thematic_area", "topic"),
                 ("ls", "mc"),
-                "attended",
+                #"attended",
                 "competency_status",
             ),
             "classes": ("wide", "skilllab-card"),
@@ -501,7 +479,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
             "session__skill_lab__facility",
             "session__skill_lab__facility__districtfk",
             "session__skill_lab__facility__districtfk__provincefk",
-            "profession",
             "thematic_area",
             "topic",
             "mentee_name",
@@ -514,9 +491,9 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
     def province_filter_kwargs(self, request):
         return {"session__skill_lab__facility__districtfk__provincefk": user_province(request)}
 
-    @admin.display(description="Profession")
-    def get_profession(self, obj):
-        return getattr(obj.profession, "name", "-")
+    # @admin.display(description="Profession")
+    # def get_profession(self, obj):
+    #     return getattr(obj.profession, "name", "-")
 
     @admin.display(description="Skill Lab")
     def get_skill_lab(self, obj):
@@ -563,7 +540,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
         if obj.checklist_score is not None:
             parts.append(f"CL: {obj.checklist_score}")
         return " | ".join(parts) if parts else "-"
-
 
 @admin.register(Skill_Lab_Mentee)
 class SkillLabMenteeAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
