@@ -18,6 +18,7 @@ urlpatterns = [
     # path('hiva/', include('hiva.urls')),  # Add this line
     # path('', include('authentication.urls')),  # Add this line
     # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
+    path("api/qqm/", include("qqm.api.urls")),
 ]
 
 if settings.DEBUG:

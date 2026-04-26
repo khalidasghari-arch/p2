@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'indicator',
     'gancgpnc',
     'skill_lab',
+    'qqm',
 ]
 
 REST_FRAMEWORK = {
