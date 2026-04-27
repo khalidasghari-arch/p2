@@ -208,58 +208,89 @@ class QQMStructuralDetailInline(admin.StackedInline):
 @admin.register(QQMFacilityScore)
 class QQMFacilityScoreAdmin(admin.ModelAdmin):
     list_display = (
+        "hfname",
         "hfcode",
-        #"hfname_excel",
-        "facility",
+
+        "province",
+        "district",
+        "facility_type",
+
         "structural_percent",
         "outcome_percent",
         "content_percent",
         "qqm_percent",
+
         "upload",
     )
 
-    list_filter = ("upload__round_name", "upload__status")
+    list_filter = (
+        "upload__round_name",
+        "facility__districtfk__provincefk__name",
+        "facility__districtfk__name",
+        "facility__facilitytypefk__name",
+    )
+
     search_fields = (
         "hfcode",
         "hfname_excel",
         "facility__name",
+        "facility__districtfk__name",
+        "facility__districtfk__provincefk__name",
     )
 
-    readonly_fields = (
-        "upload",
+    list_select_related = (
         "facility",
-        "hfcode",
-        "hfname_excel",
-        "structural_score",
-        "outcome_score",
-        "content_score",
-        "qqm_score",
-        "structural_percent",
-        "outcome_percent",
-        "content_percent",
-        "qqm_percent",
+        "facility__districtfk",
+        "facility__districtfk__provincefk",
+        "facility__facilitytypefk",
     )
 
-    inlines = [QQMStructuralDetailInline]
+    # -------- LOCATION FIELDS --------
+    def province(self, obj):
+        if obj.facility and obj.facility.districtfk and obj.facility.districtfk.provincefk:
+            return obj.facility.districtfk.provincefk.name
+        return "-"
+    province.short_description = "Province"
+    province.admin_order_field = "facility__districtfk__provincefk__name"
+
+    def district(self, obj):
+        if obj.facility and obj.facility.districtfk:
+            return obj.facility.districtfk.name
+        return "-"
+    district.short_description = "District"
+    district.admin_order_field = "facility__districtfk__name"
+
+    def facility_type(self, obj):
+        if obj.facility and obj.facility.facilitytypefk:
+            return obj.facility.facilitytypefk.name
+        return "-"
+    facility_type.short_description = "Facility Type"
+    facility_type.admin_order_field = "facility__facilitytypefk__name"
+
+    # -------- EXISTING --------
+    def hfname(self, obj):
+        return obj.facility.name if obj.facility else obj.hfname_excel or "-"
+    hfname.short_description = "Facility Name"
+    hfname.admin_order_field = "hfname_excel"
+
+    def hfcode(self, obj):
+        return obj.hfcode
+    hfcode.short_description = "HFCode"
 
     def structural_percent(self, obj):
         return percent_display(obj.structural_score, True)
-    structural_percent.short_description = "Structural (%)"
     structural_percent.admin_order_field = "structural_score"
 
     def outcome_percent(self, obj):
         return percent_display(obj.outcome_score, True)
-    outcome_percent.short_description = "Outcome (%)"
     outcome_percent.admin_order_field = "outcome_score"
 
     def content_percent(self, obj):
         return percent_display(obj.content_score, True)
-    content_percent.short_description = "Content (%)"
     content_percent.admin_order_field = "content_score"
 
     def qqm_percent(self, obj):
         return percent_display(obj.qqm_score, True)
-    qqm_percent.short_description = "QQM (%)"
     qqm_percent.admin_order_field = "qqm_score"
 
 class HasFacilityNameFilter(admin.SimpleListFilter):
@@ -292,8 +323,11 @@ class HasFacilityNameFilter(admin.SimpleListFilter):
 @admin.register(QQMStructuralDetail)
 class QQMStructuralDetailAdmin(admin.ModelAdmin):
     list_display = (
+        "province",
+        "district",
         "hfname",
         "hfcode",
+        "facility_type",
         "round_name",
         "d1_general_management_percent",
         "d2_hygiene_percent",
@@ -415,6 +449,26 @@ class QQMStructuralDetailAdmin(admin.ModelAdmin):
         return self.percent(obj.d10_anc)
     d10_anc_percent.short_description = "D10 ANC"
     d10_anc_percent.admin_order_field = "d10_anc"
+
+    def province(self, obj):
+        if obj.score.facility and obj.score.facility.districtfk and obj.score.facility.districtfk.provincefk:
+            return obj.score.facility.districtfk.provincefk.name
+        return "-"
+    province.admin_order_field = "score__facility__districtfk__provincefk__name"
+
+
+    def district(self, obj):
+        if obj.score.facility and obj.score.facility.districtfk:
+            return obj.score.facility.districtfk.name
+        return "-"
+    district.admin_order_field = "score__facility__districtfk__name"
+
+
+    def facility_type(self, obj):
+        if obj.score.facility and obj.score.facility.facilitytypefk:
+            return obj.score.facility.facilitytypefk.name
+        return "-"
+    facility_type.admin_order_field = "score__facility__facilitytypefk__name"
 
 @admin.register(QQMRawData)
 class QQMRawDataAdmin(admin.ModelAdmin):
