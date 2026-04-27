@@ -1,12 +1,12 @@
 import math
 import pandas as pd
 from django.db import transaction
+from openpyxl.utils.cell import column_index_from_string
 
 STRUCTURAL_SHEET = "Annex1b-Structural_FAC"
 EXIT_VIGNETTE_SHEET = "Annex 2b-QQC_EXIT&VIGNETTES_FAC"
 WORKFORCE_SHEET = "Annex 3b-HEALTHWORKFORCE - FAC"
 MSS_SHEET = "Annex 4b-MSS - FAC"
-
 
 def clean_hfcode(value):
     if value is None:
@@ -38,7 +38,6 @@ def clean_hfcode(value):
     except Exception:
         return None
 
-
 def clean_float(value):
     if value is None:
         return None
@@ -58,7 +57,6 @@ def clean_float(value):
         return float(value)
     except Exception:
         return None
-
 
 def safe_json(row):
     if row is None:
@@ -86,8 +84,7 @@ def safe_json(row):
 
     return data
 
-
-def load_sheet(file_path, sheet_name, header_row):
+def load_sheet(file_path, sheet_name, header_row, keep_columns=False):
     df = pd.read_excel(
         file_path,
         sheet_name=sheet_name,
@@ -95,9 +92,14 @@ def load_sheet(file_path, sheet_name, header_row):
         engine="openpyxl",
     )
     df = df.dropna(how="all")
-    df = df.dropna(axis=1, how="all")
-    return df
 
+    # Important:
+    # For Structural sheet, do NOT drop empty columns.
+    # We need exact Excel column letters: N, AD, BH, BU, CK, CW, DE, DV, EQ, FE.
+    if not keep_columns:
+        df = df.dropna(axis=1, how="all")
+
+    return df
 
 def get_col(df, possible_names):
     for wanted in possible_names:
@@ -111,7 +113,6 @@ def get_col(df, possible_names):
                 return col
 
     return None
-
 
 def build_lookup(df, possible_hfcode_columns):
     hf_col = get_col(df, possible_hfcode_columns)
@@ -127,7 +128,6 @@ def build_lookup(df, possible_hfcode_columns):
             lookup[hfcode] = row
 
     return lookup
-
 
 def get_facility_by_hfcode(hfcode):
     from hiva.models import Facility
@@ -150,7 +150,6 @@ def get_facility_by_hfcode(hfcode):
 
     return None
 
-
 def get_hfname_from_rows(*rows):
     possible_names = [
         "Facility Name",
@@ -168,11 +167,14 @@ def get_hfname_from_rows(*rows):
             col_name = str(col).strip()
             if col_name in possible_names:
                 value = row.get(col)
-                if value and not pd.isna(value):
-                    return str(value).strip()
+                try:
+                    if value is not None and not pd.isna(value):
+                        return str(value).strip()
+                except Exception:
+                    if value:
+                        return str(value).strip()
 
     return None
-
 
 def get_last_numeric_value(row):
     if row is None:
@@ -186,7 +188,6 @@ def get_last_numeric_value(row):
             return number
 
     return None
-
 
 def get_structural_score(row):
     if row is None:
@@ -208,7 +209,6 @@ def get_structural_score(row):
 
     return get_last_numeric_value(row)
 
-
 def get_outcome_score(row):
     if row is None:
         return None
@@ -228,7 +228,6 @@ def get_outcome_score(row):
                 return value
 
     return get_last_numeric_value(row)
-
 
 def get_content_score(row):
     if row is None:
@@ -250,6 +249,53 @@ def get_content_score(row):
 
     return get_last_numeric_value(row)
 
+def safe_value_by_position(row, position):
+    if row is None:
+        return None
+
+    try:
+        return clean_float(row.iloc[position])
+    except Exception:
+        return None
+
+def get_value_by_excel_column(row, column_letter):
+    if row is None:
+        return None
+
+    try:
+        index = column_index_from_string(column_letter) - 1
+        return clean_float(row.iloc[index])
+    except Exception:
+        return None
+
+def extract_structural_domains(row):
+    """
+    Exact structural domain columns from Annex1b-Structural_FAC:
+
+    N  = Domain 1: General Management
+    AD = Domain 2: Hygiene
+    BH = Domain 3: OPD / Curative Consultations
+    BU = Domain 4: Family Planning
+    CK = Domain 5: Laboratory
+    CW = Domain 6: Essential Drugs Management
+    DE = Domain 7: Tracer Drugs
+    DV = Domain 8: Maternity
+    EQ = Domain 9: EPI
+    FE = Domain 10: Antenatal Care
+    """
+
+    return {
+        "d1_general_management": get_value_by_excel_column(row, "N"),
+        "d2_hygiene": get_value_by_excel_column(row, "AD"),
+        "d3_opd": get_value_by_excel_column(row, "BH"),
+        "d4_fp": get_value_by_excel_column(row, "BU"),
+        "d5_lab": get_value_by_excel_column(row, "CK"),
+        "d6_drugs": get_value_by_excel_column(row, "CW"),
+        "d7_tracer": get_value_by_excel_column(row, "DE"),
+        "d8_maternity": get_value_by_excel_column(row, "DV"),
+        "d9_epi": get_value_by_excel_column(row, "EQ"),
+        "d10_anc": get_value_by_excel_column(row, "FE"),
+    }
 
 def calculate_qqm(structural_score, outcome_score, content_score):
     if structural_score is None or outcome_score is None or content_score is None:
@@ -262,13 +308,16 @@ def calculate_qqm(structural_score, outcome_score, content_score):
         4,
     )
 
-
 @transaction.atomic
 def process_qqm_upload(upload_id):
-    from qqm.models import QQMUpload, QQMFacilityScore, QQMRawData
+    from qqm.models import (
+        QQMUpload,
+        QQMFacilityScore,
+        QQMRawData,
+        QQMStructuralDetail,
+    )
 
     upload = QQMUpload.objects.select_for_update().get(id=upload_id)
-
     upload.status = "processing"
     upload.processed = False
     upload.error_message = None
@@ -277,7 +326,10 @@ def process_qqm_upload(upload_id):
     try:
         file_path = upload.excel_file.path
 
-        structural_df = load_sheet(file_path, STRUCTURAL_SHEET, header_row=1)
+        structural_df = load_sheet(file_path, STRUCTURAL_SHEET,
+        header_row=1,
+        keep_columns=True,
+        )
         exit_df = load_sheet(file_path, EXIT_VIGNETTE_SHEET, header_row=2)
         workforce_df = load_sheet(file_path, WORKFORCE_SHEET, header_row=2)
         mss_df = load_sheet(file_path, MSS_SHEET, header_row=2)
@@ -372,6 +424,13 @@ def process_qqm_upload(upload_id):
                 },
                 workforce_data=safe_json(workforce_row),
                 mss_data=safe_json(mss_row),
+            )
+
+            structural_domain_values = extract_structural_domains(structural_row)
+
+            QQMStructuralDetail.objects.create(
+                score=score_obj,
+                **structural_domain_values,
             )
 
             imported += 1

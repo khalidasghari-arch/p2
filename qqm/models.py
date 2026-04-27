@@ -1,6 +1,5 @@
 from django.db import models
 
-
 class QQMUpload(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
@@ -13,11 +12,9 @@ class QQMUpload(models.Model):
     round_name = models.CharField(max_length=50, help_text="Example: R1, R2, R3, R4")
     excel_file = models.FileField(upload_to="qqm_uploads/")
     uploaded_at = models.DateTimeField(auto_now_add=True)
-
     processed = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     error_message = models.TextField(blank=True, null=True)
-
     total_imported = models.PositiveIntegerField(default=0)
     total_matched_facilities = models.PositiveIntegerField(default=0)
     total_unmatched_facilities = models.PositiveIntegerField(default=0)
@@ -46,7 +43,6 @@ class QQMFacilityScore(models.Model):
 
     hfcode = models.IntegerField(db_index=True)
     hfname_excel = models.CharField(max_length=255, blank=True, null=True)
-
     structural_score = models.FloatField(blank=True, null=True)
     outcome_score = models.FloatField(blank=True, null=True)
     content_score = models.FloatField(blank=True, null=True)
@@ -74,3 +70,16 @@ class QQMRawData(models.Model):
 
     def __str__(self):
         return f"Raw data for {self.score}"
+    
+class QQMStructuralDetail(models.Model):
+    score = models.OneToOneField(QQMFacilityScore, on_delete=models.CASCADE)
+    d1_general_management = models.FloatField(null=True, blank=True)
+    d2_hygiene = models.FloatField(null=True, blank=True)
+    d3_opd = models.FloatField(null=True, blank=True)
+    d4_fp = models.FloatField(null=True, blank=True)
+    d5_lab = models.FloatField(null=True, blank=True)
+    d6_drugs = models.FloatField(null=True, blank=True)
+    d7_tracer = models.FloatField(null=True, blank=True)
+    d8_maternity = models.FloatField(null=True, blank=True)
+    d9_epi = models.FloatField(null=True, blank=True)
+    d10_anc = models.FloatField(null=True, blank=True)
