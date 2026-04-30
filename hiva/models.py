@@ -967,31 +967,31 @@ class Mpdsr(models.Model):
     )
 
     n_mpdsrcommittee = models.IntegerField(
-        default=0, verbose_name="Number HF staff who participated in the MPDSR Committee")
+        default=0, verbose_name="Staff participated")
     n_maternaldeathreported = models.IntegerField(
-        default=0, verbose_name="Number of Maternal Death reported")
+        default=0, verbose_name="Maternal Death reported")
     n_maternaldeathreviewed = models.IntegerField(
-        default=0, verbose_name="Number of Maternal Death reviewed")
+        default=0, verbose_name="Maternal Death reviewed")
     causeofmaternaldeaths_m = models.TextField(
         max_length=200, blank=True, null=True, verbose_name="Cause of maternal deaths")
     nastillbirthreportedreported = models.IntegerField(
-        default=0, verbose_name="Number of antepartum Still birth reported")
+        default=0, verbose_name="Antepartum Still birth reported")
     nastillbirthreportedreviewed = models.IntegerField(
-        default=0, verbose_name="Number of antepartum Still birth reviewed")
+        default=0, verbose_name="Antepartum Still birth reviewed")
     nistillbirthreported = models.IntegerField(
-        default=0, verbose_name="Number of intrapartum Still birth reported")
+        default=0, verbose_name="Intrapartum Still birth reported")
     nistillbirthreviewed = models.IntegerField(
-        default=0, verbose_name="Number of intrapartum Still birth reviewed")
+        default=0, verbose_name="Intrapartum Still birth reviewed")
     nndeath_afteralivebirth_reported = models.IntegerField(
-        default=0, verbose_name="Number of Neonatal Death (after a live birth) reported")
+        default=0, verbose_name="Neonatal Death after a live birth reported")
     nndeath_afteralivebirth_reviewed = models.IntegerField(
-        default=0, verbose_name="Number of neonatal Death (after a live birth) reviewed")
+        default=0, verbose_name="Neonatal Death after a live birth reviewed")
     causeofneonataldeath_n = models.TextField(
         max_length=200, blank=True, null=True, verbose_name="Cause of neonatal death")
     interventionperformed = models.TextField(
         max_length=200, blank=True, null=True, verbose_name="Intervention performed")
     recfromMPDSRcommittee = models.TextField(
-        max_length=500, blank=True, null=True, verbose_name="Recommendation from MPDSR committee")
+        max_length=500, blank=True, null=True, verbose_name="Committee Recommendation")
     remarks = models.TextField(
         max_length=500, blank=True, null=True)
 
