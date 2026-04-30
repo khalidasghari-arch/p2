@@ -1,0 +1,167 @@
+.skilllab-dashboard {
+  padding: 24px;
+  background: #f8fafc;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+.dashboard-header {
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  color: white;
+  padding: 24px;
+  border-radius: 18px;
+  margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.dashboard-header p {
+  margin-top: 8px;
+  opacity: 0.9;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tabs button {
+  border: none;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #334155;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.tabs button.active {
+  background: #2563eb;
+  color: white;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.kpi-card {
+  background: white;
+  padding: 18px;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpi-card h2 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.kpi-title {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.kpi-note {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.kpi-icon {
+  width: 46px;
+  height: 46px;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.chart-card,
+.table-card {
+  background: white;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.chart-card h3,
+.table-card h3 {
+  margin-top: 0;
+  color: #0f172a;
+}
+
+.table-card {
+  overflow-x: auto;
+}
+
+.table-card table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-card th {
+  background: #f1f5f9;
+  text-align: left;
+  padding: 12px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.table-card td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+}
+
+.table-card tr:hover {
+  background: #f8fafc;
+}
+
+.dashboard-loading {
+  padding: 40px;
+  font-size: 18px;
+  color: #334155;
+}
+
+@media (max-width: 1100px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skilllab-dashboard {
+    padding: 12px;
+  }
+}

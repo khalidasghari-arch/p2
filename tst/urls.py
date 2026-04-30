@@ -19,6 +19,7 @@ urlpatterns = [
     # path('', include('authentication.urls')),  # Add this line
     # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
     path("api/qqm/", include("qqm.api.urls")),
+    path("api/skilllab/dashboard/", include("skill_lab.api.urls")),
 ]
 
 if settings.DEBUG:
