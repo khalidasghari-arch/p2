@@ -46,7 +46,7 @@ export default function Sidebar() {
       >
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            MNH Dashboard
+            MNHIMS Dashboard
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Analytics Portal

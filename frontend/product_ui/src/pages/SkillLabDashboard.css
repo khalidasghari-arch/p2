@@ -1,6 +1,6 @@
 .skilllab-dashboard {
-  padding: 24px;
-  background: #f8fafc;
+  padding: 14px 18px 22px 18px;
+  background: #eef3f8;
   min-height: 100vh;
   font-family: Arial, sans-serif;
 }
@@ -10,16 +10,17 @@
   color: white;
   padding: 24px;
   border-radius: 18px;
-  margin-bottom: 20px;
+  margin: 0 0 14px 0;
 }
 
 .dashboard-header h1 {
   margin: 0;
   font-size: 28px;
+  font-weight: 800;
 }
 
 .dashboard-header p {
-  margin-top: 8px;
+  margin: 8px 0 0 0;
   opacity: 0.9;
 }
 
@@ -27,18 +28,18 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  margin: 0 0 14px 0;
 }
 
 .tabs button {
   border: none;
   background: white;
-  padding: 12px 16px;
+  padding: 9px 15px;
   border-radius: 999px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   color: #334155;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.08);
 }
 
 .tabs button.active {
@@ -48,32 +49,33 @@
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .kpi-card {
   background: white;
-  padding: 18px;
-  border-radius: 18px;
+  padding: 16px;
+  border-radius: 16px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-height: 78px;
 }
 
 .kpi-card h2 {
   margin: 8px 0 0;
-  font-size: 28px;
+  font-size: 26px;
   color: #0f172a;
 }
 
 .kpi-title {
   margin: 0;
   color: #64748b;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .kpi-note {
@@ -83,8 +85,8 @@
 }
 
 .kpi-icon {
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   background: #eff6ff;
   color: #2563eb;
   border-radius: 14px;
@@ -96,21 +98,23 @@
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 1fr));
-  gap: 18px;
+  gap: 14px;
 }
 
 .chart-card,
 .table-card {
   background: white;
   border-radius: 18px;
-  padding: 18px;
+  padding: 16px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
 .chart-card h3,
 .table-card h3 {
-  margin-top: 0;
+  margin: 0 0 12px 0;
   color: #0f172a;
+  font-size: 17px;
+  font-weight: 800;
 }
 
 .table-card {
@@ -125,13 +129,13 @@
 .table-card th {
   background: #f1f5f9;
   text-align: left;
-  padding: 12px;
+  padding: 11px;
   font-size: 13px;
   color: #334155;
 }
 
 .table-card td {
-  padding: 12px;
+  padding: 11px;
   border-bottom: 1px solid #e2e8f0;
   font-size: 13px;
 }
@@ -141,27 +145,74 @@
 }
 
 .dashboard-loading {
-  padding: 40px;
+  padding: 30px;
   font-size: 18px;
   color: #334155;
 }
 
+/* Tablet */
 @media (max-width: 1100px) {
+  .skilllab-dashboard {
+    padding: 12px;
+  }
+
   .kpi-grid {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
   }
 
   .chart-grid {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-header {
+    padding: 20px;
+  }
 }
 
+/* Mobile */
 @media (max-width: 640px) {
-  .kpi-grid {
-    grid-template-columns: 1fr;
+  .skilllab-dashboard {
+    padding: 10px;
   }
 
-  .skilllab-dashboard {
+  .dashboard-header {
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 22px;
+  }
+
+  .dashboard-header p {
+    font-size: 13px;
+  }
+
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .tabs button {
+    white-space: nowrap;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .kpi-card {
+    min-height: 70px;
+    padding: 14px;
+  }
+
+  .chart-card,
+  .table-card {
     padding: 12px;
+    border-radius: 14px;
   }
 }
