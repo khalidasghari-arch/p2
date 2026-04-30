@@ -17,10 +17,11 @@ export default function AppLayout({ children }) {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const menuItems = [
-    { label: "Dashboard", path: "/" },
-    { label: "Skill Lab Dashboard", path: "/skilllab-dashboard" },
-    { label: "Trends", path: "/trends" },
-  ];
+  { label: "Home", path: "/" },
+  { label: "Dashboard", path: "/dashboard" },
+  { label: "Skill Lab Dashboard", path: "/skilllab-dashboard" },
+  { label: "Trends", path: "/trends" },
+];
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#eef3f8" }}>
