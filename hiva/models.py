@@ -1545,14 +1545,63 @@ class aimpph(models.Model):
     
 class WhoChildbirthChecklistMonthly(models.Model):
 
-    shamsi_month = models.CharField(verbose_name="Afghanistan Month")
-    shamsi_year = models.CharField(verbose_name="Afghanistan Year")
+    shamsi_month = models.CharField(verbose_name="Month")
+    shamsi_year = models.CharField(verbose_name="Year")
     period = models.CharField(verbose_name="Period")
     bl_progress = models.CharField(verbose_name="Baseline and Progress")
     facility_name = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
-    gre_month =models.CharField(verbose_name="Calender Month")
-    gre_year= models.CharField(verbose_name="Calender Year")
+    gre_month =models.CharField(verbose_name="Month")
+    gre_year= models.CharField(verbose_name="Year")
     afiat_flag = models.BooleanField(verbose_name="AFIAT")
+
+    # NEW (recommended)
+    shamsi_month_fk = models.ForeignKey(
+        "hiva.ShamsiMonth",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Afghanistan Month"
+    )
+
+    shamsi_year_fk = models.ForeignKey(
+        "hiva.ShamsiYear",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Afghanistan Year"
+    )
+
+    period_fk = models.ForeignKey(
+        "hiva.Period",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Period"
+    )
+
+    bl_progress_fk = models.ForeignKey(
+        "hiva.BaselineProgress",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Baseline and Progress"
+    )
+
+    gre_month_fk = models.ForeignKey(
+        "hiva.GregorianMonth",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Calendar Month"
+    )
+
+    gre_year_fk = models.ForeignKey(
+        "hiva.GregorianYear",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name="Calendar Year"
+    )
 
     """
     WHO Childbirth Checklist – Monthly Facility Summary
@@ -1562,14 +1611,14 @@ class WhoChildbirthChecklistMonthly(models.Model):
     # --- 1) Deliveries (denominator for many indicators) ---
     total_deliveries = models.PositiveIntegerField(
         default=0,
-        verbose_name="Total number of Deliveries (normal/assisted/c-sections)",
+        verbose_name="Total Deliveries",
     )
 
     # --- 2) Sample size: randomly selected files (up to 20) ---
     files_selected = models.PositiveIntegerField(
         default=0,
         verbose_name=(
-            "Out of total number of deliveries in the month, select RANDOMLY up to 20 patient files "
+            "Out of total deliveries in this month, select RANDOMLY up to 20 patient files "
             "and record number of files selected"
         ),
         help_text="Expected range: 0–20.",
@@ -1748,7 +1797,7 @@ class safesurgeryclinical(models.Model):
     gre_year= models.CharField(verbose_name="Calender Year")
     afiat_flag = models.BooleanField(verbose_name="AFIAT")
 
-    # Core volumes
+        # Core volumes
     total_cs = models.BigIntegerField(default=0,
         verbose_name="Total Number of Cesarean Section",
         null=True, blank=True
@@ -1936,4 +1985,43 @@ class safesurgeryclinical(models.Model):
     def __str__(self):
         return f"SAFE SURGERY #{self.pk or ''}"
 
+# ============================================================
+# LOOKUP TABLES (Reference Data)
+# ============================================================
+
+class ShamsiMonth(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="Afghanistan Month")
+
+    def __str__(self):
+        return self.name
+
+class ShamsiYear(models.Model):
+    year = models.CharField(max_length=10, unique=True, verbose_name="Afghanistan Year")
+
+    def __str__(self):
+        return self.year
+
+class Period(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="Period")
+
+    def __str__(self):
+        return self.name
+
+class BaselineProgress(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="Baseline / Progress")
+
+    def __str__(self):
+        return self.name
+
+class GregorianMonth(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="Calendar Month")
+
+    def __str__(self):
+        return self.name
+
+class GregorianYear(models.Model):
+    year = models.CharField(max_length=10, unique=True, verbose_name="Calendar Year")
+
+    def __str__(self):
+        return self.year
 

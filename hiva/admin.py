@@ -57,7 +57,7 @@ from .models import (
     Participationtype,
     Position,
     WhoChildbirthChecklistMonthly,
-    QICommittee, FacilityStaff,
+    QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -334,42 +334,32 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+from decimal import Decimal, InvalidOperation
+
+from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.utils.html import format_html
+
+
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    save_on_top = True
+    list_per_page = 15
+
     list_display = (
         "id",
         "get_province",
         "facility_name",
-        "shamsi_year",
-        "shamsi_month",
-        "period",
+        "reporting_period",
         "total_deliveries",
         "files_selected",
-        "sec1_complete",
-        "sec1_completeness_ratio",
-        "cervix_ge4_admission",
-        "partograph_started_ge4",
-        "partograph_use_ge4_rate",
-        "sec2_complete",
-        "sec2_completeness_ratio",
-        "newborn_supplies_5_available",
-        "newborn_supplies_5_ratio",
-        "sec3_complete",
-        "sec3_completeness_ratio",
-        "bf_s2s_first_hour",
-        "bf_s2s_first_hour_ratio",
-        "sec4_complete",
-        "sec4_completeness_ratio",
-        "abx_need_checked_newborn",
-        "abx_need_checked_ratio",
-        "all4_sections_complete",
-        "all4_sections_completeness_ratio",
+        "who_indicator_summary",
     )
 
-    # NOTE:
-    # In your model I provided ratios as @property. Those are already "read-only".
-    # Adding them here just makes them show in the form "as read-only fields"
     readonly_fields = (
+        "clinical_entry_note",
+        "sample_guidance_note",
+        "ratio_guidance_note",
         "sec1_completeness_ratio",
         "partograph_use_ge4_rate",
         "sec2_completeness_ratio",
@@ -383,10 +373,233 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         "updated_at",
     )
 
-    # Keep your existing filters pattern (replace if you have a different facility filter)
-    list_filter = (WhodistrictFilter, FacilityFilter)
-    search_fields = ("facility__name", "facility_name__hfcode")
-    list_per_page = 10
+    list_filter = (
+        WhodistrictFilter,
+        FacilityFilter,
+        "shamsi_year_fk",
+        "shamsi_month_fk",
+        "period_fk",
+        "bl_progress_fk",
+        "gre_year_fk",
+        "gre_month_fk",
+    )
+
+    search_fields = (
+        "facility_name__name",
+        "facility_name__hfcode",
+        "facility_name__districtfk__name",
+        "facility_name__districtfk__provincefk__name",
+    )
+
+    list_select_related = (
+        "facility_name",
+        "facility_name__districtfk",
+        "facility_name__districtfk__provincefk",
+        "shamsi_month_fk",
+        "shamsi_year_fk",
+        "period_fk",
+        "bl_progress_fk",
+        "gre_month_fk",
+        "gre_year_fk",
+    )
+
+    fieldsets = (
+        (
+            "Clinical Data Entry Guidance",
+            {
+                "fields": (
+                    "clinical_entry_note",
+                    "sample_guidance_note",
+                    "ratio_guidance_note",
+                ),
+            },
+        ),
+        (
+            "1. Facility and Reporting Period",
+            {
+                "description": "Select the facility and reporting period carefully. These fields are used for dashboards and reporting.",
+                "fields": (
+                    "facility_name",
+                    ("shamsi_month_fk", "shamsi_year_fk"),
+                    ("period_fk", "bl_progress_fk"),
+                    ("gre_month_fk", "gre_year_fk"),
+                ),
+            },
+        ),
+        (
+            "2. Monthly Deliveries and Random File Sample",
+            {
+                "description": "Enter total monthly deliveries and the number of randomly selected patient files. The selected files should be up to 20.",
+                "fields": (
+                    "total_deliveries",
+                    "files_selected",
+                ),
+            },
+        ),
+        (
+            "3. WHO Checklist Section 1 and Partograph",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    ("sec1_complete", "sec1_completeness_ratio"),
+                    ("cervix_ge4_admission", "partograph_started_ge4"),
+                    "partograph_use_ge4_rate",
+                ),
+            },
+        ),
+        (
+            "4. WHO Checklist Section 2 and Newborn Supplies",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    ("sec2_complete", "sec2_completeness_ratio"),
+                    ("newborn_supplies_5_available", "newborn_supplies_5_ratio"),
+                ),
+            },
+        ),
+        (
+            "5. WHO Checklist Section 3 and Early Newborn Care",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    ("sec3_complete", "sec3_completeness_ratio"),
+                    ("bf_s2s_first_hour", "bf_s2s_first_hour_ratio"),
+                ),
+            },
+        ),
+        (
+            "6. WHO Checklist Section 4 and Discharge Checks",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    ("sec4_complete", "sec4_completeness_ratio"),
+                    ("abx_need_checked_newborn", "abx_need_checked_ratio"),
+                ),
+            },
+        ),
+        (
+            "7. Full Checklist Completion",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    ("all4_sections_complete", "all4_sections_completeness_ratio"),
+                ),
+            },
+        ),
+        (
+            "Audit Information",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "created_at",
+                    "updated_at",
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="")
+    def clinical_entry_note(self, obj):
+        return format_html(
+            """
+            <div style="padding:12px 14px; border-left:5px solid #0072bc;
+                        background:#f4f9fc; border-radius:8px; margin-bottom:8px;">
+                <b style="font-size:14px;">WHO Childbirth Checklist Monthly Reporting</b><br>
+                Enter monthly facility-level data based on selected patient files.
+                Ratios are calculated automatically and shown as read-only values.
+            </div>
+            """
+        )
+
+    @admin.display(description="")
+    def sample_guidance_note(self, obj):
+        return format_html(
+            """
+            <div style="padding:12px 14px; border-left:5px solid #1b7f5c;
+                        background:#f6fbf8; border-radius:8px; margin-bottom:8px;">
+                <b>Sampling guidance:</b> Randomly select up to <b>20 patient files</b>
+                from total monthly deliveries.
+            </div>
+            """
+        )
+
+    @admin.display(description="")
+    def ratio_guidance_note(self, obj):
+        return format_html(
+            """
+            <div style="padding:12px 14px; border-left:5px solid #8a6d3b;
+                        background:#fffaf0; border-radius:8px;">
+                <b>Ratio interpretation:</b>
+                80% and above = good progress,
+                50–79% = needs attention,
+                below 50% = priority follow-up.
+            </div>
+            """
+        )
+
+    @admin.display(description="Reporting Period")
+    def reporting_period(self, obj):
+        return format_html(
+            "<b>{}</b> / {}<br><span style='color:#6b7280;'>{} - {}</span>",
+            obj.shamsi_month_fk or "-",
+            obj.shamsi_year_fk or "-",
+            obj.period_fk or "-",
+            obj.bl_progress_fk or "-",
+        )
+
+    def _pct(self, num, den):
+        try:
+            if num is None or den in (None, 0):
+                return None
+            return (Decimal(num) / Decimal(den)) * Decimal("100.0")
+        except (InvalidOperation, ZeroDivisionError):
+            return None
+
+    def _mini_badge(self, label, value):
+        if value is None:
+            return format_html(
+                "<span style='display:inline-block;margin:2px;padding:4px 8px;"
+                "border-radius:14px;background:#e5e7eb;color:#374151;font-size:11px;'>"
+                "{}: N/A</span>",
+                label,
+            )
+
+        try:
+            value = Decimal(value)
+        except Exception:
+            return "-"
+
+        if value >= Decimal("80"):
+            bg, color = "#d1fae5", "#065f46"
+        elif value >= Decimal("50"):
+            bg, color = "#fef3c7", "#92400e"
+        else:
+            bg, color = "#fee2e2", "#991b1b"
+
+        return format_html(
+            "<span style='display:inline-block;margin:2px;padding:4px 8px;"
+            "border-radius:14px;background:{};color:{};font-size:11px;font-weight:600;'>"
+            "{}: {}%</span>",
+            bg,
+            color,
+            label,
+            round(value, 1),
+        )
+
+    @admin.display(description="WHO Indicators")
+    def who_indicator_summary(self, obj):
+        return format_html(
+            "{} {} {} {} {} {} {} {} {}",
+            self._mini_badge("Sec 1", obj.sec1_completeness_ratio),
+            self._mini_badge("Partograph", obj.partograph_use_ge4_rate),
+            self._mini_badge("Sec 2", obj.sec2_completeness_ratio),
+            self._mini_badge("Supplies", obj.newborn_supplies_5_ratio),
+            self._mini_badge("Sec 3", obj.sec3_completeness_ratio),
+            self._mini_badge("BF/S2S", obj.bf_s2s_first_hour_ratio),
+            self._mini_badge("Sec 4", obj.sec4_completeness_ratio),
+            self._mini_badge("ABX", obj.abx_need_checked_ratio),
+            self._mini_badge("All 4", obj.all4_sections_completeness_ratio),
+        )
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -394,13 +607,20 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             "facility_name",
             "facility_name__districtfk",
             "facility_name__districtfk__provincefk",
+            "shamsi_month_fk",
+            "shamsi_year_fk",
+            "period_fk",
+            "bl_progress_fk",
+            "gre_month_fk",
+            "gre_year_fk",
         )
 
     @admin.display(description="Province")
     def get_province(self, obj):
-        if obj.facility_name and obj.facility_name.districtfk and obj.facility_name.districtfk.provincefk:
+        try:
             return obj.facility_name.districtfk.provincefk.name
-        return "-"
+        except Exception:
+            return "-"
 
     def province_filter_kwargs(self, request):
         prov = user_province(request)
@@ -416,29 +636,8 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
                 if prov else Facility.objects.none()
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
-    # -------------------------
-    # Shared percent helper
-    # -------------------------
-    def _pct(self, num, den):
-        try:
-            if num is None or den in (None, 0):
-                return None
-            return (Decimal(num) / Decimal(den)) * Decimal("100.0")
-        except (InvalidOperation, ZeroDivisionError):
-            return None
 
-    # ----------------------------------------------------
-    # OPTIONAL: compute & attach stored ratios on save
-    # ----------------------------------------------------
     def save_model(self, request, obj, form, change):
-        """
-        Your current model uses @property ratios (calculated, not stored).
-        This save_model keeps the SAME admin "logic style" you showed:
-        - calculates ratios safely
-        - if later you add DB fields, the assignments will start persisting automatically.
-        """
-        # These setattr() will not persist unless you add matching model fields.
         setattr(obj, "sec1_completeness_ratio_calc", self._pct(obj.sec1_complete, obj.files_selected))
         setattr(obj, "sec2_completeness_ratio_calc", self._pct(obj.sec2_complete, obj.files_selected))
         setattr(obj, "sec3_completeness_ratio_calc", self._pct(obj.sec3_complete, obj.files_selected))
@@ -451,13 +650,7 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
 
         super().save_model(request, obj, form, change)
 
-    # -------------------------
-    # Extra guard in admin UI
-    # -------------------------
     def save_related(self, request, form, formsets, change):
-        """
-        Ensures model.clean() errors show nicely in admin.
-        """
         obj = form.instance
         try:
             obj.full_clean()
@@ -1756,6 +1949,37 @@ class TrainingAdmin(admin.ModelAdmin):
 
 class MpdsrProvinceFilter(ProvinceFromFacilityFilter):
     province_path = "facilityname__districtfk__provincefk"
+
+@admin.register(ShamsiMonth)
+class ShamsiMonthAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+    search_fields = ("name",)
+
+
+@admin.register(ShamsiYear)
+class ShamsiYearAdmin(admin.ModelAdmin):
+    list_display = ("id", "year")
+    search_fields = ("year",)
+
+
+@admin.register(Period)
+class PeriodAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+
+
+@admin.register(BaselineProgress)
+class BaselineProgressAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+
+
+@admin.register(GregorianMonth)
+class GregorianMonthAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+
+
+@admin.register(GregorianYear)
+class GregorianYearAdmin(admin.ModelAdmin):
+    list_display = ("id", "year")
 
 @admin.register(Mpdsr)
 class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
