@@ -1552,7 +1552,7 @@ class WhoChildbirthChecklistMonthly(models.Model):
     facility_name = models.ForeignKey(Facility, on_delete=models.CASCADE, verbose_name="Health Facility Name")
     gre_month =models.CharField(verbose_name="Month")
     gre_year= models.CharField(verbose_name="Year")
-    afiat_flag = models.BooleanField(verbose_name="AFIAT")
+    afiat_flag = models.BooleanField(null=True, blank=True, verbose_name="AFIAT")
 
     # NEW (recommended)
     shamsi_month_fk = models.ForeignKey(

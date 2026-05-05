@@ -334,13 +334,6 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-from decimal import Decimal, InvalidOperation
-
-from django.contrib import admin
-from django.core.exceptions import ValidationError
-from django.utils.html import format_html
-
-
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     save_on_top = True
@@ -404,98 +397,79 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
     )
 
     fieldsets = (
-        (
-            "Clinical Data Entry Guidance",
-            {
-                "fields": (
-                    "clinical_entry_note",
-                    "sample_guidance_note",
-                    "ratio_guidance_note",
-                ),
-            },
-        ),
-        (
-            "1. Facility and Reporting Period",
-            {
-                "description": "Select the facility and reporting period carefully. These fields are used for dashboards and reporting.",
-                "fields": (
-                    "facility_name",
-                    ("shamsi_month_fk", "shamsi_year_fk"),
-                    ("period_fk", "bl_progress_fk"),
-                    ("gre_month_fk", "gre_year_fk"),
-                ),
-            },
-        ),
-        (
-            "2. Monthly Deliveries and Random File Sample",
-            {
-                "description": "Enter total monthly deliveries and the number of randomly selected patient files. The selected files should be up to 20.",
-                "fields": (
-                    "total_deliveries",
-                    "files_selected",
-                ),
-            },
-        ),
-        (
-            "3. WHO Checklist Section 1 and Partograph",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    ("sec1_complete", "sec1_completeness_ratio"),
-                    ("cervix_ge4_admission", "partograph_started_ge4"),
-                    "partograph_use_ge4_rate",
-                ),
-            },
-        ),
-        (
-            "4. WHO Checklist Section 2 and Newborn Supplies",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    ("sec2_complete", "sec2_completeness_ratio"),
-                    ("newborn_supplies_5_available", "newborn_supplies_5_ratio"),
-                ),
-            },
-        ),
-        (
-            "5. WHO Checklist Section 3 and Early Newborn Care",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    ("sec3_complete", "sec3_completeness_ratio"),
-                    ("bf_s2s_first_hour", "bf_s2s_first_hour_ratio"),
-                ),
-            },
-        ),
-        (
-            "6. WHO Checklist Section 4 and Discharge Checks",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    ("sec4_complete", "sec4_completeness_ratio"),
-                    ("abx_need_checked_newborn", "abx_need_checked_ratio"),
-                ),
-            },
-        ),
-        (
-            "7. Full Checklist Completion",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    ("all4_sections_complete", "all4_sections_completeness_ratio"),
-                ),
-            },
-        ),
-        (
-            "Audit Information",
-            {
-                "classes": ("collapse",),
-                "fields": (
-                    "created_at",
-                    "updated_at",
-                ),
-            },
-        ),
+        ("Clinical Data Entry Guidance", {
+            "fields": (
+                "clinical_entry_note",
+                "sample_guidance_note",
+                "ratio_guidance_note",
+            ),
+        }),
+
+        ("1. Facility and Reporting Period", {
+            "description": "Select the facility and reporting period carefully. These fields are used for dashboards and reporting.",
+            "fields": (
+                "facility_name",
+                ("shamsi_month_fk", "shamsi_year_fk"),
+                ("period_fk", "bl_progress_fk"),
+                ("gre_month_fk", "gre_year_fk"),
+            ),
+        }),
+
+        ("2. Monthly Deliveries and Random File Sample", {
+            "description": "Enter total monthly deliveries and the number of randomly selected patient files. The selected files should be up to 20.",
+            "fields": (
+                "total_deliveries",
+                "files_selected",
+            ),
+        }),
+
+        ("3. WHO Checklist Section 1 and Partograph", {
+            "classes": ("collapse",),
+            "fields": (
+                ("sec1_complete", "sec1_completeness_ratio"),
+                ("cervix_ge4_admission", "partograph_started_ge4"),
+                "partograph_use_ge4_rate",
+            ),
+        }),
+
+        ("4. WHO Checklist Section 2 and Newborn Supplies", {
+            "classes": ("collapse",),
+            "fields": (
+                ("sec2_complete", "sec2_completeness_ratio"),
+                ("newborn_supplies_5_available", "newborn_supplies_5_ratio"),
+            ),
+        }),
+
+        ("5. WHO Checklist Section 3 and Early Newborn Care", {
+            "classes": ("collapse",),
+            "fields": (
+                ("sec3_complete", "sec3_completeness_ratio"),
+                ("bf_s2s_first_hour", "bf_s2s_first_hour_ratio"),
+            ),
+        }),
+
+        ("6. WHO Checklist Section 4 and Discharge Checks", {
+            "classes": ("collapse",),
+            "fields": (
+                ("sec4_complete", "sec4_completeness_ratio"),
+                ("abx_need_checked_newborn", "abx_need_checked_ratio"),
+            ),
+        }),
+
+        ("7. Full Checklist Completion", {
+            "classes": ("collapse",),
+            "fields": (
+                ("all4_sections_complete", "all4_sections_completeness_ratio"),
+            ),
+        }),
+
+        ("Audit Information", {
+            "classes": ("collapse",),
+            "fields": (
+                "created_at",
+                "updated_at",
+            ),
+        }),
     )
 
     @admin.display(description="")
@@ -638,26 +612,8 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        setattr(obj, "sec1_completeness_ratio_calc", self._pct(obj.sec1_complete, obj.files_selected))
-        setattr(obj, "sec2_completeness_ratio_calc", self._pct(obj.sec2_complete, obj.files_selected))
-        setattr(obj, "sec3_completeness_ratio_calc", self._pct(obj.sec3_complete, obj.files_selected))
-        setattr(obj, "sec4_completeness_ratio_calc", self._pct(obj.sec4_complete, obj.files_selected))
-        setattr(obj, "partograph_use_ge4_rate_calc", self._pct(obj.partograph_started_ge4, obj.cervix_ge4_admission))
-        setattr(obj, "newborn_supplies_5_ratio_calc", self._pct(obj.newborn_supplies_5_available, obj.total_deliveries))
-        setattr(obj, "bf_s2s_first_hour_ratio_calc", self._pct(obj.bf_s2s_first_hour, obj.total_deliveries))
-        setattr(obj, "abx_need_checked_ratio_calc", self._pct(obj.abx_need_checked_newborn, obj.total_deliveries))
-        setattr(obj, "all4_sections_completeness_ratio_calc", self._pct(obj.all4_sections_complete, obj.files_selected))
-
+        # Save safely. Ratios are calculated by model properties, so no DB ratio fields are required.
         super().save_model(request, obj, form, change)
-
-    def save_related(self, request, form, formsets, change):
-        obj = form.instance
-        try:
-            obj.full_clean()
-        except ValidationError as e:
-            form.add_error(None, e)
-            return
-        super().save_related(request, form, formsets, change)
 
 # ============================================================
 # Safe Surgery (C-Section clinical)
