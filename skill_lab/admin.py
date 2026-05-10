@@ -74,7 +74,7 @@ class SkillLabAdminMediaMixin:
             "all": ("skilllab/admin/skilllab_admin.css",)
         }
         js = (
-            "skilllab/admin/skilllab_cascade_topics.js",
+            "skilllab/admin/skilllab_cascade_topics.js?v=5",
         )
 
 

@@ -6,56 +6,41 @@
   function isThematicSelect(el) {
     if (!el || el.tagName !== "SELECT") return false;
     const name = el.getAttribute("name") || "";
-    const id = el.getAttribute("id") || "";
-    return name.includes("thematic_area") || id.includes("thematic_area");
+    return name.includes("thematic_area");
   }
 
   function findTopicSelect(thematicSelect) {
-    const name = thematicSelect.getAttribute("name") || "";
-    const id = thematicSelect.getAttribute("id") || "";
-
-    if (name.includes("thematic_area")) {
-      const topicName = name.replace("thematic_area", "topic");
-      const byName = document.querySelector(`[name="${topicName}"]`);
-      if (byName) return byName;
-    }
-
-    if (id.includes("thematic_area")) {
-      const topicId = id.replace("thematic_area", "topic");
-      const byId = document.getElementById(topicId);
-      if (byId) return byId;
-    }
-
     const row = thematicSelect.closest("tr");
+
     if (row) {
-      const rowTopic = row.querySelector('select[name*="topic"], select[id*="topic"]');
-      if (rowTopic) return rowTopic;
+      const topicSelect = row.querySelector('select[name*="topic"]');
+      if (topicSelect) return topicSelect;
     }
 
-    return null;
+    const name = thematicSelect.getAttribute("name") || "";
+    const topicName = name.replace("thematic_area", "topic");
+    return document.querySelector(`[name="${topicName}"]`);
   }
 
   function resetTopicSelect(topicSelect) {
-    if (!topicSelect) return;
-
     topicSelect.innerHTML = "";
 
-    const empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = "---------";
-    topicSelect.appendChild(empty);
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "---------";
+    topicSelect.appendChild(emptyOption);
 
     topicSelect.value = "";
   }
 
-  function loadTopics(thematicSelect) {
+  async function loadTopics(thematicSelect) {
     const thematicId = thematicSelect.value;
     const topicSelect = findTopicSelect(thematicSelect);
 
-    console.log("SkillLab thematic changed:", thematicId);
+    console.log("SkillLab selected thematic ID:", thematicId);
 
     if (!topicSelect) {
-      console.warn("SkillLab topic dropdown not found for:", thematicSelect);
+      console.warn("SkillLab topic dropdown not found.");
       return;
     }
 
@@ -65,94 +50,70 @@
 
     topicSelect.disabled = true;
 
-    const url = `${TOPICS_URL}?thematic_id=${encodeURIComponent(thematicId)}`;
-    console.log("Loading SkillLab topics:", url);
-
-    fetch(url, {
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Topic request failed: " + response.status);
+    try {
+      const response = await fetch(
+        `${TOPICS_URL}?thematic_id=${encodeURIComponent(thematicId)}`,
+        {
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+          },
         }
-        return response.json();
-      })
-      .then((data) => {
-        console.log("Topics returned:", data.results);
+      );
 
-        resetTopicSelect(topicSelect);
+      const data = await response.json();
 
-        (data.results || []).forEach((topic) => {
+      console.log("SkillLab topics JSON:", data);
+
+      resetTopicSelect(topicSelect);
+
+      if (data.results && data.results.length > 0) {
+        data.results.forEach((topic) => {
           const option = document.createElement("option");
           option.value = topic.id;
           option.textContent = topic.text;
           topicSelect.appendChild(option);
         });
+      }
 
-        topicSelect.disabled = false;
-      })
-      .catch((error) => {
-        console.error("SkillLab topic loading failed:", error);
-        topicSelect.disabled = false;
-      });
+      topicSelect.disabled = false;
+      topicSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (error) {
+      console.error("SkillLab topic cascade failed:", error);
+      topicSelect.disabled = false;
+    }
   }
 
-  function bindEvents() {
-    document.addEventListener(
-      "change",
-      function (event) {
-        if (isThematicSelect(event.target)) {
-          loadTopics(event.target);
-        }
-      },
-      true
-    );
+  document.addEventListener(
+    "change",
+    function (event) {
+      if (isThematicSelect(event.target)) {
+        loadTopics(event.target);
+      }
+    },
+    true
+  );
 
-    document.addEventListener(
-      "input",
-      function (event) {
-        if (isThematicSelect(event.target)) {
-          loadTopics(event.target);
-        }
-      },
-      true
-    );
-  }
+  // Also watch value changes because Django admin widgets sometimes do not fire normal change event
+  let previousValues = new WeakMap();
 
-  function watchValueChanges() {
-    const previousValues = new WeakMap();
+  setInterval(function () {
+    document.querySelectorAll("select").forEach(function (select) {
+      if (!isThematicSelect(select)) return;
 
-    setInterval(function () {
-      document.querySelectorAll("select").forEach(function (select) {
-        if (!isThematicSelect(select)) return;
+      const oldValue = previousValues.get(select);
+      const newValue = select.value;
 
-        const oldValue = previousValues.get(select);
-        const newValue = select.value;
+      if (oldValue === undefined) {
+        previousValues.set(select, newValue);
+        return;
+      }
 
-        if (oldValue === undefined) {
-          previousValues.set(select, newValue);
-          return;
-        }
+      if (oldValue !== newValue) {
+        previousValues.set(select, newValue);
+        loadTopics(select);
+      }
+    });
+  }, 400);
 
-        if (oldValue !== newValue) {
-          previousValues.set(select, newValue);
-          loadTopics(select);
-        }
-      });
-    }, 500);
-  }
-
-  function init() {
-    bindEvents();
-    watchValueChanges();
-    console.log("SkillLab topic cascade watcher loaded.");
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  console.log("SkillLab topic cascade v5 loaded.");
 })();
