@@ -1,7 +1,11 @@
 from django.contrib import admin, messages
 from django import forms
+from django.core.exceptions import FieldError
 from django.db.models import Count
+from django.http import JsonResponse
+from django.urls import path
 from django.utils.html import format_html
+
 from .models import (
     ThematicArea,
     SkillLabTopic,
@@ -21,12 +25,62 @@ except Exception:
     def user_province(request):
         return None
 
+
+# =========================================================
+# Helper functions
+# =========================================================
+def safe_filter_by_user_province(queryset, province):
+    """
+    Tries common province relation paths.
+    This keeps the admin stable even if related hiva models use different FK names.
+    """
+    if not province:
+        return queryset
+
+    possible_paths = [
+        "province",
+        "provincefk",
+        "districtfk__provincefk",
+        "facility__districtfk__provincefk",
+        "facilityfk__districtfk__provincefk",
+        "hfname__districtfk__provincefk",
+        "hf_name__districtfk__provincefk",
+    ]
+
+    for path in possible_paths:
+        try:
+            return queryset.filter(**{path: province})
+        except FieldError:
+            continue
+
+    return queryset
+
+
+def safe_order_by(queryset, *fields):
+    for field in fields:
+        try:
+            return queryset.order_by(field)
+        except FieldError:
+            continue
+    return queryset
+
+
+# =========================================================
+# Shared media mixin for existing CSS + new cascade JS
+# =========================================================
 class SkillLabAdminMediaMixin:
     class Media:
         css = {
             "all": ("skilllab/admin/skilllab_admin.css",)
         }
+        js = (
+            "skilllab/admin/skilllab_cascade_topics.js",
+        )
 
+
+# =========================================================
+# Filters
+# =========================================================
 class SkillLabProvinceFilter(admin.SimpleListFilter):
     title = "Province"
     parameter_name = "province"
@@ -39,6 +93,7 @@ class SkillLabProvinceFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(facility__districtfk__provincefk_id=self.value())
         return queryset
+
 
 class SkillLabSessionProvinceFilter(admin.SimpleListFilter):
     title = "Province"
@@ -53,6 +108,7 @@ class SkillLabSessionProvinceFilter(admin.SimpleListFilter):
             return queryset.filter(skill_lab__facility__districtfk__provincefk_id=self.value())
         return queryset
 
+
 class ParticipantProvinceFilter(admin.SimpleListFilter):
     title = "Province"
     parameter_name = "province"
@@ -66,6 +122,10 @@ class ParticipantProvinceFilter(admin.SimpleListFilter):
             return queryset.filter(session__skill_lab__facility__districtfk__provincefk_id=self.value())
         return queryset
 
+
+# =========================================================
+# Forms
+# =========================================================
 class SkillLabParticipantRecordForm(forms.ModelForm):
     class Meta:
         model = SkillLabParticipantRecord
@@ -82,23 +142,37 @@ class SkillLabParticipantRecordForm(forms.ModelForm):
         if "mc" in self.fields:
             self.fields["mc"].label = "MODEL COMPOTENT(MC)"
 
+        # -----------------------------------------
+        # Cascading topic queryset by thematic area
+        # Works for direct form and inline form prefixes.
+        # -----------------------------------------
         if "topic" in self.fields:
-            if "thematic_area" in self.data:
+            thematic_id = None
+
+            # Inline field name usually looks like:
+            # participant_records-0-thematic_area
+            if self.data and self.prefix:
+                prefixed_key = f"{self.prefix}-thematic_area"
+                thematic_id = self.data.get(prefixed_key)
+
+            # Direct change form field name
+            if not thematic_id and self.data:
+                thematic_id = self.data.get("thematic_area")
+
+            # Existing saved object
+            if not thematic_id and self.instance.pk and getattr(self.instance, "thematic_area_id", None):
+                thematic_id = self.instance.thematic_area_id
+
+            if thematic_id:
                 try:
-                    thematic_id = int(self.data.get("thematic_area"))
                     self.fields["topic"].queryset = SkillLabTopic.objects.filter(
-                        thematicfk_id=thematic_id
+                        thematicfk_id=int(thematic_id)
                     ).order_by("track", "seq_no", "name")
                 except (TypeError, ValueError):
                     self.fields["topic"].queryset = SkillLabTopic.objects.none()
-            elif self.instance.pk and getattr(self.instance, "thematic_area_id", None):
-                self.fields["topic"].queryset = SkillLabTopic.objects.filter(
-                    thematicfk_id=self.instance.thematic_area_id
-                ).order_by("track", "seq_no", "name")
             else:
-                self.fields["topic"].queryset = SkillLabTopic.objects.all().order_by(
-                    "track", "seq_no", "name"
-                )
+                self.fields["topic"].queryset = SkillLabTopic.objects.none()
+
 
 class SkillLabSessionAdminForm(forms.ModelForm):
     class Meta:
@@ -111,6 +185,10 @@ class SkillLabSessionAdminForm(forms.ModelForm):
             "action_points": forms.Textarea(attrs={"rows": 2}),
         }
 
+
+# =========================================================
+# Inline
+# =========================================================
 class SkillLabParticipantRecordInline(admin.TabularInline):
     model = SkillLabParticipantRecord
     form = SkillLabParticipantRecordForm
@@ -118,7 +196,8 @@ class SkillLabParticipantRecordInline(admin.TabularInline):
     show_change_link = True
     classes = ("tabular-inline-modern",)
 
-    autocomplete_fields = ("thematic_area", "topic")
+    # Keep thematic as autocomplete. Topic must be normal dropdown for cascade.
+    autocomplete_fields = ("thematic_area",)
     raw_id_fields = ("mentee_name",)
 
     fields = (
@@ -135,6 +214,25 @@ class SkillLabParticipantRecordInline(admin.TabularInline):
     verbose_name = "Participant Record"
     verbose_name_plural = "Participant Records"
 
+    class Media:
+        js = (
+            "skilllab/admin/skilllab_cascade_topics.js",
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        province = user_province(request)
+
+        # Show all mentees in user's province, not only the skill lab facility.
+        if db_field.name == "mentee_name" and province and not request.user.is_superuser:
+            kwargs["queryset"] = Skill_Lab_Mentee.objects.filter(
+                hfname__districtfk__provincefk=province
+            ).select_related("hfname", "position").order_by("firstname", "lastname")
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+# =========================================================
+# Thematic Area
+# =========================================================
 @admin.register(ThematicArea)
 class ThematicAreaAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
     list_display = ("name", "shortname", "hqip_area")
@@ -143,13 +241,20 @@ class ThematicAreaAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
     raw_id_fields = ("hqip_area",)
 
 
+# =========================================================
+# Skill Lab Topic
+# =========================================================
 @admin.register(SkillLabTopic)
 class SkillLabTopicAdmin(SkillLabAdminMediaMixin, admin.ModelAdmin):
     list_display = ("name", "shortname", "thematicfk", "nameeng")
-    search_fields = ("name", "shortname", "thematicfk__name")
+    search_fields = ("name", "shortname", "thematicfk__name", "nameeng")
     list_filter = ("thematicfk",)
     autocomplete_fields = ("thematicfk",)
 
+
+# =========================================================
+# Skill Lab
+# =========================================================
 @admin.register(SkillLab)
 class SkillLabAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = (
@@ -230,6 +335,10 @@ class SkillLabAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin
         cls = css_map.get(obj.status, "sl-badge")
         return format_html('<span class="{}">{}</span>', cls, obj.get_status_display())
 
+
+# =========================================================
+# Skill Lab Session
+# =========================================================
 @admin.register(SkillLabSession)
 class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     form = SkillLabSessionAdminForm
@@ -237,7 +346,6 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
 
     list_display = (
         "skill_lab",
-        #"get_facility",
         "get_province",
         "session_date",
         "lab_round",
@@ -313,6 +421,48 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
             "classes": ("collapse", "skilllab-card"),
         }),
     )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "topics-by-thematic/",
+                self.admin_site.admin_view(self.topics_by_thematic),
+                name="skilllab_topics_by_thematic",
+            ),
+        ]
+        return custom_urls + urls
+
+    def topics_by_thematic(self, request):
+        thematic_id = request.GET.get("thematic_id")
+        topics = SkillLabTopic.objects.none()
+
+        if thematic_id:
+            topics = SkillLabTopic.objects.filter(
+                thematicfk_id=thematic_id
+            ).order_by("track", "seq_no", "name")
+
+        data = [
+            {
+                "id": topic.pk,
+                "text": str(topic),
+            }
+            for topic in topics
+        ]
+        return JsonResponse({"results": data})
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        province = user_province(request)
+
+        # If mentor_name has been converted to FK to hiva.Assessor,
+        # restrict it to clinical mentors in the user's province.
+        # If mentor_name is still CharField, this method is not called for it.
+        if db_field.name in ("mentor_name", "mentor") and province and not request.user.is_superuser:
+            qs = db_field.remote_field.model.objects.all()
+            qs = safe_filter_by_user_province(qs, province)
+            kwargs["queryset"] = safe_order_by(qs, "name", "firstname", "first_name")
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related(
@@ -391,13 +541,16 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
             return "-"
         return f"{obj.duration_hours} hours"
 
+
+# =========================================================
+# Participant Record
+# =========================================================
 @admin.register(SkillLabParticipantRecord)
 class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     form = SkillLabParticipantRecordForm
 
     list_display = (
         "mentee_name",
-        #"get_profession",
         "get_skill_lab",
         "get_session_date",
         "get_province",
@@ -437,7 +590,8 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
     )
     list_per_page = 50
 
-    autocomplete_fields = ("session", "thematic_area", "topic")
+    # Topic is normal dropdown for cascade.
+    autocomplete_fields = ("session", "thematic_area")
     raw_id_fields = ("mentee_name",)
 
     fieldsets = (
@@ -452,7 +606,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
             "fields": (
                 ("thematic_area", "topic"),
                 ("ls", "mc"),
-                #"attended",
                 "competency_status",
             ),
             "classes": ("wide", "skilllab-card"),
@@ -472,6 +625,17 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
         }),
     )
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        province = user_province(request)
+
+        # Show all mentees in user's province, not limited to one facility.
+        if db_field.name == "mentee_name" and province and not request.user.is_superuser:
+            kwargs["queryset"] = Skill_Lab_Mentee.objects.filter(
+                hfname__districtfk__provincefk=province
+            ).select_related("hfname", "position").order_by("firstname", "lastname")
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related(
             "session",
@@ -490,10 +654,6 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
 
     def province_filter_kwargs(self, request):
         return {"session__skill_lab__facility__districtfk__provincefk": user_province(request)}
-
-    # @admin.display(description="Profession")
-    # def get_profession(self, obj):
-    #     return getattr(obj.profession, "name", "-")
 
     @admin.display(description="Skill Lab")
     def get_skill_lab(self, obj):
@@ -541,6 +701,10 @@ class SkillLabParticipantRecordAdmin(SkillLabAdminMediaMixin, ProvinceRestricted
             parts.append(f"CL: {obj.checklist_score}")
         return " | ".join(parts) if parts else "-"
 
+
+# =========================================================
+# Skill Lab Mentee
+# =========================================================
 @admin.register(Skill_Lab_Mentee)
 class SkillLabMenteeAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = (

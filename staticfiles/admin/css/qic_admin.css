@@ -1,0 +1,30 @@
+/* Wrap admin column headers */
+#result_list thead th {
+    white-space: normal !important;
+    vertical-align: middle;
+    min-width: 90px;
+}
+
+/* Wrap table cells where needed */
+#result_list tbody td,
+#result_list tbody th {
+    white-space: normal !important;
+    vertical-align: middle;
+}
+
+/* Make boolean badge columns centered */
+#result_list td.field-tor_status,
+#result_list td.field-meeting_status,
+#result_list td.field-minutes_status,
+#result_list td.field-pip_status,
+#result_list td.field-ngo_status,
+#result_list td.field-peer_status,
+#result_list td.field-shura_status,
+#result_list td.field-progress_bar {
+    text-align: center;
+}
+
+/* Keep facility readable */
+#result_list td.field-qicfacility {
+    min-width: 180px;
+}

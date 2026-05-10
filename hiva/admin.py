@@ -62,7 +62,6 @@ from .models import (
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
-
 # ============================================================
 # Admin Branding
 # ============================================================
@@ -347,6 +346,7 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         "total_deliveries",
         "files_selected",
         "who_indicator_summary",
+        "created_at",
     )
 
     readonly_fields = (
