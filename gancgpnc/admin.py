@@ -450,7 +450,6 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
 # ============================================================
 # GANC Second Session
 # ============================================================
-
 @admin.register(Gancsecondsession)
 class GancsecondsessionAdmin(BaseSessionAdmin):
     list_display = (
@@ -467,72 +466,116 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
         "mebendazole",
         "dangersign",
     )
+
     list_filter = (
         SessionProvinceFilter,
         "sessiontype",
+        "sessionround",
         "sessiondate",
         "attendance",
         "dhypertension",
         "anemia",
+        "mebendazole",
         "dangersign",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "sessiontype",
+        "sessionround",
         "typeofdangersign",
     )
+
     ordering = ("-sessiondate",)
+    date_hierarchy = "sessiondate"
+    list_per_page = 25
+    save_on_top = True
+
+    readonly_fields = (
+        "session_help",
+        "maternal_help",
+        "lab_help",
+        "danger_help",
+    )
 
     fieldsets = (
-        ("Session Information", {
+        ("① Session Information", {
+            "classes": ("ganc-section", "wide"),
+            "description": "Basic session details. Please confirm the woman, session date, attendance type and gestational age.",
             "fields": (
-                "registerid",
-                "sessiontype",
-                "sessionround",
-                "sessiondate",
-                "attendance",
-                "presentga",
+                "session_help",
+                ("registerid", "sessiondate"),
+                ("sessiontype", "sessionround"),
+                ("attendance", "presentga"),
             )
         }),
-        ("Maternal Assessment", {
+
+        ("② Maternal Assessment", {
+            "classes": ("ganc-section", "wide"),
+            "description": "Record blood pressure, nutrition, anemia, supplementation and maternal assessment findings.",
             "fields": (
-                "bp",
-                "dhypertension",
-                "rhypertensiontoMD",
-                "weight",
-                "anemia",
-                "ironfolate",
-                "ironfolatepluswomen",
-                "pcalcium",
-                "acalcium",
-                "mebendazole",
-                "muac",
-                "dmam",
-                "rmam",
-                "dsam",
-                "rsam",
+                "maternal_help",
+                ("bp", "weight", "muac"),
+                ("dhypertension", "rhypertensiontoMD"),
+                ("anemia", "ironfolate", "ironfolatepluswomen"),
+                ("pcalcium", "acalcium", "mebendazole"),
+                ("dmam", "rmam"),
+                ("dsam", "rsam"),
             )
         }),
-        ("Laboratory and Screening", {
+
+        ("③ Laboratory and Screening", {
+            "classes": ("ganc-section", "collapse"),
+            "description": "Record urine protein, cough screening, referral and TT vaccine status.",
             "fields": (
-                "urinexam",
-                "rpositivepuriatomd",
-                "coughmorethantwoweeks",
-                "rcough",
+                "lab_help",
+                ("urinexam", "rpositivepuriatomd"),
+                ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
             )
         }),
-        ("Danger Signs", {
+
+        ("④ Danger Signs", {
+            "classes": ("ganc-section", "collapse"),
+            "description": "If danger sign is Yes, clearly mention the type of danger sign.",
             "fields": (
-                "dangersign",
-                "typeofdangersign",
+                "danger_help",
+                ("dangersign", "typeofdangersign"),
             )
         }),
-        ("Other Information", {
+
+        ("⑤ Remarks", {
+            "classes": ("ganc-section", "collapse"),
             "fields": ("remarks",)
         }),
     )
+
+    class Media:
+        css = {
+            "all": ("admin/css/ganc_admin.css",)
+        }
+        js = ("admin/js/ganc_admin.js",)
+
+    def session_help(self, obj=None):
+        return "Use this section to confirm the correct client and second session details."
+
+    session_help.short_description = "Data entry guidance"
+
+    def maternal_help(self, obj=None):
+        return "Check BP, weight, MUAC, anemia, supplements, MAM/SAM and referrals carefully."
+
+    maternal_help.short_description = "Maternal assessment guidance"
+
+    def lab_help(self, obj=None):
+        return "Urine protein, cough screening and TT vaccine should be completed where applicable."
+
+    lab_help.short_description = "Laboratory guidance"
+
+    def danger_help(self, obj=None):
+        return "If danger sign is selected, type the specific danger sign in the next field."
+
+    danger_help.short_description = "Danger sign guidance"
 
 
 # ============================================================

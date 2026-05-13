@@ -1,0 +1,79 @@
+/* GANC admin professional styling */
+
+.module h2,
+.inline-group h2 {
+    background: #0f766e !important;
+    color: white !important;
+    font-weight: 600;
+    border-radius: 6px 6px 0 0;
+    padding: 10px 14px;
+}
+
+fieldset.ganc-section {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+fieldset.ganc-section .description {
+    background: #ecfdf5;
+    border-left: 4px solid #0f766e;
+    padding: 10px 12px;
+    margin: 8px 0 15px 0;
+    color: #064e3b;
+    font-size: 13px;
+    border-radius: 4px;
+}
+
+.form-row {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.form-row label {
+    font-weight: 600;
+    color: #374151;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+    border-radius: 6px !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 7px 9px !important;
+}
+
+textarea {
+    min-height: 90px;
+}
+
+.help,
+.readonly {
+    background: #f8fafc;
+    border-left: 4px solid #38bdf8;
+    padding: 8px 10px;
+    border-radius: 4px;
+    color: #334155;
+}
+
+.submit-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    border-top: 1px solid #d1d5db;
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
+}
+
+.object-tools a,
+.submit-row input {
+    border-radius: 6px !important;
+}
+
+.boolean-field-warning {
+    background: #fff7ed !important;
+    border-left: 4px solid #f97316 !important;
+}
