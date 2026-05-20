@@ -307,17 +307,24 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
     """
     Large-data safe export:
     - Uses write_only workbook (low memory)
-    - Uses values_list + iterator (fast, avoids ORM object explosion)
-    - Exports one row per Mentorshipdetails line (recommended)
+    - Uses values_list + iterator (fast)
+    - Exports one row per Mentorshipdetails line
+
+    Calculation rule:
+    One mentorship visit = unique Visit Date + Mentor.
+    Same Visit Date + same Mentor = counted once as 1.
+    Repeated rows for the same Visit Date + Mentor = 0.
+    Same Visit Date + different Mentor = counted separately as 1.
     """
 
     # If user selects visits: export details under those visits
     visit_ids = list(queryset.values_list("id", flat=True))
+
     if not visit_ids:
-        # No selection: return empty file (or you can raise message)
         wb = Workbook(write_only=True)
         ws = wb.create_sheet("Mentorship")
         ws.append(["No data selected"])
+
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -331,7 +338,9 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
     headers = [
         "Detail ID",
         "Visit ID",
+        "visit by mentors",
         "Visit Date",
+        "Month",
         "Visit Round",
         "Start Time",
         "End Time",
@@ -352,9 +361,9 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
     ]
     ws.append(headers)
 
-    # IMPORTANT:
-    # Replace these field names ONLY if your hiva models use different names:
-    # districtfk, provincefk, hfcode
+    # This set tracks unique Visit Date + Mentor combinations
+    seen_visit_date_mentor = set()
+
     rows = (
         Mentorshipdetails.objects
         .filter(mentorshipvistfk_id__in=visit_ids)
@@ -374,17 +383,18 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
             "menteename__position__name",
             "menteename__gender",
             "menteename__tazkiranumber",
-
-            # mentor is hiva.Assessor. In your admin you used mentor__name,
-            # but if your Assessor uses full_name or firstname/lastname, adjust here.
             "mentor__name",
-
             "thematicname__name",
             "topicname__name",
-
             "ls",
             "pc",
             "mc",
+        )
+        .order_by(
+            "mentorshipvistfk__visitdate",
+            "mentor__name",
+            "mentorshipvistfk_id",
+            "id",
         )
         .iterator(chunk_size=2000)
     )
@@ -418,17 +428,52 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
             mc,
         ) = r
 
-        mentee_full = " ".join([x for x in [mentee_first, mentee_last] if x]) if (mentee_first or mentee_last) else ""
+        # Mentee full name
+        mentee_full = " ".join(
+            [x for x in [mentee_first, mentee_last] if x]
+        ) if (mentee_first or mentee_last) else ""
+
+        # Gender text
         gender_txt = ""
         if mentee_gender is True:
             gender_txt = "Female"
         elif mentee_gender is False:
             gender_txt = "Male"
 
+        # Month name from visit date
+        month_name = ""
+        if visit_date:
+            try:
+                month_name = visit_date.strftime("%B")
+            except Exception:
+                month_name = ""
+
+        # Normalize visit date in case it includes hidden time
+        clean_visit_date = visit_date
+        if visit_date and hasattr(visit_date, "date") and callable(visit_date.date):
+            clean_visit_date = visit_date.date()
+
+        # Normalize mentor name
+        clean_mentor_name = (mentor_name or "").strip().lower()
+
+        # Unique key: Visit Date + Mentor only
+        unique_key = (clean_visit_date, clean_mentor_name)
+
+        if clean_visit_date and clean_mentor_name:
+            if unique_key not in seen_visit_date_mentor:
+                visit_by_mentors = 1
+                seen_visit_date_mentor.add(unique_key)
+            else:
+                visit_by_mentors = 0
+        else:
+            visit_by_mentors = 0
+
         ws.append([
             detail_id,
             visit_id,
+            visit_by_mentors,
             visit_date,
+            month_name,
             visit_round,
             start_time,
             end_time,
@@ -449,15 +494,19 @@ def export_selected_mentorship_large(modeladmin, request, queryset):
         ])
 
     filename = f"mentorship_export_{timezone.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
     wb.save(response)
     return response
 
-export_selected_mentorship_large.short_description = "Export selected visits (Large/fast Excel)"
 
+export_selected_mentorship_large.short_description = (
+    "Export selected visits with mentor visit count"
+)
 # =====================================================
 # VISIT ADMIN FORM (ADMIN-LEVEL REQUIRED VALIDATION)
 # =====================================================
