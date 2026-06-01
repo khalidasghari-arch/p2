@@ -10,7 +10,6 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone
 from django.utils.html import format_html
 from urllib.parse import urlencode
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -62,9 +61,18 @@ from .models import (
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
+from django.contrib import admin
+from django.http import HttpResponse
+from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
 # ============================================================
 # Admin Branding
 # ============================================================
+
 admin.site.site_header = "Maternal and Newborn Health Information Management System (MNHIMS)"
 admin.site.site_title = "IQoC Portal"
 admin.site.index_title = "M&E Data Management System"
@@ -1937,8 +1945,271 @@ class GregorianMonthAdmin(admin.ModelAdmin):
 class GregorianYearAdmin(admin.ModelAdmin):
     list_display = ("id", "year")
 
+class AutoUserAdminMixin:
+    def save_model(self, request, obj, form, change):
+        if not obj.pk:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+def clean_excel_value(value):
+    """
+    Prevent Excel export errors caused by illegal characters.
+    """
+    if value is None:
+        return ""
+    value = str(value)
+    return ILLEGAL_CHARACTERS_RE.sub("", value)
+
+
+def safe_attr(obj, attr_path, default=""):
+    """
+    Safely get nested object attributes.
+
+    Example:
+    safe_attr(obj, "facilityname__districtfk__provincefk__name")
+    """
+    try:
+        current = obj
+        for attr in attr_path.split("__"):
+            current = getattr(current, attr, None)
+            if current is None:
+                return default
+        return current
+    except Exception:
+        return default
+
+
+def percent(reviewed, reported):
+    """
+    Calculate review rate safely.
+    """
+    reviewed = reviewed or 0
+    reported = reported or 0
+
+    if reported > 0:
+        return round((reviewed / reported) * 100, 1)
+
+    return 0
+
+
+@admin.action(description="Export selected MPDSR records to Excel")
+def export_mpdsr_to_excel(modeladmin, request, queryset):
+    queryset = queryset.select_related(
+        "facilityname",
+        "facilityname__districtfk",
+        "facilityname__districtfk__provincefk",
+        "facilityname__facilitytypefk",
+        "created_by",
+        "updated_by",
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "MPDSR Export"
+
+    report_date = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
+
+    headers = [
+        "ID",
+        "Year",
+        "Month",
+        "Province",
+        "District",
+        "Health Facility",
+        "Facility Type",
+        "Facility Code",
+
+        "Staff Participated in MPDSR Committee",
+
+        "Maternal Deaths Reported",
+        "Maternal Deaths Reviewed",
+        "Maternal Death Review Rate (%)",
+        "Legacy Cause of Maternal Deaths",
+
+        "Maternal Death Cause Category",
+        "Maternal Death Specific Cause",
+        "Maternal Death Contributing Factor",
+        "Maternal Death Preventability",
+        "Timing of Maternal Death",
+        "Place of Maternal Death",
+
+        "Antepartum Stillbirths Reported",
+        "Antepartum Stillbirths Reviewed",
+        "Antepartum Stillbirth Review Rate (%)",
+
+        "Intrapartum Stillbirths Reported",
+        "Intrapartum Stillbirths Reviewed",
+        "Intrapartum Stillbirth Review Rate (%)",
+
+        "Neonatal Deaths After Live Birth Reported",
+        "Neonatal Deaths After Live Birth Reviewed",
+        "Neonatal Death Review Rate (%)",
+        "Cause of Neonatal Death",
+
+        "Intervention Performed",
+        "Committee Recommendation",
+        "Remarks",
+
+        "Created By",
+        "Created At",
+        "Updated By",
+        "Updated At",
+    ]
+
+    last_column_letter = get_column_letter(len(headers))
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+    title_cell = ws.cell(row=1, column=1)
+    title_cell.value = "MPDSR Monthly Reporting Export"
+    title_cell.font = Font(size=16, bold=True, color="FFFFFF")
+    title_cell.fill = PatternFill("solid", fgColor="1F4E78")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(headers))
+    subtitle_cell = ws.cell(row=2, column=1)
+    subtitle_cell.value = f"Generated on: {report_date}"
+    subtitle_cell.font = Font(italic=True)
+    subtitle_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    header_row = 4
+
+    for col_num, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col_num)
+        cell.value = header
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="4472C4")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    row_num = header_row + 1
+
+    for obj in queryset:
+        created_by = ""
+        if obj.created_by:
+            created_by = obj.created_by.get_full_name() or obj.created_by.username
+
+        updated_by = ""
+        if obj.updated_by:
+            updated_by = obj.updated_by.get_full_name() or obj.updated_by.username
+
+        created_at = ""
+        if obj.created_at:
+            created_at = timezone.localtime(obj.created_at).strftime("%Y-%m-%d %H:%M")
+
+        updated_at = ""
+        if obj.updated_at:
+            updated_at = timezone.localtime(obj.updated_at).strftime("%Y-%m-%d %H:%M")
+
+        row = [
+            obj.id,
+            obj.yearmpdsr,
+            obj.get_monthmpdsr_display(),
+
+            safe_attr(obj, "facilityname__districtfk__provincefk__name"),
+            safe_attr(obj, "facilityname__districtfk__name"),
+            safe_attr(obj, "facilityname__name"),
+            safe_attr(obj, "facilityname__facilitytypefk__name"),
+            safe_attr(obj, "facilityname__hfcode"),
+
+            obj.n_mpdsrcommittee,
+
+            obj.n_maternaldeathreported,
+            obj.n_maternaldeathreviewed,
+            percent(obj.n_maternaldeathreviewed, obj.n_maternaldeathreported),
+            obj.causeofmaternaldeaths_m,
+
+            obj.get_maternal_death_cause_category_display() if obj.maternal_death_cause_category else "",
+            obj.get_maternal_death_specific_cause_display() if obj.maternal_death_specific_cause else "",
+            obj.get_maternal_death_contributing_factor_display() if obj.maternal_death_contributing_factor else "",
+            obj.get_maternal_death_preventability_display() if obj.maternal_death_preventability else "",
+            obj.get_maternal_death_timing_display() if obj.maternal_death_timing else "",
+            obj.get_maternal_death_place_display() if obj.maternal_death_place else "",
+
+            obj.nastillbirthreportedreported,
+            obj.nastillbirthreportedreviewed,
+            percent(obj.nastillbirthreportedreviewed, obj.nastillbirthreportedreported),
+
+            obj.nistillbirthreported,
+            obj.nistillbirthreviewed,
+            percent(obj.nistillbirthreviewed, obj.nistillbirthreported),
+
+            obj.nndeath_afteralivebirth_reported,
+            obj.nndeath_afteralivebirth_reviewed,
+            percent(obj.nndeath_afteralivebirth_reviewed, obj.nndeath_afteralivebirth_reported),
+            obj.causeofneonataldeath_n,
+
+            obj.interventionperformed,
+            obj.recfromMPDSRcommittee,
+            obj.remarks,
+
+            created_by,
+            created_at,
+            updated_by,
+            updated_at,
+        ]
+
+        for col_num, value in enumerate(row, start=1):
+            cell = ws.cell(row=row_num, column=col_num)
+            cell.value = clean_excel_value(value)
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        row_num += 1
+
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    for row in ws.iter_rows(
+        min_row=header_row,
+        max_row=ws.max_row,
+        min_col=1,
+        max_col=len(headers),
+    ):
+        for cell in row:
+            cell.border = thin_border
+
+    ws.freeze_panes = "A5"
+    ws.auto_filter.ref = f"A{header_row}:{last_column_letter}{ws.max_row}"
+
+    for col_num, header in enumerate(headers, start=1):
+        column_letter = get_column_letter(col_num)
+
+        if header in [
+            "Legacy Cause of Maternal Deaths",
+            "Cause of Neonatal Death",
+            "Intervention Performed",
+            "Committee Recommendation",
+            "Remarks",
+        ]:
+            ws.column_dimensions[column_letter].width = 35
+        elif header in [
+            "Health Facility",
+            "Maternal Death Specific Cause",
+            "Maternal Death Contributing Factor",
+        ]:
+            ws.column_dimensions[column_letter].width = 28
+        elif "Rate" in header:
+            ws.column_dimensions[column_letter].width = 18
+        else:
+            ws.column_dimensions[column_letter].width = 16
+
+    filename = f"mpdsr_export_{timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M')}.xlsx"
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    wb.save(response)
+    return response
+
+
 @admin.register(Mpdsr)
-class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+class mpdsrshow(ProvinceRestrictedAdminMixin, AutoUserAdminMixin, admin.ModelAdmin):
     list_display = [
         "id",
         "yearmpdsr",
@@ -1947,7 +2218,6 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "n_mpdsrcommittee",
         "n_maternaldeathreported",
         "n_maternaldeathreviewed",
-        #"causeofmaternaldeaths_m",
         "maternal_death_cause_category_display",
         "maternal_death_specific_cause_display",
         "nastillbirthreportedreported",
@@ -2042,6 +2312,27 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         }),
     )
 
+    actions = [export_mpdsr_to_excel]
+
+    ordering = (
+        "-yearmpdsr",
+        "-monthmpdsr",
+        "facilityname",
+    )
+
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "facilityname",
+            "facilityname__districtfk",
+            "facilityname__districtfk__provincefk",
+            "facilityname__facilitytypefk",
+            "created_by",
+            "updated_by",
+        )
+
     def province_filter_kwargs(self, request):
         return {"facilityname__districtfk__provincefk": user_province(request)}
 
@@ -2051,6 +2342,7 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             kwargs["queryset"] = Facility.objects.filter(
                 districtfk__provincefk=prov
             ) if prov else Facility.objects.none()
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="Maternal cause category")
@@ -2060,13 +2352,6 @@ class mpdsrshow(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     @admin.display(description="Maternal specific cause")
     def maternal_death_specific_cause_display(self, obj):
         return obj.get_maternal_death_specific_cause_display() if obj.maternal_death_specific_cause else "-"
-    
-class AutoUserAdminMixin:
-    def save_model(self, request, obj, form, change):
-        if not obj.pk:
-            obj.created_by = request.user
-        obj.updated_by = request.user
-        super().save_model(request, obj, form, change)
 
 # ============================================================
 # User admin with Profile inline
