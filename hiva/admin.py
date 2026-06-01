@@ -2009,7 +2009,7 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
     ws = wb.active
     ws.title = "MPDSR Export"
 
-    report_date = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
+    generated_on = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
 
     headers = [
         "ID",
@@ -2058,18 +2058,42 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
         "Updated At",
     ]
 
-    last_column_letter = get_column_letter(len(headers))
+    numeric_headers = {
+        "ID",
+        "Year",
+        "Facility Code",
+        "Staff Participated in MPDSR Committee",
 
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+        "Maternal Deaths Reported",
+        "Maternal Deaths Reviewed",
+        "Maternal Death Review Rate (%)",
+
+        "Antepartum Stillbirths Reported",
+        "Antepartum Stillbirths Reviewed",
+        "Antepartum Stillbirth Review Rate (%)",
+
+        "Intrapartum Stillbirths Reported",
+        "Intrapartum Stillbirths Reviewed",
+        "Intrapartum Stillbirth Review Rate (%)",
+
+        "Neonatal Deaths After Live Birth Reported",
+        "Neonatal Deaths After Live Birth Reviewed",
+        "Neonatal Death Review Rate (%)",
+    }
+
+    total_columns = len(headers)
+    last_column = get_column_letter(total_columns)
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_columns)
     title_cell = ws.cell(row=1, column=1)
     title_cell.value = "MPDSR Monthly Reporting Export"
     title_cell.font = Font(size=16, bold=True, color="FFFFFF")
     title_cell.fill = PatternFill("solid", fgColor="1F4E78")
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(headers))
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_columns)
     subtitle_cell = ws.cell(row=2, column=1)
-    subtitle_cell.value = f"Generated on: {report_date}"
+    subtitle_cell.value = f"Generated on: {generated_on}"
     subtitle_cell.font = Font(italic=True)
     subtitle_cell.alignment = Alignment(horizontal="center", vertical="center")
 
@@ -2150,8 +2174,25 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
         ]
 
         for col_num, value in enumerate(row, start=1):
+            header_name = headers[col_num - 1]
             cell = ws.cell(row=row_num, column=col_num)
-            cell.value = clean_excel_value(value)
+
+            if header_name in numeric_headers:
+                if value in [None, ""]:
+                    cell.value = None
+                else:
+                    try:
+                        if "Rate" in header_name:
+                            cell.value = float(value)
+                            cell.number_format = "0.0"
+                        else:
+                            cell.value = int(value)
+                            cell.number_format = "0"
+                    except (TypeError, ValueError):
+                        cell.value = None
+            else:
+                cell.value = clean_excel_value(value)
+
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
         row_num += 1
@@ -2163,17 +2204,17 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
         bottom=Side(style="thin"),
     )
 
-    for row in ws.iter_rows(
+    for row_cells in ws.iter_rows(
         min_row=header_row,
         max_row=ws.max_row,
         min_col=1,
-        max_col=len(headers),
+        max_col=total_columns,
     ):
-        for cell in row:
+        for cell in row_cells:
             cell.border = thin_border
 
     ws.freeze_panes = "A5"
-    ws.auto_filter.ref = f"A{header_row}:{last_column_letter}{ws.max_row}"
+    ws.auto_filter.ref = f"A{header_row}:{last_column}{ws.max_row}"
 
     for col_num, header in enumerate(headers, start=1):
         column_letter = get_column_letter(col_num)
@@ -2193,7 +2234,7 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
         ]:
             ws.column_dimensions[column_letter].width = 28
         elif "Rate" in header:
-            ws.column_dimensions[column_letter].width = 18
+            ws.column_dimensions[column_letter].width = 20
         else:
             ws.column_dimensions[column_letter].width = 16
 
@@ -2206,7 +2247,6 @@ def export_mpdsr_to_excel(modeladmin, request, queryset):
 
     wb.save(response)
     return response
-
 
 @admin.register(Mpdsr)
 class mpdsrshow(ProvinceRestrictedAdminMixin, AutoUserAdminMixin, admin.ModelAdmin):
