@@ -375,11 +375,11 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
     )
 
     list_filter = (
-        WhodistrictFilter,
+        #WhodistrictFilter,
         FacilityFilter,
         "shamsi_year_fk",
         "shamsi_month_fk",
-        "period_fk",
+        #"period_fk",
         "bl_progress_fk",
         "gre_year_fk",
         "gre_month_fk",
@@ -684,8 +684,8 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "skin_prep_rate",
     )
 
-    list_filter = (DistrictFilter, AimpeeFacilityFilter)
-    search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    list_filter = (AimpeeFacilityFilter,)
+    #search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
 
     def _pct(self, num, den):
         try:
