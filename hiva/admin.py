@@ -344,7 +344,7 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     save_on_top = True
-    list_per_page = 15
+    list_per_page = 10
 
     list_display = (
         "id",
@@ -354,7 +354,7 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         "total_deliveries",
         "files_selected",
         "who_indicator_summary",
-        "created_at",
+        #"created_at",
     )
 
     readonly_fields = (
@@ -620,7 +620,27 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        # Save safely. Ratios are calculated by model properties, so no DB ratio fields are required.
+    # Copy FK dropdown values into old text fields
+    # This keeps old database fields, unique_together, ordering, and __str__ safe.
+
+        if obj.shamsi_month_fk:
+            obj.shamsi_month = str(obj.shamsi_month_fk)
+
+        if obj.shamsi_year_fk:
+            obj.shamsi_year = str(obj.shamsi_year_fk)
+
+        if obj.period_fk:
+            obj.period = str(obj.period_fk)
+
+        if obj.bl_progress_fk:
+            obj.bl_progress = str(obj.bl_progress_fk)
+
+        if obj.gre_month_fk:
+            obj.gre_month = str(obj.gre_month_fk)
+
+        if obj.gre_year_fk:
+            obj.gre_year = str(obj.gre_year_fk)
+
         super().save_model(request, obj, form, change)
 
 # ============================================================
