@@ -692,22 +692,22 @@ MentorshipDashboardMixin, admin.ModelAdmin):
     # -------------------------------------------------
     # LS / PC / MC COUNTS
     # -------------------------------------------------
-    @admin.display(description="Total-LS")
+    @admin.display(description="Tot-LS")
     def ls_count(self, obj):
         return obj.items.filter(ls=True).count()
 
-    @admin.display(description="Total-PC")
+    @admin.display(description="Tot-PC")
     def pc_count(self, obj):
         return obj.items.filter(pc=True).count()
 
-    @admin.display(description="Total-MC")
+    @admin.display(description="Tot-MC")
     def mc_count(self, obj):
         return obj.items.filter(mc=True).count()
 
     # -------------------------------------------------
     # DISTINCT COUNTS
     # -------------------------------------------------
-    @admin.display(description="Total-Mentee")
+    @admin.display(description="Tot-Mentee")
     def mentees_count(self, obj):
         return (
             obj.items
