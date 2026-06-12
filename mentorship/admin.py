@@ -548,7 +548,7 @@ MentorshipDashboardMixin, admin.ModelAdmin):
     list_display = (
         "facilityfk",
         "visitdate",
-        "visitround",
+        #"visitround",
         "mentorshipstarttime",
         "mentorshipendtime",
         "get_mentors",

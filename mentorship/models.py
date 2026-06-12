@@ -65,8 +65,8 @@ class Mentorshipvisit(models.Model):
     facilityfk = models.ForeignKey("hiva.Facility", on_delete=models.CASCADE, verbose_name="Health Facility")
     visitdate = models.DateField(verbose_name="Visit Date")
     visitround = models.IntegerField(null=True, blank=True, verbose_name="Visit Round")
-    mentorshipstarttime = models.TimeField(verbose_name="Mentorship Start Time")
-    mentorshipendtime = models.TimeField(verbose_name="Mentorship End Time")
+    mentorshipstarttime = models.TimeField(verbose_name="Start Time")
+    mentorshipendtime = models.TimeField(verbose_name="End Time")
 
     class Meta:
         verbose_name = "MENTORSHIP VISIT"
