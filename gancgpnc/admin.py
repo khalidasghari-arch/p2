@@ -13,7 +13,10 @@ from .models import (
 
 # import Facility from hiva
 from hiva.models import Facility
-
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 # ============================================================
 # Province helper (same style as hiva admin.py)
@@ -378,22 +381,31 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
         "anemia",
         "dangersign",
     )
+
     list_filter = (
         SessionProvinceFilter,
         "sessiontype",
+        "sessionround",
         "sessiondate",
         "attendance",
         "dhypertension",
         "anemia",
         "dangersign",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "sessiontype",
+        "sessionround",
         "typeofdangersign",
     )
+
     ordering = ("-sessiondate",)
+    list_per_page = 25
+    save_on_top = True
+
+    actions = ["export_ganc_first_session_excel"]
 
     fieldsets = (
         ("Session Information", {
@@ -446,6 +458,122 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
         }),
     )
 
+    def export_ganc_first_session_excel(self, request, queryset):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "GANC First Session"
+
+        headers = [
+            "Register Name",
+            "Facility",
+            "Province",
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Attendance",
+            "Present GA",
+            "BP",
+            "Diagnosed Hypertension",
+            "Referred Hypertension to MD",
+            "Weight",
+            "Anemia",
+            "Iron Folate Routine Dose",
+            "Iron Folate 30+ for Anemic Woman",
+            "Prescribe Calcium",
+            "Absorbed Calcium Last Month",
+            "MUAC",
+            "Diagnosed MAM",
+            "Refer MAM to Nutrition Counsellor",
+            "Diagnosed SAM",
+            "Refer SAM to Higher Level",
+            "Completing Laboratory Exam",
+            "Hemoglobin",
+            "Urine Exam / Protein Uria",
+            "Referred Positive Protein Uria to MD",
+            "Cough More Than Two Weeks",
+            "Referred Cough to DOTS Room",
+            "TT Vaccine",
+            "Danger Sign",
+            "Type of Danger Sign",
+            "Remarks",
+        ]
+
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="0F766E")
+        header_font = Font(color="FFFFFF", bold=True)
+
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        for obj in queryset:
+            ws.append([
+                str(obj.registerid) if obj.registerid else "",
+                self.get_facility(obj),
+                self.get_province(obj),
+                obj.sessiontype,
+                obj.sessionround,
+                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
+                obj.attendance,
+                obj.presentga,
+                obj.bp,
+                yes_no(obj.dhypertension),
+                yes_no(obj.rhypertensiontoMD),
+                obj.weight,
+                yes_no(obj.anemia),
+                yes_no(obj.ironfolate),
+                yes_no(obj.ironfolatepluswomen),
+                yes_no(obj.pcalcium),
+                yes_no(obj.acalcium),
+                obj.muac,
+                yes_no(obj.dmam),
+                yes_no(obj.rmam),
+                yes_no(obj.dsam),
+                yes_no(obj.rsam),
+                yes_no(obj.clabexm),
+                obj.hemoglobin,
+                obj.urinexam,
+                yes_no(obj.rpositivepuriatomd),
+                yes_no(obj.coughmorethantwoweeks),
+                yes_no(obj.rcough),
+                yes_no(obj.ttvaccine),
+                yes_no(obj.dangersign),
+                obj.typeofdangersign,
+                obj.remarks,
+            ])
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        for column_cells in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column_cells[0].column)
+
+            for cell in column_cells:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+
+            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="ganc_first_session.xlsx"'
+
+        wb.save(response)
+        return response
+
+    export_ganc_first_session_excel.short_description = "Export selected GANC First Session records to Excel"
+
 
 # ============================================================
 # GANC Second Session
@@ -488,9 +616,10 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
     )
 
     ordering = ("-sessiondate",)
-    date_hierarchy = "sessiondate"
     list_per_page = 25
     save_on_top = True
+
+    actions = ["export_ganc_second_session_excel"]
 
     readonly_fields = (
         "session_help",
@@ -510,7 +639,6 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
                 ("attendance", "presentga"),
             )
         }),
-
         ("② Maternal Assessment", {
             "classes": ("ganc-section", "wide"),
             "description": "Record blood pressure, nutrition, anemia, supplementation and maternal assessment findings.",
@@ -524,7 +652,6 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
                 ("dsam", "rsam"),
             )
         }),
-
         ("③ Laboratory and Screening", {
             "classes": ("ganc-section", "collapse"),
             "description": "Record urine protein, cough screening, referral and TT vaccine status.",
@@ -535,7 +662,6 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
                 "ttvaccine",
             )
         }),
-
         ("④ Danger Signs", {
             "classes": ("ganc-section", "collapse"),
             "description": "If danger sign is Yes, clearly mention the type of danger sign.",
@@ -544,7 +670,6 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
                 ("dangersign", "typeofdangersign"),
             )
         }),
-
         ("⑤ Remarks", {
             "classes": ("ganc-section", "collapse"),
             "fields": ("remarks",)
@@ -559,24 +684,133 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
 
     def session_help(self, obj=None):
         return "Use this section to confirm the correct client and second session details."
-
     session_help.short_description = "Data entry guidance"
 
     def maternal_help(self, obj=None):
         return "Check BP, weight, MUAC, anemia, supplements, MAM/SAM and referrals carefully."
-
     maternal_help.short_description = "Maternal assessment guidance"
 
     def lab_help(self, obj=None):
         return "Urine protein, cough screening and TT vaccine should be completed where applicable."
-
     lab_help.short_description = "Laboratory guidance"
 
     def danger_help(self, obj=None):
         return "If danger sign is selected, type the specific danger sign in the next field."
-
     danger_help.short_description = "Danger sign guidance"
 
+    def export_ganc_second_session_excel(self, request, queryset):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "GANC Second Session"
+
+        headers = [
+            "Register Name",
+            "Facility",
+            "Province",
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Attendance",
+            "Present GA",
+            "BP",
+            "Diagnosed Hypertension",
+            "Referred Hypertension to MD",
+            "Weight",
+            "Anemia",
+            "Iron Folate Routine Dose",
+            "Iron Folate 30+ for Anemic Woman",
+            "Prescribe Calcium",
+            "Absorbed Calcium Last Month",
+            "Mebendazole",
+            "MUAC",
+            "Diagnosed MAM",
+            "Refer MAM to Nutrition Counsellor",
+            "Diagnosed SAM",
+            "Refer SAM to Higher Level",
+            "Urine Exam / Protein Uria",
+            "Referred Positive Protein Uria to MD",
+            "Cough More Than Two Weeks",
+            "Referred Cough to DOTS Room",
+            "TT Vaccine",
+            "Danger Sign",
+            "Type of Danger Sign",
+            "Remarks",
+        ]
+
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="0F766E")
+        header_font = Font(color="FFFFFF", bold=True)
+
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        for obj in queryset:
+            ws.append([
+                str(obj.registerid) if obj.registerid else "",
+                self.get_facility(obj),
+                self.get_province(obj),
+                obj.sessiontype,
+                obj.sessionround,
+                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
+                obj.attendance,
+                obj.presentga,
+                obj.bp,
+                yes_no(obj.dhypertension),
+                yes_no(obj.rhypertensiontoMD),
+                obj.weight,
+                yes_no(obj.anemia),
+                yes_no(obj.ironfolate),
+                yes_no(obj.ironfolatepluswomen),
+                yes_no(obj.pcalcium),
+                yes_no(obj.acalcium),
+                yes_no(obj.mebendazole),
+                obj.muac,
+                yes_no(obj.dmam),
+                yes_no(obj.rmam),
+                yes_no(obj.dsam),
+                yes_no(obj.rsam),
+                obj.urinexam,
+                yes_no(obj.rpositivepuriatomd),
+                yes_no(obj.coughmorethantwoweeks),
+                yes_no(obj.rcough),
+                yes_no(obj.ttvaccine),
+                yes_no(obj.dangersign),
+                obj.typeofdangersign,
+                obj.remarks,
+            ])
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        for column_cells in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column_cells[0].column)
+
+            for cell in column_cells:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+
+            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="ganc_second_session.xlsx"'
+
+        wb.save(response)
+        return response
+
+    export_ganc_second_session_excel.short_description = "Export selected GANC Second Session records to Excel"
 
 # ============================================================
 # GANC Third Session
@@ -585,95 +819,250 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
 @admin.register(Gancthirdsession)
 class GancthirdsessionAdmin(BaseSessionAdmin):
     list_display = (
-        "registerid",
-        "get_facility",
-        "get_province",
-        "sessiontype",
-        "sessionround",
-        "sessiondate",
-        "attendance",
-        "presentga",
-        "bp",
-        "anemia",
-        "antedepressionscreening",
-        "birthplanningcounseling",
+        "registerid", "get_facility", "get_province",
+        "sessiontype", "sessionround", "sessiondate",
+        "attendance", "presentga", "bp", "anemia",
+        "antedepressionscreening", "antedepressiondiagnosed",
+        "birthplanningcounseling", "dangersign",
     )
+
     list_filter = (
         SessionProvinceFilter,
-        "sessiontype",
-        "sessiondate",
-        "attendance",
-        "dhypertension",
-        "anemia",
-        "antedepressionscreening",
-        "antedepressiondiagnosed",
-        "birthplanningcounseling",
+        "sessiontype", "sessionround", "sessiondate",
+        "attendance", "dhypertension", "anemia",
+        "antedepressionscreening", "antedepressiondiagnosed",
+        "rpsychosocialcounselor", "birthplanningcounseling",
+        "dangersign",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "sessiontype",
+        "sessionround",
         "typeofdangersign",
     )
+
     ordering = ("-sessiondate",)
+    list_per_page = 25
+    save_on_top = True
+
+    actions = ["export_ganc_third_session_excel"]
+
+    readonly_fields = (
+        "session_help",
+        "maternal_help",
+        "mental_health_help",
+        "lab_help",
+        "danger_counseling_help",
+    )
 
     fieldsets = (
-        ("Session Information", {
+        ("① Session Information", {
+            "classes": ("ganc-section", "wide"),
+            "description": "Confirm client, session date, attendance status and gestational age.",
             "fields": (
-                "registerid",
-                "sessiontype",
-                "sessionround",
-                "sessiondate",
-                "attendance",
-                "presentga",
+                "session_help",
+                ("registerid", "sessiondate"),
+                ("sessiontype", "sessionround"),
+                ("attendance", "presentga"),
             )
         }),
-        ("Maternal Assessment", {
+        ("② Maternal Assessment", {
+            "classes": ("ganc-section", "wide"),
+            "description": "Record BP, weight, MUAC, anemia, supplements, nutrition status and referrals.",
             "fields": (
-                "bp",
-                "dhypertension",
-                "rhypertensiontoMD",
-                "weight",
-                "anemia",
-                "ironfolate",
-                "ironfolatepluswomen",
-                "pcalcium",
-                "acalcium",
-                "muac",
-                "dmam",
-                "rmam",
-                "dsam",
-                "rsam",
+                "maternal_help",
+                ("bp", "weight", "muac"),
+                ("dhypertension", "rhypertensiontoMD"),
+                ("anemia", "ironfolate", "ironfolatepluswomen"),
+                ("pcalcium", "acalcium"),
+                ("dmam", "rmam"),
+                ("dsam", "rsam"),
             )
         }),
-        ("Mental Health", {
+        ("③ Mental Health", {
+            "classes": ("ganc-section", "wide"),
+            "description": "Record antenatal depression screening, diagnosis and referral.",
             "fields": (
-                "antedepressionscreening",
-                "antedepressiondiagnosed",
-                "rpsychosocialcounselor",
+                "mental_health_help",
+                (
+                    "antedepressionscreening",
+                    "antedepressiondiagnosed",
+                    "rpsychosocialcounselor",
+                ),
             )
         }),
-        ("Laboratory and Screening", {
+        ("④ Laboratory and Screening", {
+            "classes": ("ganc-section", "collapse"),
+            "description": "Record urine protein, cough screening, referral and TT vaccine.",
             "fields": (
-                "urinexam",
-                "rpositivepuriatomd",
-                "coughmorethantwoweeks",
-                "rcough",
+                "lab_help",
+                ("urinexam", "rpositivepuriatomd"),
+                ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
             )
         }),
-        ("Danger Signs and Counseling", {
+        ("⑤ Danger Signs and Counseling", {
+            "classes": ("ganc-section", "collapse"),
+            "description": "Record danger signs and birth planning counseling.",
             "fields": (
-                "dangersign",
-                "typeofdangersign",
+                "danger_counseling_help",
+                ("dangersign", "typeofdangersign"),
                 "birthplanningcounseling",
             )
         }),
-        ("Other Information", {
+        ("⑥ Remarks", {
+            "classes": ("ganc-section", "collapse"),
             "fields": ("remarks",)
         }),
     )
 
+    class Media:
+        css = {
+            "all": ("admin/css/ganc_admin.css",)
+        }
+        js = ("admin/js/ganc_admin.js",)
+
+    def session_help(self, obj=None):
+        return "Use this section to confirm the correct woman and third ANC session details."
+    session_help.short_description = "Guidance"
+
+    def maternal_help(self, obj=None):
+        return "Complete BP, nutrition, anemia, supplements and referral-related fields carefully."
+    maternal_help.short_description = "Guidance"
+
+    def mental_health_help(self, obj=None):
+        return "If depression is diagnosed, referral to psychosocial counselor should be reviewed."
+    mental_health_help.short_description = "Guidance"
+
+    def lab_help(self, obj=None):
+        return "Complete urine protein, cough screening and TT vaccine fields where applicable."
+    lab_help.short_description = "Guidance"
+
+    def danger_counseling_help(self, obj=None):
+        return "If danger sign is Yes, enter the type of danger sign. Also record birth planning counseling."
+    danger_counseling_help.short_description = "Guidance"
+
+    def export_ganc_third_session_excel(self, request, queryset):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "GANC Third Session"
+
+        headers = [
+            "Register Name",
+            "Facility",
+            "Province",
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Attendance",
+            "Present GA",
+            "BP",
+            "Diagnosed Hypertension",
+            "Referred Hypertension to MD",
+            "Weight",
+            "Anemia",
+            "Iron Folate Routine Dose",
+            "Iron Folate 30+ for Anemic Woman",
+            "Prescribe Calcium",
+            "Absorbed Calcium Last Month",
+            "MUAC",
+            "Diagnosed MAM",
+            "Refer MAM to Nutrition Counsellor",
+            "Diagnosed SAM",
+            "Refer SAM to Higher Level",
+            "Antenatal Depression Screening",
+            "Antenatal Depression Diagnosed",
+            "Refer to Psychosocial Counselor",
+            "Urine Exam / Protein Uria",
+            "Referred Positive Protein Uria to MD",
+            "Cough More Than Two Weeks",
+            "Referred Cough to DOTS Room",
+            "TT Vaccine",
+            "Danger Sign",
+            "Type of Danger Sign",
+            "Birth Planning Counseling",
+            "Remarks",
+        ]
+
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="0F766E")
+        header_font = Font(color="FFFFFF", bold=True)
+
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        for obj in queryset:
+            ws.append([
+                str(obj.registerid) if obj.registerid else "",
+                self.get_facility(obj),
+                self.get_province(obj),
+                obj.sessiontype,
+                obj.sessionround,
+                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
+                obj.attendance,
+                obj.presentga,
+                obj.bp,
+                yes_no(obj.dhypertension),
+                yes_no(obj.rhypertensiontoMD),
+                obj.weight,
+                yes_no(obj.anemia),
+                yes_no(obj.ironfolate),
+                yes_no(obj.ironfolatepluswomen),
+                yes_no(obj.pcalcium),
+                yes_no(obj.acalcium),
+                obj.muac,
+                yes_no(obj.dmam),
+                yes_no(obj.rmam),
+                yes_no(obj.dsam),
+                yes_no(obj.rsam),
+                yes_no(obj.antedepressionscreening),
+                yes_no(obj.antedepressiondiagnosed),
+                yes_no(obj.rpsychosocialcounselor),
+                obj.urinexam,
+                yes_no(obj.rpositivepuriatomd),
+                yes_no(obj.coughmorethantwoweeks),
+                yes_no(obj.rcough),
+                yes_no(obj.ttvaccine),
+                yes_no(obj.dangersign),
+                obj.typeofdangersign,
+                yes_no(obj.birthplanningcounseling),
+                obj.remarks,
+            ])
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        for column_cells in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column_cells[0].column)
+
+            for cell in column_cells:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+
+            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="ganc_third_session.xlsx"'
+
+        wb.save(response)
+        return response
+
+    export_ganc_third_session_excel.short_description = "Export selected GANC Third Session records to Excel"
 
 # ============================================================
 # GANC Fourth Session
