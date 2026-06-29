@@ -68,6 +68,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from io import BytesIO
+from decimal import Decimal
+from datetime import datetime, date
+from django.contrib import admin
+from django.http import HttpResponse
+from django.utils import timezone
+from django.db.models import ForeignKey
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 # ============================================================
 # Admin Branding
@@ -265,39 +275,197 @@ class AimpeeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "bl_progress",
         "gre_year",
         "gre_month",
-         # ANC Screening
+
+        # ANC Screening
         "anc_total_seen",
         "anc_bp_measured",
         "preeclampsia_diagnosed",
+
         # Severe cases & treatment
         "severe_pree_or_eclampsia",
         "severe_pree_antihypertensive_within_1hr",
         "magnesium_sulfate_within_1hr",
+
         # Admissions
         "spe_admissions_before_delivery",
         "eclampsia_admissions_before_delivery",
+
         # Outcomes
         "total_complications",
         "maternal_death",
-        #"created_at", 
     )
 
     list_filter = (DistrictFilter, AimpeeFacilityFilter)
     search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
     list_per_page = 10
 
+    actions = ["export_aimpee_to_excel"]
+
     @admin.display(description="Province")
     def get_province(self, obj):
         return obj.aimfacilityname.districtfk.provincefk.name
 
     def province_filter_kwargs(self, request):
-        return {"aimfacilityname__districtfk__provincefk": user_province(request)}
+        return {
+            "aimfacilityname__districtfk__provincefk": user_province(request)
+        }
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "aimfacilityname" and not request.user.is_superuser:
             prov = user_province(request)
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+            kwargs["queryset"] = (
+                Facility.objects.filter(districtfk__provincefk=prov)
+                if prov else Facility.objects.none()
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    # ------------------------------------------------------------
+    # Excel Export Action
+    # ------------------------------------------------------------
+    @admin.action(description="Export selected AIM-PEE records to Excel")
+    def export_aimpee_to_excel(self, request, queryset):
+        """
+        Export all fields from AIM-PEE model into Excel.
+        Also includes Province, District, Facility Code, and Facility Name.
+        """
+
+        queryset = queryset.select_related(
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "AIM-PEE Export"
+
+        # -----------------------------
+        # Helper functions
+        # -----------------------------
+        def clean_value(value):
+            if value is None:
+                return ""
+
+            if isinstance(value, Decimal):
+                return float(value)
+
+            if isinstance(value, datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                return value.replace(tzinfo=None)
+
+            if isinstance(value, date):
+                return value
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            return value
+
+        def safe_get(obj, attr_path):
+            """
+            Example:
+            safe_get(obj, "aimfacilityname__districtfk__provincefk__name")
+            """
+            current = obj
+            for attr in attr_path.split("__"):
+                current = getattr(current, attr, None)
+                if current is None:
+                    return ""
+            return current
+
+        # -----------------------------
+        # Build dynamic columns
+        # -----------------------------
+        columns = [
+            ("Province", lambda obj: safe_get(obj, "aimfacilityname__districtfk__provincefk__name")),
+            ("District", lambda obj: safe_get(obj, "aimfacilityname__districtfk__name")),
+            ("HF Code", lambda obj: safe_get(obj, "aimfacilityname__hfcode")),
+            ("Facility Name", lambda obj: safe_get(obj, "aimfacilityname__name")),
+        ]
+
+        # Add every real database field from the AIM-PEE model
+        for field in self.model._meta.fields:
+            if isinstance(field, ForeignKey):
+                columns.append(
+                    (
+                        field.verbose_name.title(),
+                        lambda obj, f=field: str(getattr(obj, f.name, "") or "")
+                    )
+                )
+                columns.append(
+                    (
+                        f"{field.name}_id",
+                        lambda obj, f=field: getattr(obj, f.attname, "")
+                    )
+                )
+            else:
+                columns.append(
+                    (
+                        field.verbose_name.title(),
+                        lambda obj, f=field: clean_value(
+                            getattr(obj, f"get_{f.name}_display")()
+                            if f.choices
+                            else getattr(obj, f.name, "")
+                        )
+                    )
+                )
+
+        # -----------------------------
+        # Write headers
+        # -----------------------------
+        headers = [col[0] for col in columns]
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="D9EAF7")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        # -----------------------------
+        # Write data rows
+        # -----------------------------
+        for obj in queryset:
+            row = [clean_value(func(obj)) for _, func in columns]
+            ws.append(row)
+
+        # -----------------------------
+        # Excel formatting
+        # -----------------------------
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for col_num, column_cells in enumerate(ws.columns, start=1):
+            max_length = 0
+            col_letter = get_column_letter(col_num)
+
+            for cell in column_cells:
+                try:
+                    value_length = len(str(cell.value)) if cell.value is not None else 0
+                    max_length = max(max_length, value_length)
+                except Exception:
+                    pass
+
+            ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+
+        # -----------------------------
+        # Return Excel response
+        # -----------------------------
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"aimpee_export_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return response
 
 # ============================================================
 # AIM-PPH
@@ -328,18 +496,204 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
     list_per_page = 10
 
+    actions = ["export_aimpph_to_excel"]
+
     @admin.display(description="Province")
     def get_province(self, obj):
         return obj.aimfacilityname.districtfk.provincefk.name
 
     def province_filter_kwargs(self, request):
-        return {"aimfacilityname__districtfk__provincefk": user_province(request)}
+        return {
+            "aimfacilityname__districtfk__provincefk": user_province(request)
+        }
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "aimfacilityname" and not request.user.is_superuser:
             prov = user_province(request)
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+            kwargs["queryset"] = (
+                Facility.objects.filter(districtfk__provincefk=prov)
+                if prov else Facility.objects.none()
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    # ------------------------------------------------------------
+    # Excel Export Action
+    # ------------------------------------------------------------
+    @admin.action(description="Export selected AIM-PPH records to Excel")
+    def export_aimpph_to_excel(self, request, queryset):
+        """
+        Export all fields from AIM-PPH model into Excel.
+        Also includes Province, District, Facility Code, and Facility Name.
+        """
+
+        queryset = queryset.select_related(
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "AIM-PPH Export"
+
+        # -----------------------------
+        # Helper functions
+        # -----------------------------
+        def clean_value(value):
+            if value is None:
+                return ""
+
+            if isinstance(value, Decimal):
+                return float(value)
+
+            if isinstance(value, datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                return value.replace(tzinfo=None)
+
+            if isinstance(value, date):
+                return value
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            return value
+
+        def safe_get(obj, attr_path):
+            """
+            Example:
+            safe_get(obj, "aimfacilityname__districtfk__provincefk__name")
+            """
+            current = obj
+            for attr in attr_path.split("__"):
+                current = getattr(current, attr, None)
+                if current is None:
+                    return ""
+            return current
+
+        # -----------------------------
+        # Build export columns
+        # -----------------------------
+        columns = [
+            (
+                "Province",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__districtfk__provincefk__name"
+                ),
+            ),
+            (
+                "District",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__districtfk__name"
+                ),
+            ),
+            (
+                "HF Code",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__hfcode"
+                ),
+            ),
+            (
+                "Facility Name",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__name"
+                ),
+            ),
+        ]
+
+        # Add every real database field from the AIM-PPH model
+        for field in self.model._meta.fields:
+            if isinstance(field, ForeignKey):
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: str(getattr(obj, f.name, "") or "")
+                    )
+                )
+                columns.append(
+                    (
+                        f"{field.name}_id",
+                        lambda obj, f=field: getattr(obj, f.attname, "")
+                    )
+                )
+            else:
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: clean_value(
+                            getattr(obj, f"get_{f.name}_display")()
+                            if f.choices
+                            else getattr(obj, f.name, "")
+                        )
+                    )
+                )
+
+        # -----------------------------
+        # Write headers
+        # -----------------------------
+        headers = [col[0] for col in columns]
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="D9EAF7")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        # -----------------------------
+        # Write data rows
+        # -----------------------------
+        for obj in queryset:
+            row = [clean_value(func(obj)) for _, func in columns]
+            ws.append(row)
+
+        # -----------------------------
+        # Excel formatting
+        # -----------------------------
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for col_num, column_cells in enumerate(ws.columns, start=1):
+            max_length = 0
+            col_letter = get_column_letter(col_num)
+
+            for cell in column_cells:
+                try:
+                    value_length = len(str(cell.value)) if cell.value is not None else 0
+                    max_length = max(max_length, value_length)
+                except Exception:
+                    pass
+
+            ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+
+        # -----------------------------
+        # Return Excel response
+        # -----------------------------
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"aimpph_export_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return response
 
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
