@@ -695,6 +695,9 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
         return response
 
+# ============================================================
+# WHO Childbirth Checklist Monthly
+# ============================================================
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     save_on_top = True
@@ -708,7 +711,7 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         "total_deliveries",
         "files_selected",
         "who_indicator_summary",
-        #"created_at",
+        # "created_at",
     )
 
     readonly_fields = (
@@ -729,11 +732,11 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
     )
 
     list_filter = (
-        #WhodistrictFilter,
+        # WhodistrictFilter,
         FacilityFilter,
         "shamsi_year_fk",
         "shamsi_month_fk",
-        #"period_fk",
+        # "period_fk",
         "bl_progress_fk",
         "gre_year_fk",
         "gre_month_fk",
@@ -758,6 +761,8 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         "gre_year_fk",
     )
 
+    actions = ["export_who_childbirth_to_excel"]
+
     fieldsets = (
         ("Clinical Data Entry Guidance", {
             "fields": (
@@ -768,7 +773,10 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         }),
 
         ("1. Facility and Reporting Period", {
-            "description": "Select the facility and reporting period carefully. These fields are used for dashboards and reporting.",
+            "description": (
+                "Select the facility and reporting period carefully. "
+                "These fields are used for dashboards and reporting."
+            ),
             "fields": (
                 "facility_name",
                 ("shamsi_month_fk", "shamsi_year_fk"),
@@ -778,7 +786,10 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         }),
 
         ("2. Monthly Deliveries and Random File Sample", {
-            "description": "Enter total monthly deliveries and the number of randomly selected patient files. The selected files should be up to 20.",
+            "description": (
+                "Enter total monthly deliveries and the number of randomly selected "
+                "patient files. The selected files should be up to 20."
+            ),
             "fields": (
                 "total_deliveries",
                 "files_selected",
@@ -834,6 +845,9 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         }),
     )
 
+    # ------------------------------------------------------------
+    # Admin guidance notes
+    # ------------------------------------------------------------
     @admin.display(description="")
     def clinical_entry_note(self, obj):
         return format_html(
@@ -873,6 +887,9 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             """
         )
 
+    # ------------------------------------------------------------
+    # Display reporting period
+    # ------------------------------------------------------------
     @admin.display(description="Reporting Period")
     def reporting_period(self, obj):
         return format_html(
@@ -883,14 +900,20 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             obj.bl_progress_fk or "-",
         )
 
+    # ------------------------------------------------------------
+    # Percentage helper
+    # ------------------------------------------------------------
     def _pct(self, num, den):
         try:
             if num is None or den in (None, 0):
                 return None
             return (Decimal(num) / Decimal(den)) * Decimal("100.0")
-        except (InvalidOperation, ZeroDivisionError):
+        except (InvalidOperation, ZeroDivisionError, TypeError):
             return None
 
+    # ------------------------------------------------------------
+    # Mini indicator badge
+    # ------------------------------------------------------------
     def _mini_badge(self, label, value):
         if value is None:
             return format_html(
@@ -922,6 +945,9 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             round(value, 1),
         )
 
+    # ------------------------------------------------------------
+    # WHO indicator summary in list display
+    # ------------------------------------------------------------
     @admin.display(description="WHO Indicators")
     def who_indicator_summary(self, obj):
         return format_html(
@@ -937,6 +963,9 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             self._mini_badge("All 4", obj.all4_sections_completeness_ratio),
         )
 
+    # ------------------------------------------------------------
+    # Optimized queryset
+    # ------------------------------------------------------------
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related(
@@ -951,6 +980,9 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
             "gre_year_fk",
         )
 
+    # ------------------------------------------------------------
+    # Province display
+    # ------------------------------------------------------------
     @admin.display(description="Province")
     def get_province(self, obj):
         try:
@@ -958,11 +990,16 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
         except Exception:
             return "-"
 
+    # ------------------------------------------------------------
+    # Province restriction
+    # ------------------------------------------------------------
     def province_filter_kwargs(self, request):
         prov = user_province(request)
         if not prov:
             return {}
-        return {"facility_name__districtfk__provincefk_id": prov.id}
+        return {
+            "facility_name__districtfk__provincefk_id": prov.id
+        }
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "facility_name" and not request.user.is_superuser:
@@ -971,11 +1008,15 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
                 Facility.objects.filter(districtfk__provincefk=prov)
                 if prov else Facility.objects.none()
             )
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    # ------------------------------------------------------------
+    # Save FK dropdown values into old text fields
+    # ------------------------------------------------------------
     def save_model(self, request, obj, form, change):
-    # Copy FK dropdown values into old text fields
-    # This keeps old database fields, unique_together, ordering, and __str__ safe.
+        # Copy FK dropdown values into old text fields.
+        # This keeps old database fields, unique_together, ordering, and __str__ safe.
 
         if obj.shamsi_month_fk:
             obj.shamsi_month = str(obj.shamsi_month_fk)
@@ -997,12 +1038,235 @@ class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.Mod
 
         super().save_model(request, obj, form, change)
 
+    # ------------------------------------------------------------
+    # Excel Export Action
+    # ------------------------------------------------------------
+    @admin.action(description="Export selected WHO Childbirth Checklist records to Excel")
+    def export_who_childbirth_to_excel(self, request, queryset):
+        """
+        Export all WHO Childbirth Checklist Monthly fields into Excel.
+        Includes:
+        - Province
+        - District
+        - HF Code
+        - Facility Name
+        - All database fields
+        - Foreign key display values
+        - Foreign key IDs
+        - Calculated ratio properties
+        """
+
+        queryset = queryset.select_related(
+            "facility_name",
+            "facility_name__districtfk",
+            "facility_name__districtfk__provincefk",
+            "shamsi_month_fk",
+            "shamsi_year_fk",
+            "period_fk",
+            "bl_progress_fk",
+            "gre_month_fk",
+            "gre_year_fk",
+        )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "WHO Childbirth Export"
+
+        # -----------------------------
+        # Helper functions
+        # -----------------------------
+        def clean_value(value):
+            if value is None:
+                return ""
+
+            if isinstance(value, Decimal):
+                return float(value)
+
+            if isinstance(value, datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                return value.replace(tzinfo=None)
+
+            if isinstance(value, date):
+                return value
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            return value
+
+        def safe_get(obj, attr_path):
+            """
+            Example:
+            safe_get(obj, "facility_name__districtfk__provincefk__name")
+            """
+            current = obj
+
+            for attr in attr_path.split("__"):
+                current = getattr(current, attr, None)
+                if current is None:
+                    return ""
+
+            return current
+
+        # -----------------------------
+        # Main export columns
+        # -----------------------------
+        columns = [
+            (
+                "Province",
+                lambda obj: safe_get(
+                    obj,
+                    "facility_name__districtfk__provincefk__name"
+                ),
+            ),
+            (
+                "District",
+                lambda obj: safe_get(
+                    obj,
+                    "facility_name__districtfk__name"
+                ),
+            ),
+            (
+                "HF Code",
+                lambda obj: safe_get(
+                    obj,
+                    "facility_name__hfcode"
+                ),
+            ),
+            (
+                "Facility Name",
+                lambda obj: safe_get(
+                    obj,
+                    "facility_name__name"
+                ),
+            ),
+        ]
+
+        # Add every real database field from WhoChildbirthChecklistMonthly model
+        for field in self.model._meta.fields:
+            if isinstance(field, ForeignKey):
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: str(getattr(obj, f.name, "") or "")
+                    )
+                )
+
+                columns.append(
+                    (
+                        f"{field.name}_id",
+                        lambda obj, f=field: getattr(obj, f.attname, "")
+                    )
+                )
+
+            else:
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: clean_value(
+                            getattr(obj, f"get_{f.name}_display")()
+                            if f.choices
+                            else getattr(obj, f.name, "")
+                        )
+                    )
+                )
+
+        # Add calculated ratio properties.
+        # These are not database fields, so they must be added manually.
+        ratio_columns = [
+            ("Section 1 Completeness Ratio (%)", "sec1_completeness_ratio"),
+            ("Partograph Use at Cervix ≥4cm Rate (%)", "partograph_use_ge4_rate"),
+            ("Section 2 Completeness Ratio (%)", "sec2_completeness_ratio"),
+            ("Newborn 5 Essential Supplies Ratio (%)", "newborn_supplies_5_ratio"),
+            ("Section 3 Completeness Ratio (%)", "sec3_completeness_ratio"),
+            ("Breastfeeding and Skin-to-Skin First Hour Ratio (%)", "bf_s2s_first_hour_ratio"),
+            ("Section 4 Completeness Ratio (%)", "sec4_completeness_ratio"),
+            ("Newborn Antibiotic Need Checked Ratio (%)", "abx_need_checked_ratio"),
+            ("All 4 Sections Completeness Ratio (%)", "all4_sections_completeness_ratio"),
+        ]
+
+        for header, attr_name in ratio_columns:
+            columns.append(
+                (
+                    header,
+                    lambda obj, a=attr_name: clean_value(getattr(obj, a, ""))
+                )
+            )
+
+        # -----------------------------
+        # Write headers
+        # -----------------------------
+        headers = [col[0] for col in columns]
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="D9EAF7")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        # -----------------------------
+        # Write data rows
+        # -----------------------------
+        for obj in queryset:
+            row = [clean_value(func(obj)) for _, func in columns]
+            ws.append(row)
+
+        # -----------------------------
+        # Excel formatting
+        # -----------------------------
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for col_num, column_cells in enumerate(ws.columns, start=1):
+            max_length = 0
+            col_letter = get_column_letter(col_num)
+
+            for cell in column_cells:
+                try:
+                    value_length = len(str(cell.value)) if cell.value is not None else 0
+                    max_length = max(max_length, value_length)
+                except Exception:
+                    pass
+
+            ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+
+        # -----------------------------
+        # Return Excel response
+        # -----------------------------
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = (
+            f"who_childbirth_checklist_export_"
+            f"{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return response
+
 # ============================================================
 # Safe Surgery (C-Section clinical)
 # ============================================================
 @admin.register(safesurgeryclinical)
 class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    form = AimpeeAdminForm  # if you really intended this, keep; otherwise replace with correct form
+    form = AimpeeAdminForm  # Replace with SafeSurgery form if you have one
 
     list_display = (
         "id",
@@ -1039,16 +1303,39 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     )
 
     list_filter = (AimpeeFacilityFilter,)
-    #search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    list_per_page = 10
 
+    actions = ["export_safesurgeryclinical_to_excel"]
+
+    # ------------------------------------------------------------
+    # Improve queryset performance
+    # ------------------------------------------------------------
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+    # ------------------------------------------------------------
+    # Percentage helper
+    # ------------------------------------------------------------
     def _pct(self, num, den):
         try:
             if num is None or den in (None, 0):
-                return None
-            return (Decimal(num) / Decimal(den)) * Decimal("100.0")
-        except (InvalidOperation, ZeroDivisionError):
-            return None
+                return Decimal("0.00")
 
+            result = (Decimal(num) / Decimal(den)) * Decimal("100")
+            return result.quantize(Decimal("0.01"))
+
+        except (InvalidOperation, ZeroDivisionError, TypeError):
+            return Decimal("0.00")
+
+    # ------------------------------------------------------------
+    # Auto-calculate rates before saving
+    # ------------------------------------------------------------
     def save_model(self, request, obj, form, change):
         obj.cs_rate = self._pct(obj.total_cs, obj.total_deliv)
         obj.who_ssc_rate = self._pct(obj.who_ssc_completed, obj.total_cs)
@@ -1063,20 +1350,223 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         obj.foley_after_anes_rate = self._pct(obj.foley_after_anes_num, obj.total_cs)
         obj.abx_proph_rate = self._pct(obj.abx_proph_num, obj.total_cs)
         obj.skin_prep_rate = self._pct(obj.skin_prep_num, obj.total_cs)
+
         super().save_model(request, obj, form, change)
 
+    # ------------------------------------------------------------
+    # Province display
+    # ------------------------------------------------------------
     @admin.display(description="Province")
     def get_province(self, obj):
-        return obj.aimfacilityname.districtfk.provincefk.name
+        try:
+            return obj.aimfacilityname.districtfk.provincefk.name
+        except AttributeError:
+            return ""
 
+    # ------------------------------------------------------------
+    # Province restriction
+    # ------------------------------------------------------------
     def province_filter_kwargs(self, request):
-        return {"aimfacilityname__districtfk__provincefk": user_province(request)}
+        return {
+            "aimfacilityname__districtfk__provincefk": user_province(request)
+        }
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "aimfacilityname" and not request.user.is_superuser:
             prov = user_province(request)
-            kwargs["queryset"] = Facility.objects.filter(districtfk__provincefk=prov) if prov else Facility.objects.none()
+            kwargs["queryset"] = (
+                Facility.objects.filter(districtfk__provincefk=prov)
+                if prov else Facility.objects.none()
+            )
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    # ------------------------------------------------------------
+    # Excel Export Action
+    # ------------------------------------------------------------
+    @admin.action(description="Export selected Safe Surgery records to Excel")
+    def export_safesurgeryclinical_to_excel(self, request, queryset):
+        """
+        Export all fields from Safe Surgery Clinical model into Excel.
+        Also includes Province, District, Facility Code, and Facility Name.
+        """
+
+        queryset = queryset.select_related(
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Safe Surgery Export"
+
+        # -----------------------------
+        # Helper functions
+        # -----------------------------
+        def clean_value(value):
+            if value is None:
+                return ""
+
+            if isinstance(value, Decimal):
+                return float(value)
+
+            if isinstance(value, datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                return value.replace(tzinfo=None)
+
+            if isinstance(value, date):
+                return value
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            return value
+
+        def safe_get(obj, attr_path):
+            """
+            Example:
+            safe_get(obj, "aimfacilityname__districtfk__provincefk__name")
+            """
+            current = obj
+
+            for attr in attr_path.split("__"):
+                current = getattr(current, attr, None)
+                if current is None:
+                    return ""
+
+            return current
+
+        # -----------------------------
+        # Build export columns
+        # -----------------------------
+        columns = [
+            (
+                "Province",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__districtfk__provincefk__name"
+                ),
+            ),
+            (
+                "District",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__districtfk__name"
+                ),
+            ),
+            (
+                "HF Code",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__hfcode"
+                ),
+            ),
+            (
+                "Facility Name",
+                lambda obj: safe_get(
+                    obj,
+                    "aimfacilityname__name"
+                ),
+            ),
+        ]
+
+        # Add every real database field from safesurgeryclinical model
+        for field in self.model._meta.fields:
+            if isinstance(field, ForeignKey):
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: str(getattr(obj, f.name, "") or "")
+                    )
+                )
+
+                columns.append(
+                    (
+                        f"{field.name}_id",
+                        lambda obj, f=field: getattr(obj, f.attname, "")
+                    )
+                )
+
+            else:
+                columns.append(
+                    (
+                        str(field.verbose_name),
+                        lambda obj, f=field: clean_value(
+                            getattr(obj, f"get_{f.name}_display")()
+                            if f.choices
+                            else getattr(obj, f.name, "")
+                        )
+                    )
+                )
+
+        # -----------------------------
+        # Write headers
+        # -----------------------------
+        headers = [col[0] for col in columns]
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="D9EAF7")
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        # -----------------------------
+        # Write data rows
+        # -----------------------------
+        for obj in queryset:
+            row = [clean_value(func(obj)) for _, func in columns]
+            ws.append(row)
+
+        # -----------------------------
+        # Excel formatting
+        # -----------------------------
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for col_num, column_cells in enumerate(ws.columns, start=1):
+            max_length = 0
+            col_letter = get_column_letter(col_num)
+
+            for cell in column_cells:
+                try:
+                    value_length = len(str(cell.value)) if cell.value is not None else 0
+                    max_length = max(max_length, value_length)
+                except Exception:
+                    pass
+
+            ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+
+        # -----------------------------
+        # Return Excel response
+        # -----------------------------
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = (
+            f"safe_surgery_export_"
+            f"{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return response
 
 # ============================================================
 # Facility Admin
