@@ -5,6 +5,11 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.urls import path
 from django.utils.html import format_html
+from django.http import HttpResponse, JsonResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from django.db.models import Count
 
 from .models import (
     ThematicArea,
@@ -336,9 +341,6 @@ class SkillLabAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin
         return format_html('<span class="{}">{}</span>', cls, obj.get_status_display())
 
 
-# =========================================================
-# Skill Lab Session
-# =========================================================
 @admin.register(SkillLabSession)
 class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     form = SkillLabSessionAdminForm
@@ -346,6 +348,7 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
 
     list_display = (
         "skill_lab",
+        "get_facility",
         "get_province",
         "session_date",
         "lab_round",
@@ -356,12 +359,14 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
         "participant_total_display",
         "duration_display",
     )
+
     search_fields = (
         "skill_lab__name",
         "skill_lab__facility__name",
         "skill_lab__facility__districtfk__name",
         "skill_lab__facility__districtfk__provincefk__name",
     )
+
     list_filter = (
         SkillLabSessionProvinceFilter,
         "session_type",
@@ -372,12 +377,15 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
         "followup_needed",
         "session_date",
     )
-    date_hierarchy = "session_date"
+
+    ordering = ("-session_date",)
     save_on_top = True
     list_per_page = 50
 
     autocomplete_fields = ("skill_lab",)
     raw_id_fields = ("mentor_org",)
+
+    actions = ["export_skilllab_sessions_excel"]
 
     readonly_fields = (
         "duration_preview",
@@ -442,21 +450,12 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
                 thematicfk_id=thematic_id
             ).order_by("track", "seq_no", "name")
 
-        data = [
-            {
-                "id": topic.pk,
-                "text": str(topic),
-            }
-            for topic in topics
-        ]
+        data = [{"id": topic.pk, "text": str(topic)} for topic in topics]
         return JsonResponse({"results": data})
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         province = user_province(request)
 
-        # If mentor_name has been converted to FK to hiva.Assessor,
-        # restrict it to clinical mentors in the user's province.
-        # If mentor_name is still CharField, this method is not called for it.
         if db_field.name in ("mentor_name", "mentor") and province and not request.user.is_superuser:
             qs = db_field.remote_field.model.objects.all()
             qs = safe_filter_by_user_province(qs, province)
@@ -470,12 +469,14 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
             "skill_lab__facility",
             "skill_lab__facility__districtfk",
             "skill_lab__facility__districtfk__provincefk",
+            "mentor_name",
             "mentor_org",
         ).annotate(_participant_count=Count("participant_records"))
 
         province = user_province(request)
         if province and not request.user.is_superuser:
             qs = qs.filter(skill_lab__facility__districtfk__provincefk=province)
+
         return qs
 
     def province_filter_kwargs(self, request):
@@ -485,6 +486,7 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
         super().save_related(request, form, formsets, change)
         obj = form.instance
         actual_count = obj.participant_records.count()
+
         if obj.total_participants != actual_count:
             obj.total_participants = actual_count
             obj.save(update_fields=["total_participants"])
@@ -496,7 +498,10 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
 
     @admin.display(description="Facility")
     def get_facility(self, obj):
-        return obj.skill_lab.facility.name if obj.skill_lab and obj.skill_lab.facility else "-"
+        try:
+            return obj.skill_lab.facility.name
+        except Exception:
+            return "-"
 
     @admin.display(description="Province")
     def get_province(self, obj):
@@ -507,14 +512,10 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
 
     @admin.display(description="Type")
     def session_type_badge(self, obj):
-        css_map = {
-            "LS": "sl-badge sl-badge-primary",
-            "MC": "sl-badge sl-badge-success",
-            "PC": "sl-badge sl-badge-warning",
-            "OTHER": "sl-badge sl-badge-muted",
-        }
-        cls = css_map.get(obj.session_type, "sl-badge")
-        return format_html('<span class="{}">{}</span>', cls, obj.get_session_type_display())
+        return format_html(
+            '<span class="sl-badge">{}</span>',
+            obj.get_session_type_display()
+        )
 
     @admin.display(description="Participants")
     def participant_total_display(self, obj):
@@ -541,6 +542,184 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
             return "-"
         return f"{obj.duration_hours} hours"
 
+    def export_skilllab_sessions_excel(self, request, queryset):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Skill Lab Participants"
+
+        headers = [
+            "Skill Lab",
+            "Province",
+            "District",
+            "Facility",
+            "Session Date",
+            "Lab Round",
+            "Check In",
+            "Check Out",
+            "Duration Hours",
+            "Session Type",
+            "Clinical Mentor",
+            "Mentor Organization",
+            "CE Checklist Applied",
+            "Planned Session",
+            "Completed Session",
+            "Total Participants",
+            "Participant Name",
+            "Participant Facility",
+            "Participant Position",
+            "Thematic Area",
+            "Topic",
+            "LS",
+            "MC",
+            "Competency Status",
+            "Checklist Score",
+            "Feedback Given",
+            "Objectives",
+            "Session Notes",
+            "Challenges",
+            "Action Points",
+            "Follow-up Needed",
+            "Created At",
+            "Updated At",
+        ]
+
+        ws.append(headers)
+
+        header_fill = PatternFill("solid", fgColor="0F766E")
+        header_font = Font(color="FFFFFF", bold=True)
+
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        def date_value(value):
+            return value.strftime("%Y-%m-%d") if value else ""
+
+        def time_value(value):
+            return value.strftime("%H:%M") if value else ""
+
+        def datetime_value(value):
+            return value.strftime("%Y-%m-%d %H:%M") if value else ""
+
+        def safe_name(obj):
+            return str(obj) if obj else ""
+
+        def get_mentee_facility(mentee):
+            try:
+                return mentee.hfname.name if mentee and mentee.hfname else ""
+            except Exception:
+                return ""
+
+        def get_mentee_position(mentee):
+            try:
+                return str(mentee.position) if mentee and mentee.position else ""
+            except Exception:
+                return ""
+
+        for obj in queryset:
+            participant_records = obj.participant_records.select_related(
+                "mentee_name",
+                "mentee_name__hfname",
+                "mentee_name__position",
+                "thematic_area",
+                "topic",
+            ).all()
+
+            if not participant_records.exists():
+                ws.append([
+                    safe_name(obj.skill_lab),
+                    self.get_province(obj),
+                    obj.district.name if obj.district else "",
+                    self.get_facility(obj),
+                    date_value(obj.session_date),
+                    obj.lab_round,
+                    time_value(obj.check_in),
+                    time_value(obj.check_out),
+                    obj.duration_hours if obj.duration_hours is not None else "",
+                    obj.get_session_type_display() if obj.session_type else "",
+                    safe_name(obj.mentor_name),
+                    safe_name(obj.mentor_org),
+                    yes_no(obj.ce_checklist_applied),
+                    yes_no(obj.planned_session),
+                    yes_no(obj.completed_session),
+                    obj.total_participants,
+                    "", "", "", "", "", "", "", "", "", "",
+                    obj.objectives or "",
+                    obj.session_notes or "",
+                    obj.challenges or "",
+                    obj.action_points or "",
+                    yes_no(obj.followup_needed),
+                    datetime_value(obj.created_at),
+                    datetime_value(obj.updated_at),
+                ])
+            else:
+                for pr in participant_records:
+                    ws.append([
+                        safe_name(obj.skill_lab),
+                        self.get_province(obj),
+                        obj.district.name if obj.district else "",
+                        self.get_facility(obj),
+                        date_value(obj.session_date),
+                        obj.lab_round,
+                        time_value(obj.check_in),
+                        time_value(obj.check_out),
+                        obj.duration_hours if obj.duration_hours is not None else "",
+                        obj.get_session_type_display() if obj.session_type else "",
+                        safe_name(obj.mentor_name),
+                        safe_name(obj.mentor_org),
+                        yes_no(obj.ce_checklist_applied),
+                        yes_no(obj.planned_session),
+                        yes_no(obj.completed_session),
+                        obj.total_participants,
+                        safe_name(pr.mentee_name),
+                        get_mentee_facility(pr.mentee_name),
+                        get_mentee_position(pr.mentee_name),
+                        safe_name(pr.thematic_area),
+                        safe_name(pr.topic),
+                        yes_no(pr.ls),
+                        yes_no(pr.mc),
+                        pr.competency_status or "",
+                        pr.checklist_score if pr.checklist_score is not None else "",
+                        yes_no(pr.feedback_given),
+                        obj.objectives or "",
+                        obj.session_notes or "",
+                        obj.challenges or "",
+                        obj.action_points or "",
+                        yes_no(obj.followup_needed),
+                        datetime_value(obj.created_at),
+                        datetime_value(obj.updated_at),
+                    ])
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        for column_cells in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column_cells[0].column)
+
+            for cell in column_cells:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+
+            ws.column_dimensions[column_letter].width = min(max_length + 3, 45)
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="skill_lab_participant_level_export.xlsx"'
+
+        wb.save(response)
+        return response
+
+    export_skilllab_sessions_excel.short_description = "Export selected Skill Lab Sessions with Participant Records to Excel"
 
 # =========================================================
 # Participant Record
