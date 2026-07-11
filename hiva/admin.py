@@ -1,5 +1,6 @@
 from urllib.parse import urlencode
 import openpyxl
+from datetime import datetime
 from django.http import HttpResponse
 from openpyxl.utils import get_column_letter
 from django.http import HttpResponse
@@ -78,6 +79,18 @@ from django.db.models import ForeignKey
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+from django.contrib import messages
+import openpyxl
+from collections import defaultdict
+from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime as py_datetime, date as py_date
+from django.contrib import messages
+from django.db.models import Count, Q
+from django.http import HttpResponse
+from django.utils import timezone
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 # ============================================================
 # Admin Branding
@@ -1650,6 +1663,7 @@ SCORE_NA_ID = 3
 # ============================================================
 @admin.register(HQIPAssessmentHeader)
 class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    actions = ["export_hqip_assessments_to_excel"]
     inlines = [AssessmentLineInline]
 
     list_display = (
@@ -1757,6 +1771,546 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             ),
         ]
         return custom_urls + urls
+    
+    @admin.action(description="Export selected HQIP assessments to Excel")
+    def export_hqip_assessments_to_excel(self, request, queryset):
+        """
+        Export selected HQIP Assessment Headers and all related detail lines to Excel.
+
+        Sheets:
+        1. HQIP_Details
+        2. Header_Summary
+        3. Standard_Summary
+        4. Section_Summary
+        5. Area_Summary
+        """
+
+        queryset = queryset.select_related(
+            "facilityfk",
+            "facilityfk__districtfk",
+            "facilityfk__districtfk__provincefk",
+            "facilityfk__facilitytypefk",
+            "assesorfk",
+            "implementorfk",
+            "assessmenttype",
+            "areafk",
+            "created_by",
+            "updated_by",
+        ).order_by(
+            "facilityfk__districtfk__provincefk__name",
+            "facilityfk__name",
+            "assessmentdate",
+            "areafk__name",
+        )
+
+        if not queryset.exists():
+            messages.warning(request, "No HQIP assessments selected for export.")
+            return None
+
+        # ------------------------------------------------------------
+        # Helper functions
+        # ------------------------------------------------------------
+        def safe_excel_value(value):
+            """
+            Converts values safely for Excel.
+            Important: Excel/openpyxl does not support timezone-aware datetimes.
+            """
+            if value is None:
+                return ""
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            if isinstance(value, py_datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                    value = timezone.make_naive(value)
+                return value
+
+            if isinstance(value, str):
+                return ILLEGAL_CHARACTERS_RE.sub("", value)
+
+            return value
+
+        def safe_str(obj):
+            if obj is None:
+                return ""
+            return safe_excel_value(str(obj))
+
+        def get_name(obj):
+            if obj is None:
+                return ""
+            return safe_excel_value(getattr(obj, "name", str(obj)))
+
+        def get_short_or_name(obj):
+            if obj is None:
+                return ""
+            return safe_excel_value(
+                getattr(obj, "shortname", None)
+                or getattr(obj, "name", str(obj))
+            )
+
+        def round2(value):
+            if value is None:
+                return None
+            return float(
+                Decimal(str(value)).quantize(
+                    Decimal("0.01"),
+                    rounding=ROUND_HALF_UP
+                )
+            )
+
+        def pct(yes_count, applicable_count):
+            if not applicable_count:
+                return None
+            return round2(
+                (Decimal(yes_count) / Decimal(applicable_count)) * Decimal(100)
+            )
+
+        def score_text(score_obj):
+            if score_obj is None:
+                return "Missing"
+            return safe_str(score_obj)
+
+        def score_category(score_id):
+            if score_id == SCORE_YES_ID:
+                return "YES"
+            if score_id == SCORE_NO_ID:
+                return "NO"
+            if score_id == SCORE_NA_ID:
+                return "N/A"
+            return "Missing"
+
+        def is_applicable(score_id):
+            return "Yes" if score_id in [SCORE_YES_ID, SCORE_NO_ID] else "No"
+
+        def style_worksheet(ws):
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True
+                )
+                cell.border = border
+
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+                    if isinstance(cell.value, py_datetime):
+                        cell.number_format = "yyyy-mm-dd hh:mm:ss"
+                    elif isinstance(cell.value, py_date):
+                        cell.number_format = "yyyy-mm-dd"
+
+            for column_cells in ws.columns:
+                max_length = 0
+                col_letter = get_column_letter(column_cells[0].column)
+
+                for cell in column_cells:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                ws.column_dimensions[col_letter].width = min(
+                    max(max_length + 2, 12),
+                    45
+                )
+
+        # ------------------------------------------------------------
+        # Workbook setup
+        # ------------------------------------------------------------
+        wb = openpyxl.Workbook()
+
+        ws_details = wb.active
+        ws_details.title = "HQIP_Details"
+
+        ws_header_summary = wb.create_sheet("Header_Summary")
+        ws_standard_summary = wb.create_sheet("Standard_Summary")
+        ws_section_summary = wb.create_sheet("Section_Summary")
+        ws_area_summary = wb.create_sheet("Area_Summary")
+
+        header_ids = list(queryset.values_list("id", flat=True))
+        header_map = {h.id: h for h in queryset}
+
+        # ------------------------------------------------------------
+        # Sheet 1: HQIP Details
+        # ------------------------------------------------------------
+        ws_details.append([
+            "Header ID",
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Facility Type",
+            "Implementor",
+            "Assessor",
+            "Assessment Type",
+            "Assessment Start Date",
+            "Assessment End Date",
+            "Thematic Area",
+            "Assessment Team",
+            "RCA Conducted",
+            "Section",
+            "Standard",
+            "Criteria",
+            "Score",
+            "Score Category",
+            "Applicable",
+            "Created By",
+            "Created At",
+            "Updated By",
+            "Updated At",
+        ])
+
+        lines_qs = (
+            HQIPAssessment.objects
+            .filter(header_id__in=header_ids)
+            .select_related(
+                "header",
+                "header__facilityfk",
+                "header__facilityfk__districtfk",
+                "header__facilityfk__districtfk__provincefk",
+                "header__facilityfk__facilitytypefk",
+                "header__assesorfk",
+                "header__implementorfk",
+                "header__assessmenttype",
+                "header__areafk",
+                "header__created_by",
+                "header__updated_by",
+                "criteriafk",
+                "criteriafk__standardfk",
+                "criteriafk__standardfk__sectionfk",
+                "scorefk",
+            )
+            .order_by(
+                "header__facilityfk__districtfk__provincefk__name",
+                "header__facilityfk__name",
+                "header__assessmentdate",
+                "header__areafk__name",
+                "criteriafk__standardfk__sectionfk__id",
+                "criteriafk__standardfk__id",
+                "criteriafk__id",
+            )
+        )
+
+        for line in lines_qs:
+            h = line.header
+            facility = h.facilityfk
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+            facility_type = getattr(facility, "facilitytypefk", None) if facility else None
+
+            criteria = line.criteriafk
+            standard = criteria.standardfk if criteria else None
+            section = standard.sectionfk if standard else None
+
+            ws_details.append([
+                h.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility),
+                safe_excel_value(getattr(facility, "hfcode", "")),
+                get_name(facility_type),
+                get_name(h.implementorfk),
+                get_name(h.assesorfk),
+                get_name(h.assessmenttype),
+                safe_excel_value(h.assessmentdate),
+                safe_excel_value(h.assessmentend_date),
+                get_name(h.areafk),
+                safe_excel_value(h.assessmentteam),
+                safe_excel_value(h.is_RCAduringtheassessment),
+                get_short_or_name(section),
+                get_short_or_name(standard),
+                get_short_or_name(criteria),
+                score_text(line.scorefk),
+                score_category(line.scorefk_id),
+                is_applicable(line.scorefk_id),
+                safe_str(h.created_by),
+                safe_excel_value(h.created_at),
+                safe_str(h.updated_by),
+                safe_excel_value(h.updated_at),
+            ])
+
+        # ------------------------------------------------------------
+        # Sheet 2: Header Summary
+        # ------------------------------------------------------------
+        ws_header_summary.append([
+            "Header ID",
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Facility Type",
+            "Implementor",
+            "Assessor",
+            "Assessment Type",
+            "Assessment Start Date",
+            "Assessment End Date",
+            "Thematic Area",
+            "RCA Conducted",
+            "Total Criteria",
+            "YES",
+            "NO",
+            "N/A",
+            "Missing",
+            "Applicable",
+            "HQIP %",
+        ])
+
+        summary_qs = (
+            HQIPAssessment.objects
+            .filter(header_id__in=header_ids)
+            .values("header_id")
+            .annotate(
+                total=Count("id"),
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                no=Count("id", filter=Q(scorefk_id=SCORE_NO_ID)),
+                na=Count("id", filter=Q(scorefk_id=SCORE_NA_ID)),
+                missing=Count("id", filter=Q(scorefk__isnull=True)),
+                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+            )
+        )
+
+        summary_map = {r["header_id"]: r for r in summary_qs}
+
+        for h in queryset:
+            facility = h.facilityfk
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+            facility_type = getattr(facility, "facilitytypefk", None) if facility else None
+
+            r = summary_map.get(h.id, {})
+            yes = r.get("yes", 0)
+            applicable = r.get("applicable", 0)
+
+            ws_header_summary.append([
+                h.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility),
+                safe_excel_value(getattr(facility, "hfcode", "")),
+                get_name(facility_type),
+                get_name(h.implementorfk),
+                get_name(h.assesorfk),
+                get_name(h.assessmenttype),
+                safe_excel_value(h.assessmentdate),
+                safe_excel_value(h.assessmentend_date),
+                get_name(h.areafk),
+                safe_excel_value(h.is_RCAduringtheassessment),
+                r.get("total", 0),
+                yes,
+                r.get("no", 0),
+                r.get("na", 0),
+                r.get("missing", 0),
+                applicable,
+                pct(yes, applicable),
+            ])
+
+        # ------------------------------------------------------------
+        # Sheet 3: Standard Summary
+        # ------------------------------------------------------------
+        ws_standard_summary.append([
+            "Header ID",
+            "Province",
+            "District",
+            "Facility",
+            "Assessment Type",
+            "Assessment Start Date",
+            "Thematic Area",
+            "Section",
+            "Standard",
+            "YES",
+            "Applicable",
+            "Standard %",
+        ])
+
+        std_rows = (
+            HQIPAssessment.objects
+            .filter(header_id__in=header_ids)
+            .values(
+                "header_id",
+                "criteriafk__standardfk__id",
+                "criteriafk__standardfk__name",
+                "criteriafk__standardfk__sectionfk__id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__sectionfk__areafk__name",
+            )
+            .annotate(
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+            )
+            .order_by(
+                "header_id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__name",
+            )
+        )
+
+        section_percent_map = defaultdict(list)
+
+        for r in std_rows:
+            h = header_map.get(r["header_id"])
+            if not h:
+                continue
+
+            facility = h.facilityfk
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+
+            yes = r["yes"]
+            applicable = r["applicable"]
+            standard_percent = pct(yes, applicable)
+
+            area_name = safe_excel_value(r["criteriafk__standardfk__sectionfk__areafk__name"] or "")
+            section_name = safe_excel_value(r["criteriafk__standardfk__sectionfk__name"] or "")
+            standard_name = safe_excel_value(r["criteriafk__standardfk__name"] or "")
+
+            ws_standard_summary.append([
+                h.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility),
+                get_name(h.assessmenttype),
+                safe_excel_value(h.assessmentdate),
+                area_name,
+                section_name,
+                standard_name,
+                yes,
+                applicable,
+                standard_percent,
+            ])
+
+            if standard_percent is not None:
+                section_key = (h.id, area_name, section_name)
+                section_percent_map[section_key].append(standard_percent)
+
+        # ------------------------------------------------------------
+        # Sheet 4: Section Summary
+        # Section % = Average of Standard %
+        # ------------------------------------------------------------
+        ws_section_summary.append([
+            "Header ID",
+            "Province",
+            "District",
+            "Facility",
+            "Assessment Type",
+            "Assessment Start Date",
+            "Thematic Area",
+            "Section",
+            "Number of Standards Used",
+            "Section %",
+        ])
+
+        area_percent_map = defaultdict(list)
+
+        for section_key, percents in section_percent_map.items():
+            header_id, area_name, section_name = section_key
+            h = header_map.get(header_id)
+            if not h:
+                continue
+
+            facility = h.facilityfk
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+
+            section_percent = round2(sum(percents) / len(percents)) if percents else None
+
+            ws_section_summary.append([
+                h.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility),
+                get_name(h.assessmenttype),
+                safe_excel_value(h.assessmentdate),
+                area_name,
+                section_name,
+                len(percents),
+                section_percent,
+            ])
+
+            if section_percent is not None:
+                area_key = (h.id, area_name)
+                area_percent_map[area_key].append(section_percent)
+
+        # ------------------------------------------------------------
+        # Sheet 5: Area Summary
+        # Area % = Average of Section %
+        # ------------------------------------------------------------
+        ws_area_summary.append([
+            "Header ID",
+            "Province",
+            "District",
+            "Facility",
+            "Assessment Type",
+            "Assessment Start Date",
+            "Thematic Area",
+            "Number of Sections Used",
+            "Area %",
+        ])
+
+        for area_key, percents in area_percent_map.items():
+            header_id, area_name = area_key
+            h = header_map.get(header_id)
+            if not h:
+                continue
+
+            facility = h.facilityfk
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+
+            area_percent = round2(sum(percents) / len(percents)) if percents else None
+
+            ws_area_summary.append([
+                h.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility),
+                get_name(h.assessmenttype),
+                safe_excel_value(h.assessmentdate),
+                area_name,
+                len(percents),
+                area_percent,
+            ])
+
+        # ------------------------------------------------------------
+        # Formatting
+        # ------------------------------------------------------------
+        for ws in wb.worksheets:
+            style_worksheet(ws)
+
+            for row in ws.iter_rows(min_row=2):
+                for cell in row:
+                    header_name = ws.cell(row=1, column=cell.column).value
+                    if header_name and "%" in str(header_name):
+                        cell.number_format = "0.00"
+
+        # ------------------------------------------------------------
+        # Return Excel response
+        # ------------------------------------------------------------
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        filename = f"HQIP_Assessment_Export_{timestamp}.xlsx"
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        wb.save(response)
+        return response
 
     # ---- buttons ----
     @admin.display(description="Score")
