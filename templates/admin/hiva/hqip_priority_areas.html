@@ -11,275 +11,389 @@
 <h1 style="margin-bottom:10px;">HQIP Priority Thematic Areas</h1>
 
 {% if facility_obj %}
-  <div class="hqip-card">
-    <div class="hqip-card-grid">
-      <div><span class="muted">Facility:</span><br><strong>{{ facility_obj.name }}</strong></div>
-      <div><span class="muted">Province:</span><br><strong>{{ facility_obj.districtfk.provincefk.name }}</strong></div>
-      <div><span class="muted">District:</span><br><strong>{{ facility_obj.districtfk.name }}</strong></div>
-      <div><span class="muted">HF Code:</span><br><strong>{{ facility_obj.hfcode }}</strong></div>
-    </div>
-  </div>
 
-  <style>
-    .hqip-card{
-      margin: 12px 0 14px;
-      padding: 14px;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      background: #fff;
-      box-shadow: 0 1px 2px rgba(0,0,0,.03);
-    }
-    .hqip-card-grid{
-      display: grid;
-      grid-template-columns: repeat(4, minmax(160px, 1fr));
-      gap: 14px;
-    }
-    @media (max-width: 980px){
-      .hqip-card-grid{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
-    }
-    @media (max-width: 520px){
-      .hqip-card-grid{ grid-template-columns: 1fr; }
-    }
-    .muted{ color:#6b7280; font-size: 12px; }
+<style>
+  .hqip-card{
+    margin: 12px 0 14px;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
 
-    .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;color:#fff}
-    .b-red{background:#c62828}
-    .b-yellow{background:#f9a825;color:#000}
-    .b-green{background:#2e7d32}
-    .b-grey{background:#607d8b}
+  .hqip-card-grid{
+    display: grid;
+    grid-template-columns: repeat(4, minmax(160px, 1fr));
+    gap: 14px;
+  }
 
-    .pill{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:700;font-size:12px;border:1px solid transparent}
-    .pill-pri{background:#ffe9e9;color:#9b0000;border-color:#ffc9c9}
-    .pill-non{background:#eef6ff;color:#0b5394;border-color:#cfe2ff}
+  @media (max-width: 980px){
+    .hqip-card-grid{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  }
 
-    .hqip-toolbar{
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
-      margin: 10px 0 12px;
-    }
-    .hqip-toolbar-left{
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
-    }
-    .hqip-input{
-      padding: 8px 10px;
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      background:#fff;
-      min-width: 260px;
-    }
-    .hqip-check{
-      display:flex;
-      gap:8px;
-      align-items:center;
-      padding: 6px 10px;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      background:#fff;
-    }
+  @media (max-width: 520px){
+    .hqip-card-grid{ grid-template-columns: 1fr; }
+  }
 
-    table.hqip{width:100%;border-collapse:collapse}
-    table.hqip th{
-      border-bottom:1px solid #ddd;
-      padding:10px;
-      text-align:left;
-      background:#fafafa;
-      cursor:pointer;
-      user-select:none;
-      white-space:nowrap;
-    }
-    table.hqip td{border-bottom:1px solid #eee;padding:10px;vertical-align:middle}
-    .sort-ind{ font-size: 11px; color:#6b7280; margin-left:6px; }
-    .smallnote{ color:#444; margin: 8px 0 12px; }
-  </style>
+  .muted{
+    color:#6b7280;
+    font-size: 12px;
+  }
 
-  <p class="smallnote">
-    The <strong>lowest 3</strong> thematic areas (based on % achievement across <strong>all HQIP assessments for this facility</strong>)
-    are flagged as <span class="pill pill-pri">Priority thematic areas</span>.
-    <strong>NA</strong> scores are excluded from calculations.
-  </p>
+  .smallnote{
+    color:#444;
+    margin: 8px 0 12px;
+    line-height: 1.6;
+  }
 
-  <div class="hqip-toolbar">
-    <div class="hqip-toolbar-left">
-      <input id="searchBox" class="hqip-input" type="text" placeholder="Search thematic area...">
-      <label class="hqip-check">
-        <input id="priorityOnly" type="checkbox">
-        <span>Show Priority only</span>
-      </label>
-      <span class="muted" id="rowCount"></span>
+  .badge{
+    display:inline-block;
+    padding:3px 10px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:12px;
+    color:#fff;
+  }
+
+  .b-red{background:#c62828}
+  .b-yellow{background:#f9a825;color:#000}
+  .b-green{background:#2e7d32}
+  .b-grey{background:#607d8b}
+
+  .pill{
+    display:inline-block;
+    padding:5px 10px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:12px;
+    border:1px solid transparent;
+  }
+
+  .pill-pri{
+    background:#ffe9e9;
+    color:#9b0000;
+    border-color:#ffc9c9;
+  }
+
+  .pill-non{
+    background:#eef6ff;
+    color:#0b5394;
+    border-color:#cfe2ff;
+  }
+
+  .pill-round{
+    background:#e8f1ff;
+    color:#0b5394;
+    border-color:#cfe2ff;
+  }
+
+  .hqip-toolbar{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin: 10px 0 16px;
+  }
+
+  .hqip-toolbar-left{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .hqip-input{
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background:#fff;
+    min-width: 280px;
+  }
+
+  .hqip-check{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background:#fff;
+  }
+
+  .round-box{
+    margin: 18px 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+
+  .round-header{
+    padding: 14px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+
+  .round-title{
+    margin:0;
+    font-size:18px;
+    font-weight:700;
+  }
+
+  .round-meta{
+    padding: 12px 14px;
+    display:grid;
+    grid-template-columns: repeat(4, minmax(160px, 1fr));
+    gap:12px;
+    border-bottom:1px solid #f0f0f0;
+  }
+
+  @media (max-width: 980px){
+    .round-meta{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  }
+
+  @media (max-width: 520px){
+    .round-meta{ grid-template-columns: 1fr; }
+  }
+
+  .round-body{
+    padding: 12px 14px 16px;
+  }
+
+  table.hqip{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+  }
+
+  table.hqip th{
+    border-bottom:1px solid #ddd;
+    padding:10px;
+    text-align:left;
+    background:#fafafa;
+    white-space:nowrap;
+  }
+
+  table.hqip td{
+    border-bottom:1px solid #eee;
+    padding:10px;
+    vertical-align:middle;
+  }
+
+  .empty-round{
+    text-align:center;
+    padding:14px;
+    color:#6b7280;
+  }
+</style>
+
+<div class="hqip-card">
+  <div class="hqip-card-grid">
+    <div>
+      <span class="muted">Facility:</span><br>
+      <strong>{{ facility_obj.name }}</strong>
     </div>
 
     <div>
-      <a class="button" href="?facility_id={{ facility_obj.id }}&export=1">Export to Excel</a>
+      <span class="muted">Province:</span><br>
+      <strong>{{ facility_obj.districtfk.provincefk.name }}</strong>
+    </div>
+
+    <div>
+      <span class="muted">District:</span><br>
+      <strong>{{ facility_obj.districtfk.name }}</strong>
+    </div>
+
+    <div>
+      <span class="muted">HF Code:</span><br>
+      <strong>{{ facility_obj.hfcode }}</strong>
     </div>
   </div>
+</div>
 
-  <table class="hqip" id="hqipTable">
-    <thead>
-      <tr>
-        <th data-key="area">Thematic Area <span class="sort-ind" id="si-area"></span></th>
-        <th data-key="percent">% Achievement <span class="sort-ind" id="si-percent"></span></th>
-        <th data-key="yes">YES <span class="sort-ind" id="si-yes"></span></th>
-        <th data-key="applicable">Applicable <span class="sort-ind" id="si-applicable"></span></th>
-        <th data-key="priority">Priority <span class="sort-ind" id="si-priority"></span></th>
-      </tr>
-    </thead>
+<p class="smallnote">
+  This page shows <strong>priority thematic areas separately by HQIP assessment round</strong>.
+  Baseline, 2nd round, and future rounds are <strong>not mixed together</strong>.
+  In each round, the <strong>lowest 3</strong> thematic areas are flagged as
+  <span class="pill pill-pri">Priority thematic area</span>.
+  <strong>NA</strong> scores are excluded from calculations.
+</p>
 
-    <tbody id="hqipBody">
-      {% for r in rows %}
-        <tr
-          data-area="{{ r.area|default_if_none:''|lower }}"
-          data-priority="{% if r.is_priority %}1{% else %}0{% endif %}"
-          data-percent="{% if r.percent is None %}-1{% else %}{{ r.percent }}{% endif %}"
-          data-yes="{{ r.yes|default_if_none:0 }}"
-          data-applicable="{{ r.applicable|default_if_none:0 }}"
-        >
-          <td><strong>{{ r.area }}</strong></td>
-          <td>
-            {% if r.percent is None %}
-              <span class="badge b-grey">N/A</span>
-            {% else %}
-              {% if r.percent < 50 %}
-                <span class="badge b-red">{{ r.percent }}%</span>
-              {% elif r.percent < 75 %}
-                <span class="badge b-yellow">{{ r.percent }}%</span>
-              {% else %}
-                <span class="badge b-green">{{ r.percent }}%</span>
-              {% endif %}
-            {% endif %}
-          </td>
-          <td>{{ r.yes }}</td>
-          <td>{{ r.applicable }}</td>
-          <td>
-            {% if r.is_priority %}
-              <span class="pill pill-pri">Priority thematic area</span>
-            {% else %}
-              <span class="pill pill-non">Non-priority area</span>
-            {% endif %}
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5" style="text-align:center;padding:14px;">No results found for this facility.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="hqip-toolbar">
+  <div class="hqip-toolbar-left">
+    <input id="searchBox" class="hqip-input" type="text" placeholder="Search thematic area or round...">
 
-  <script>
-    (function(){
-      const searchBox = document.getElementById("searchBox");
-      const priorityOnly = document.getElementById("priorityOnly");
-      const body = document.getElementById("hqipBody");
-      const rowCount = document.getElementById("rowCount");
+    <label class="hqip-check">
+      <input id="priorityOnly" type="checkbox">
+      <span>Show Priority only</span>
+    </label>
 
-      let sortKey = "priority";
-      let sortDir = "desc"; // default: priority on top
+    <span class="muted" id="rowCount"></span>
+  </div>
 
-      function visibleRows(){
-        return Array.from(body.querySelectorAll("tr"))
+  <div>
+    <a class="button" href="?facility_id={{ facility_obj.id }}&export=1">
+      Export All Rounds to Excel
+    </a>
+  </div>
+</div>
+
+{% for rd in rounds %}
+  <div class="round-box" data-round-box="{{ rd.round_label|lower }}">
+    <div class="round-header">
+      <h2 class="round-title">
+        <span class="pill pill-round">{{ rd.round_label }}</span>
+      </h2>
+
+      <div class="muted">
+        Priority is calculated within this round only
+      </div>
+    </div>
+
+    <div class="round-meta">
+      <div>
+        <span class="muted">Assessment Date From:</span><br>
+        <strong>{{ rd.date_from|default:"-" }}</strong>
+      </div>
+
+      <div>
+        <span class="muted">Assessment Date To:</span><br>
+        <strong>{{ rd.date_to|default:"-" }}</strong>
+      </div>
+
+      <div>
+        <span class="muted">HQIP Headers Included:</span><br>
+        <strong>{{ rd.headers_count }}</strong>
+      </div>
+
+      <div>
+        <span class="muted">Thematic Areas Included:</span><br>
+        <strong>{{ rd.thematic_area_count }}</strong>
+      </div>
+    </div>
+
+    <div class="round-body">
+      <table class="hqip">
+        <thead>
+          <tr>
+            <th>Thematic Area</th>
+            <th>% Achievement</th>
+            <th>YES</th>
+            <th>Applicable</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for r in rd.rows %}
+            <tr
+              data-area="{{ r.area|default_if_none:''|lower }}"
+              data-round="{{ rd.round_label|lower }}"
+              data-priority="{% if r.is_priority %}1{% else %}0{% endif %}"
+            >
+              <td><strong>{{ r.area }}</strong></td>
+
+              <td>
+                {% if r.percent is None %}
+                  <span class="badge b-grey">N/A</span>
+                {% else %}
+                  {% if r.percent < 50 %}
+                    <span class="badge b-red">{{ r.percent }}%</span>
+                  {% elif r.percent < 75 %}
+                    <span class="badge b-yellow">{{ r.percent }}%</span>
+                  {% else %}
+                    <span class="badge b-green">{{ r.percent }}%</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+
+              <td>{{ r.yes }}</td>
+              <td>{{ r.applicable }}</td>
+
+              <td>
+                {% if r.is_priority %}
+                  <span class="pill pill-pri">Priority thematic area</span>
+                {% else %}
+                  <span class="pill pill-non">Non-priority area</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="empty-round">No results found for this round.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% empty %}
+  <div class="hqip-card">
+    No HQIP rounds found for this facility.
+  </div>
+{% endfor %}
+
+<script>
+  (function(){
+    const searchBox = document.getElementById("searchBox");
+    const priorityOnly = document.getElementById("priorityOnly");
+    const rowCount = document.getElementById("rowCount");
+
+    function allRows(){
+      return Array.from(document.querySelectorAll("table.hqip tbody tr[data-area]"));
+    }
+
+    function allRoundBoxes(){
+      return Array.from(document.querySelectorAll(".round-box"));
+    }
+
+    function updateCount(){
+      const visible = allRows().filter(tr => tr.style.display !== "none").length;
+      rowCount.textContent = visible ? `${visible} visible row(s)` : "No matching rows";
+    }
+
+    function updateRoundVisibility(){
+      allRoundBoxes().forEach(box => {
+        const visibleRows = Array.from(box.querySelectorAll("tbody tr[data-area]"))
           .filter(tr => tr.style.display !== "none");
-      }
 
-      function updateCount(){
-        const v = visibleRows().length;
-        rowCount.textContent = v ? `${v} row(s)` : "No matching rows";
-      }
-
-      function applyFilter(){
-        const q = (searchBox.value || "").trim().toLowerCase();
-        const priOnly = priorityOnly.checked;
-
-        Array.from(body.querySelectorAll("tr")).forEach(tr => {
-          const area = tr.getAttribute("data-area") || "";
-          const pri = tr.getAttribute("data-priority") === "1";
-
-          const matchText = !q || area.includes(q);
-          const matchPri = !priOnly || pri;
-
-          tr.style.display = (matchText && matchPri) ? "" : "none";
-        });
-
-        updateCount();
-      }
-
-      function getSortVal(tr){
-        if(sortKey === "area") return tr.getAttribute("data-area") || "";
-        if(sortKey === "priority") return Number(tr.getAttribute("data-priority") || 0);
-        if(sortKey === "percent") return Number(tr.getAttribute("data-percent") || -1);
-        if(sortKey === "yes") return Number(tr.getAttribute("data-yes") || 0);
-        if(sortKey === "applicable") return Number(tr.getAttribute("data-applicable") || 0);
-        return "";
-      }
-
-      function clearSortIndicators(){
-        ["area","priority","percent","yes","applicable"].forEach(k => {
-          const el = document.getElementById("si-" + k);
-          if(el) el.textContent = "";
-        });
-      }
-
-      function setSortIndicator(){
-        clearSortIndicators();
-        const el = document.getElementById("si-" + sortKey);
-        if(el) el.textContent = (sortDir === "asc") ? "▲" : "▼";
-      }
-
-      function applySort(){
-        const rows = Array.from(body.querySelectorAll("tr"));
-        rows.sort((a,b) => {
-          const va = getSortVal(a);
-          const vb = getSortVal(b);
-
-          // percent=-1 means N/A -> always bottom
-          if(sortKey === "percent"){
-            const aNA = (va === -1);
-            const bNA = (vb === -1);
-            if(aNA && !bNA) return 1;
-            if(!aNA && bNA) return -1;
-          }
-
-          if(typeof va === "number" && typeof vb === "number"){
-            return (sortDir === "asc") ? (va - vb) : (vb - va);
-          }
-          return (sortDir === "asc")
-            ? String(va).localeCompare(String(vb))
-            : String(vb).localeCompare(String(va));
-        });
-
-        rows.forEach(r => body.appendChild(r));
-        setSortIndicator();
-      }
-
-      // Initial sort + filter
-      applySort();
-      applyFilter();
-
-      // Filter events
-      searchBox.addEventListener("input", applyFilter);
-      priorityOnly.addEventListener("change", applyFilter);
-
-      // Sort events
-      document.querySelectorAll("#hqipTable thead th").forEach(th => {
-        th.addEventListener("click", () => {
-          const key = th.getAttribute("data-key");
-          if(!key) return;
-
-          if(sortKey === key){
-            sortDir = (sortDir === "asc") ? "desc" : "asc";
-          } else {
-            sortKey = key;
-            sortDir = "asc";
-            if(key === "priority") sortDir = "desc";
-          }
-          applySort();
-        });
+        box.style.display = visibleRows.length ? "" : "none";
       });
-    })();
-  </script>
+    }
+
+    function applyFilter(){
+      const q = (searchBox.value || "").trim().toLowerCase();
+      const priOnly = priorityOnly.checked;
+
+      allRows().forEach(tr => {
+        const area = tr.getAttribute("data-area") || "";
+        const round = tr.getAttribute("data-round") || "";
+        const pri = tr.getAttribute("data-priority") === "1";
+
+        const matchText = !q || area.includes(q) || round.includes(q);
+        const matchPri = !priOnly || pri;
+
+        tr.style.display = (matchText && matchPri) ? "" : "none";
+      });
+
+      updateRoundVisibility();
+      updateCount();
+    }
+
+    searchBox.addEventListener("input", applyFilter);
+    priorityOnly.addEventListener("change", applyFilter);
+
+    applyFilter();
+  })();
+</script>
 
 {% else %}
   <div class="hqip-card">

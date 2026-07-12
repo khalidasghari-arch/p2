@@ -2825,22 +2825,33 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
     def hqip_priority_areas(self, request):
         """
-        Priority thematic areas for a FACILITY:
-        - Uses the SAME % calculations as Score/View (via _compute_hqip_rollups)
-        - Flags lowest 3 thematic areas as Priority
-        - Optional export: ?facility_id=107&export=1
+        Facility-level HQIP Priority Thematic Areas by assessment round.
+
+        This page:
+        - Opens by facility_id
+        - Shows Baseline, 2nd Round, 3rd Round, etc. separately
+        - Calculates the lowest 3 priority thematic areas within each round
+        - Does NOT mix baseline and follow-up rounds together
+        - Uses the same HQIP calculation logic as Score/View through _compute_hqip_rollups()
         """
+
+        from collections import defaultdict
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
 
         facility_id = request.GET.get("facility_id")
         export = request.GET.get("export") == "1"
 
-        # Province-restricted headers (superuser sees all)
         headers_base = self.get_queryset(request)
 
         facility_obj = None
-        rows = []
+        rounds = []
         error_message = None
 
+        # -----------------------------------------------------
+        # 1. Validate facility
+        # -----------------------------------------------------
         if not facility_id:
             error_message = "No facility selected."
             context = dict(
@@ -2848,12 +2859,17 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 title="HQIP Priority Thematic Areas",
                 error_message=error_message,
                 facility_obj=None,
-                rows=[],
+                rounds=[],
             )
             return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-        # Load facility (and enforce access)
-        facility_obj = Facility.objects.select_related("districtfk__provincefk").filter(pk=facility_id).first()
+        facility_obj = (
+            Facility.objects
+            .select_related("districtfk__provincefk")
+            .filter(pk=facility_id)
+            .first()
+        )
+
         if not facility_obj:
             error_message = "Invalid facility."
             context = dict(
@@ -2861,10 +2877,13 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 title="HQIP Priority Thematic Areas",
                 error_message=error_message,
                 facility_obj=None,
-                rows=[],
+                rounds=[],
             )
             return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
+        # -----------------------------------------------------
+        # 2. Province access restriction
+        # -----------------------------------------------------
         if not request.user.is_superuser:
             prov = user_province(request)
             if not prov or facility_obj.districtfk.provincefk_id != prov.id:
@@ -2874,108 +2893,328 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     title="HQIP Priority Thematic Areas",
                     error_message=error_message,
                     facility_obj=None,
-                    rows=[],
+                    rounds=[],
                 )
                 return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-        # Only headers for this facility
-        headers_qs = headers_base.filter(facilityfk_id=facility_obj.id)
+        # -----------------------------------------------------
+        # 3. Load all HQIP headers for this facility
+        # -----------------------------------------------------
+        headers_all = list(
+            headers_base
+            .filter(facilityfk_id=facility_obj.id)
+            .select_related(
+                "facilityfk",
+                "facilityfk__districtfk",
+                "facilityfk__districtfk__provincefk",
+                "assessmenttype",
+                "areafk",
+            )
+            .order_by(
+                "assessmenttype__name",
+                "assessmentdate",
+                "areafk__name",
+                "id",
+            )
+        )
 
-        # If no headers, show empty
-        if not headers_qs.exists():
+        if not headers_all:
             error_message = "No HQIP assessments found for this facility."
             context = dict(
                 self.admin_site.each_context(request),
                 title="HQIP Priority Thematic Areas",
                 error_message=error_message,
                 facility_obj=facility_obj,
-                rows=[],
+                rounds=[],
             )
             return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
-        # ---- SAME calculations as Score/View ----
-        _std, _sec, area_results = self._compute_hqip_rollups(headers_qs)
+        # -----------------------------------------------------
+        # 4. Group headers by assessment round
+        # IMPORTANT:
+        # This assumes Assessment Type means Baseline, 2nd Round, 3rd Round, etc.
+        # -----------------------------------------------------
+        grouped_headers = defaultdict(list)
 
-        # For display ONLY (not used in %): raw counts per area
-        raw_counts = (
-            HQIPAssessment.objects
-            .filter(header__in=headers_qs)
-            .values("criteriafk__standardfk__sectionfk__areafk__name")
-            .annotate(
-                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
-                applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+        for h in headers_all:
+            round_key = h.assessmenttype_id or 0
+            grouped_headers[round_key].append(h)
+
+        # -----------------------------------------------------
+        # 5. Calculate priority areas separately for each round
+        # -----------------------------------------------------
+        for round_key, header_list in grouped_headers.items():
+            header_ids = [h.id for h in header_list]
+            sample_header = header_list[0]
+
+            round_label = (
+                sample_header.assessmenttype.name
+                if sample_header.assessmenttype
+                else "Unknown Assessment Round"
             )
-        )
-        raw_map = {
-            r["criteriafk__standardfk__sectionfk__areafk__name"] or "-": {
-                "yes": r["yes"],
-                "applicable": r["applicable"],
+
+            assessment_dates = [
+                h.assessmentdate for h in header_list
+                if h.assessmentdate
+            ]
+            assessment_end_dates = [
+                h.assessmentend_date for h in header_list
+                if h.assessmentend_date
+            ]
+
+            date_from = min(assessment_dates) if assessment_dates else None
+            date_to = max(assessment_end_dates) if assessment_end_dates else None
+
+            thematic_area_count = len(
+                set(h.areafk_id for h in header_list if h.areafk_id)
+            )
+
+            round_headers_qs = headers_base.filter(id__in=header_ids)
+
+            # Same calculation logic as Score/View dashboard
+            _std, _sec, area_results = self._compute_hqip_rollups(round_headers_qs)
+
+            # Raw YES / Applicable counts for display only
+            raw_counts = (
+                HQIPAssessment.objects
+                .filter(header_id__in=header_ids)
+                .values("criteriafk__standardfk__sectionfk__areafk__name")
+                .annotate(
+                    yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                    applicable=Count("id", filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID])),
+                )
+            )
+
+            raw_map = {
+                r["criteriafk__standardfk__sectionfk__areafk__name"] or "-": {
+                    "yes": r["yes"],
+                    "applicable": r["applicable"],
+                }
+                for r in raw_counts
             }
-            for r in raw_counts
-        }
 
-        # Build rows: percent comes from area_results (HQIP hierarchy)
-        rows = []
-        for r in area_results:
-            area_name = r["area"]
-            rows.append({
-                "area": area_name,
-                "percent": r["percent"],
-                "num_sections_used": r["num_sections_used"],
-                "yes": raw_map.get(area_name, {}).get("yes", 0),
-                "applicable": raw_map.get(area_name, {}).get("applicable", 0),
-                "is_priority": False,  # set below
-            })
+            rows = []
+            for r in area_results:
+                area_name = r["area"]
+                rows.append({
+                    "area": area_name,
+                    "percent": r["percent"],
+                    "num_sections_used": r["num_sections_used"],
+                    "yes": raw_map.get(area_name, {}).get("yes", 0),
+                    "applicable": raw_map.get(area_name, {}).get("applicable", 0),
+                    "is_priority": False,
+                })
 
-        # Priority = lowest 3 by percent (ignore None)
-        scored = [x for x in rows if x["percent"] is not None]
-        scored_sorted = sorted(scored, key=lambda x: x["percent"])  # lowest first
-        priority_set = set([x["area"] for x in scored_sorted[:3]])
-
-        for x in rows:
-            x["is_priority"] = (x["area"] in priority_set)
-
-        # Optional: export to Excel
-        if export:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Priority Areas"
-
-            ws.append([
-                "Facility", "Province", "District", "HF Code",
-                "Thematic Area", "HQIP % (Area)", "Priority",
-                "YES (criteria)", "Applicable (criteria)", "# Sections used"
-            ])
+            # Lowest 3 thematic areas for this round only
+            scored = [x for x in rows if x["percent"] is not None]
+            scored_sorted = sorted(scored, key=lambda x: x["percent"])
+            priority_set = set(x["area"] for x in scored_sorted[:3])
 
             for x in rows:
-                ws.append([
+                x["is_priority"] = x["area"] in priority_set
+
+            # User-friendly order: priority first, then lowest score
+            rows = sorted(
+                rows,
+                key=lambda x: (
+                    0 if x["is_priority"] else 1,
+                    x["percent"] is None,
+                    x["percent"] if x["percent"] is not None else 999999,
+                    x["area"],
+                )
+            )
+
+            rounds.append({
+                "round_key": round_key,
+                "round_label": round_label,
+                "date_from": date_from,
+                "date_to": date_to,
+                "headers_count": len(header_list),
+                "thematic_area_count": thematic_area_count,
+                "rows": rows,
+            })
+
+        # Sort rounds by assessment date
+        rounds = sorted(
+            rounds,
+            key=lambda x: (
+                x["date_from"] is None,
+                x["date_from"],
+                x["round_label"],
+            )
+        )
+
+        # -----------------------------------------------------
+        # 6. Optional Excel export: all rounds in one Excel
+        # -----------------------------------------------------
+        if export:
+            wb = openpyxl.Workbook()
+
+            ws = wb.active
+            ws.title = "All Rounds"
+
+            ws.append([
+                "Facility",
+                "Province",
+                "District",
+                "HF Code",
+                "Assessment Round",
+                "Assessment Date From",
+                "Assessment Date To",
+                "Headers Included",
+                "Thematic Areas Included",
+                "Thematic Area",
+                "HQIP % Achievement",
+                "Priority Status",
+                "YES",
+                "Applicable",
+                "Sections Used",
+            ])
+
+            for rd in rounds:
+                for x in rd["rows"]:
+                    ws.append([
+                        facility_obj.name,
+                        facility_obj.districtfk.provincefk.name,
+                        facility_obj.districtfk.name,
+                        facility_obj.hfcode,
+                        rd["round_label"],
+                        rd["date_from"],
+                        rd["date_to"],
+                        rd["headers_count"],
+                        rd["thematic_area_count"],
+                        x["area"],
+                        x["percent"] if x["percent"] is not None else "",
+                        "PRIORITY" if x["is_priority"] else "NON-PRIORITY",
+                        x["yes"],
+                        x["applicable"],
+                        x["num_sections_used"],
+                    ])
+
+            ws_summary = wb.create_sheet("Round Summary")
+            ws_summary.append([
+                "Facility",
+                "Province",
+                "District",
+                "HF Code",
+                "Assessment Round",
+                "Assessment Date From",
+                "Assessment Date To",
+                "Headers Included",
+                "Thematic Areas Included",
+                "Priority Thematic Areas",
+            ])
+
+            for rd in rounds:
+                priority_areas = [
+                    x["area"] for x in rd["rows"]
+                    if x["is_priority"]
+                ]
+
+                ws_summary.append([
                     facility_obj.name,
                     facility_obj.districtfk.provincefk.name,
                     facility_obj.districtfk.name,
                     facility_obj.hfcode,
-                    x["area"],
-                    x["percent"] if x["percent"] is not None else "",
-                    "PRIORITY" if x["is_priority"] else "NON-PRIORITY",
-                    x["yes"],
-                    x["applicable"],
-                    x["num_sections_used"],
+                    rd["round_label"],
+                    rd["date_from"],
+                    rd["date_to"],
+                    rd["headers_count"],
+                    rd["thematic_area_count"],
+                    ", ".join(priority_areas),
                 ])
+
+            # Optional: separate sheet for each round
+            for rd in rounds:
+                sheet_name = str(rd["round_label"])[:25]
+                invalid_chars = ["\\", "/", "*", "[", "]", ":", "?"]
+                for ch in invalid_chars:
+                    sheet_name = sheet_name.replace(ch, "-")
+
+                if sheet_name in wb.sheetnames:
+                    sheet_name = f"{sheet_name[:20]} {rd['round_key']}"
+
+                ws_round = wb.create_sheet(sheet_name)
+                ws_round.append([
+                    "Thematic Area",
+                    "HQIP % Achievement",
+                    "Priority Status",
+                    "YES",
+                    "Applicable",
+                    "Sections Used",
+                ])
+
+                for x in rd["rows"]:
+                    ws_round.append([
+                        x["area"],
+                        x["percent"] if x["percent"] is not None else "",
+                        "PRIORITY" if x["is_priority"] else "NON-PRIORITY",
+                        x["yes"],
+                        x["applicable"],
+                        x["num_sections_used"],
+                    ])
+
+            # Formatting
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            for sheet in wb.worksheets:
+                sheet.freeze_panes = "A2"
+                sheet.auto_filter.ref = sheet.dimensions
+
+                for cell in sheet[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(
+                        horizontal="center",
+                        vertical="center",
+                        wrap_text=True,
+                    )
+                    cell.border = border
+
+                for row in sheet.iter_rows():
+                    for cell in row:
+                        cell.border = border
+                        cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+                for col in sheet.columns:
+                    max_len = 0
+                    col_letter = get_column_letter(col[0].column)
+
+                    for cell in col:
+                        if cell.value is not None:
+                            max_len = max(max_len, len(str(cell.value)))
+
+                    sheet.column_dimensions[col_letter].width = min(
+                        max(max_len + 2, 12),
+                        45,
+                    )
 
             resp = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            filename = f"HQIP_Priority_Areas_Facility_{facility_obj.id}.xlsx"
+            filename = f"HQIP_Priority_Areas_By_Round_Facility_{facility_obj.id}.xlsx"
             resp["Content-Disposition"] = f'attachment; filename="{filename}"'
             wb.save(resp)
             return resp
 
+        # -----------------------------------------------------
+        # 7. Page context
+        # -----------------------------------------------------
         context = dict(
             self.admin_site.each_context(request),
             title="HQIP Priority Thematic Areas",
             error_message=error_message,
             facility_obj=facility_obj,
-            rows=rows,
+            rounds=rounds,
         )
+
         return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
 
 # ===========================================================
