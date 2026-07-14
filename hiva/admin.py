@@ -3308,6 +3308,8 @@ from django.utils.html import format_html
 
 @admin.register(Qicdataset)
 class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    actions = ["export_qic_dataset_to_excel"]
+    
     list_display = [
         #"id",
         "qicfacility",
@@ -3554,6 +3556,594 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def shura_status(self, obj):
         return self.yes_no_badge(obj.qicmetwithhealthshura_bool)
     shura_status.short_description = "Shura"
+
+     # ============================================================
+    # EXPORT TO EXCEL
+    # ============================================================
+    @admin.action(description="Export selected QIC records to Excel")
+    def export_qic_dataset_to_excel(self, request, queryset):
+        """
+        Exports selected QIC records to Excel for analysis and visualization.
+
+        Sheets:
+        1. QIC_Data
+        2. Summary_By_Province
+        3. Summary_By_Facility
+        4. Summary_By_Month
+        5. Data_Quality_Issues
+        6. Question_Summary
+        """
+
+        queryset = queryset.select_related(
+            "qicfacility",
+            "qicfacility__districtfk",
+            "qicfacility__districtfk__provincefk",
+            "qicfacility__facilitytypefk",
+            "qicdatacollector",
+            "qicimplementor",
+        ).order_by(
+            "qicfacility__districtfk__provincefk__name",
+            "qicfacility__districtfk__name",
+            "qicfacility__name",
+            "yearqic",
+            "monthqic",
+            "qiccommdate",
+        )
+
+        if not queryset.exists():
+            messages.warning(request, "No QIC records selected for export.")
+            return None
+
+        month_map = dict(Qicdataset.MONTH_CHOICES)
+
+        question_fields = [
+            ("qictoravail_bool", "1. TOR of QI focal point and QI committee available"),
+            ("qiclastmonth_bool", "2. QI committee meeting conducted last month"),
+            ("qicmmavial_bool", "3. Meeting minutes available"),
+            ("qicmmsigned_bool", "4. Meeting minutes signed by participants"),
+            ("qicmmdatause_bool", "5. Data use discussed in QI committee meeting"),
+            ("qichqiptollavail_bool", "6. HQIP tool available and accessible"),
+            ("qicpipavail_bool", "7. PIP available"),
+            ("qicpipupdated_bool", "8. PIP updated in last month meeting"),
+            ("qicngoinvolved_bool", "9. NGO involved in completed corrective actions"),
+            ("qicpeertopeeravail_bool", "10. Peer-to-peer learning conducted"),
+            ("qicmenteelogbookavial_bool", "11. Mentee logbook available"),
+            ("qicmenteelogbookupdated_bool", "12. Mentee logbook updated and signed"),
+            ("qicmetwithhealthshura_bool", "13. QI committee met HF Shura-e-Sihie"),
+            ("qichealthshurainvolvedincorract_bool", "14. HF Shura involved in corrective actions"),
+        ]
+
+        total_questions = len(question_fields)
+
+        def safe_excel_value(value):
+            if value is None:
+                return ""
+
+            if isinstance(value, bool):
+                return "Yes" if value else "No"
+
+            if isinstance(value, py_datetime):
+                if timezone.is_aware(value):
+                    value = timezone.localtime(value)
+                    value = timezone.make_naive(value)
+                return value
+
+            if isinstance(value, Decimal):
+                return float(value)
+
+            if isinstance(value, str):
+                return ILLEGAL_CHARACTERS_RE.sub("", value)
+
+            return value
+
+        def safe_str(obj):
+            if obj is None:
+                return ""
+            return safe_excel_value(str(obj))
+
+        def get_name(obj):
+            if obj is None:
+                return ""
+            return safe_excel_value(getattr(obj, "name", str(obj)))
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        def score_category(percent):
+            percent = float(percent or 0)
+            if percent >= 80:
+                return "Good"
+            if percent >= 50:
+                return "Moderate"
+            return "Low"
+
+        def month_sort_value(value):
+            try:
+                return int(value)
+            except Exception:
+                return 0
+
+        def detect_dq_issues(obj):
+            issues = []
+
+            if not obj.qiccommdate:
+                issues.append("Missing QIC meeting date")
+
+            if not obj.qicdatacollector_id:
+                issues.append("Missing data collector")
+
+            if not obj.qicimplementor_id:
+                issues.append("Missing implementor")
+
+            if float(obj.qicpercentscore or 0) < 50:
+                issues.append("Low QIC score below 50%")
+
+            if not obj.qiclastmonth_bool:
+                issues.append("QI committee meeting not conducted last month")
+
+            if not obj.qicmmavial_bool:
+                issues.append("Meeting minutes not available")
+
+            if not obj.qicpipavail_bool:
+                issues.append("PIP not available")
+
+            if obj.qicpipavail_bool and not obj.qicpipupdated_bool:
+                issues.append("PIP available but not updated")
+
+            if obj.qicaction_points_count and obj.qicactions_completed_count:
+                if obj.qicactions_completed_count > obj.qicaction_points_count:
+                    issues.append("Completed actions greater than total action points")
+
+            if obj.qicnext_meeting_date and obj.qiccommdate:
+                if obj.qicnext_meeting_date < obj.qiccommdate:
+                    issues.append("Next meeting date is earlier than current QIC date")
+
+            if obj.qicfollowup_required:
+                issues.append("Follow-up required")
+
+            if not obj.qicvalidated_by_supervisor:
+                issues.append("Not validated by supervisor")
+
+            if obj.qicdata_quality_issue_note:
+                issues.append("Data quality issue note recorded")
+
+            return issues
+
+        def style_worksheet(ws):
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                cell.border = border
+
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+                    if isinstance(cell.value, py_datetime):
+                        cell.number_format = "yyyy-mm-dd hh:mm:ss"
+                    elif isinstance(cell.value, py_date):
+                        cell.number_format = "yyyy-mm-dd"
+
+            for column_cells in ws.columns:
+                max_length = 0
+                col_letter = get_column_letter(column_cells[0].column)
+
+                for cell in column_cells:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                ws.column_dimensions[col_letter].width = min(
+                    max(max_length + 2, 12),
+                    45,
+                )
+
+        wb = openpyxl.Workbook()
+
+        ws_data = wb.active
+        ws_data.title = "QIC_Data"
+
+        ws_province = wb.create_sheet("Summary_By_Province")
+        ws_facility = wb.create_sheet("Summary_By_Facility")
+        ws_month = wb.create_sheet("Summary_By_Month")
+        ws_dq = wb.create_sheet("Data_Quality_Issues")
+        ws_question = wb.create_sheet("Question_Summary")
+
+        # ============================================================
+        # Sheet 1: Full QIC data
+        # ============================================================
+        main_headers = [
+            "Record ID",
+            "Province",
+            "District",
+            "Facility Type",
+            "Facility",
+            "HF Code",
+            "Year",
+            "Month Number",
+            "Month Name",
+            "QIC Meeting Date",
+            "Data Collector",
+            "Implementor",
+            "Total YES",
+            "Total Questions",
+            "QIC Percent Score",
+            "Score Category",
+        ]
+
+        question_headers = [label for _field, label in question_fields]
+
+        additional_headers = [
+            "Committee Members Count",
+            "Quorum Met",
+            "Action Points Count",
+            "Actions Completed Count",
+            "Action Completion %",
+            "Next Meeting Date",
+            "Follow-up Required",
+            "Validated By Supervisor",
+            "Data Quality Issue Note",
+            "Remarks",
+            "Created At",
+            "Updated At",
+        ]
+
+        ws_data.append(main_headers + question_headers + additional_headers)
+
+        province_summary = defaultdict(lambda: {
+            "records": 0,
+            "score_sum": 0,
+            "yes_sum": 0,
+            "questions_sum": 0,
+            "followup_required": 0,
+            "validated": 0,
+        })
+
+        facility_summary = defaultdict(lambda: {
+            "records": 0,
+            "score_sum": 0,
+            "yes_sum": 0,
+            "questions_sum": 0,
+            "followup_required": 0,
+            "validated": 0,
+        })
+
+        month_summary = defaultdict(lambda: {
+            "records": 0,
+            "score_sum": 0,
+            "yes_sum": 0,
+            "questions_sum": 0,
+            "followup_required": 0,
+            "validated": 0,
+        })
+
+        question_summary = {
+            field: {
+                "question": label,
+                "yes": 0,
+                "no": 0,
+            }
+            for field, label in question_fields
+        }
+
+        dq_rows = []
+
+        for obj in queryset:
+            facility = obj.qicfacility
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+            facility_type = getattr(facility, "facilitytypefk", None) if facility else None
+
+            month_name = month_map.get(str(obj.monthqic), obj.monthqic)
+            percent_score = float(obj.qicpercentscore or 0)
+            total_yes = int(obj.qictotalquestions or 0)
+
+            action_completion_pct = ""
+            if obj.qicaction_points_count:
+                action_completion_pct = round(
+                    (float(obj.qicactions_completed_count or 0) / float(obj.qicaction_points_count)) * 100,
+                    2,
+                )
+
+            question_values = []
+            for field, _label in question_fields:
+                value = bool(getattr(obj, field))
+                question_values.append(yes_no(value))
+
+                if value:
+                    question_summary[field]["yes"] += 1
+                else:
+                    question_summary[field]["no"] += 1
+
+            ws_data.append([
+                obj.id,
+                get_name(province),
+                get_name(district),
+                get_name(facility_type),
+                get_name(facility),
+                safe_excel_value(getattr(facility, "hfcode", "")),
+                obj.yearqic,
+                month_sort_value(obj.monthqic),
+                month_name,
+                safe_excel_value(obj.qiccommdate),
+                safe_str(obj.qicdatacollector),
+                safe_str(obj.qicimplementor),
+                total_yes,
+                total_questions,
+                percent_score,
+                score_category(percent_score),
+                *question_values,
+                obj.qiccommittee_members_count or 0,
+                yes_no(obj.qicmeeting_quorum_met),
+                obj.qicaction_points_count or 0,
+                obj.qicactions_completed_count or 0,
+                action_completion_pct,
+                safe_excel_value(obj.qicnext_meeting_date),
+                yes_no(obj.qicfollowup_required),
+                yes_no(obj.qicvalidated_by_supervisor),
+                safe_excel_value(obj.qicdata_quality_issue_note),
+                safe_excel_value(obj.remarks),
+                safe_excel_value(obj.created_at),
+                safe_excel_value(obj.updated_at),
+            ])
+
+            province_key = get_name(province) or "Unknown"
+            facility_key = (
+                get_name(province) or "Unknown",
+                get_name(district) or "Unknown",
+                get_name(facility) or "Unknown",
+                safe_excel_value(getattr(facility, "hfcode", "")),
+            )
+            month_key = (
+                obj.yearqic,
+                month_sort_value(obj.monthqic),
+                month_name,
+            )
+
+            for bucket_key, bucket in [
+                (province_key, province_summary[province_key]),
+                (facility_key, facility_summary[facility_key]),
+                (month_key, month_summary[month_key]),
+            ]:
+                bucket["records"] += 1
+                bucket["score_sum"] += percent_score
+                bucket["yes_sum"] += total_yes
+                bucket["questions_sum"] += total_questions
+                bucket["followup_required"] += 1 if obj.qicfollowup_required else 0
+                bucket["validated"] += 1 if obj.qicvalidated_by_supervisor else 0
+
+            issues = detect_dq_issues(obj)
+            if issues:
+                dq_rows.append([
+                    obj.id,
+                    get_name(province),
+                    get_name(district),
+                    get_name(facility),
+                    safe_excel_value(getattr(facility, "hfcode", "")),
+                    obj.yearqic,
+                    month_name,
+                    safe_excel_value(obj.qiccommdate),
+                    percent_score,
+                    "; ".join(issues),
+                    safe_excel_value(obj.qicdata_quality_issue_note),
+                    safe_excel_value(obj.remarks),
+                ])
+
+        # ============================================================
+        # Sheet 2: Summary by province
+        # ============================================================
+        ws_province.append([
+            "Province",
+            "Records",
+            "Average QIC %",
+            "Total YES",
+            "Total Questions",
+            "Overall Achievement %",
+            "Follow-up Required Count",
+            "Validated Count",
+            "Validation %",
+        ])
+
+        for province_name, s in sorted(province_summary.items()):
+            avg_score = round(s["score_sum"] / s["records"], 2) if s["records"] else 0
+            overall_achievement = round((s["yes_sum"] / s["questions_sum"]) * 100, 2) if s["questions_sum"] else 0
+            validation_pct = round((s["validated"] / s["records"]) * 100, 2) if s["records"] else 0
+
+            ws_province.append([
+                province_name,
+                s["records"],
+                avg_score,
+                s["yes_sum"],
+                s["questions_sum"],
+                overall_achievement,
+                s["followup_required"],
+                s["validated"],
+                validation_pct,
+            ])
+
+        # ============================================================
+        # Sheet 3: Summary by facility
+        # ============================================================
+        ws_facility.append([
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Records",
+            "Average QIC %",
+            "Total YES",
+            "Total Questions",
+            "Overall Achievement %",
+            "Follow-up Required Count",
+            "Validated Count",
+            "Validation %",
+        ])
+
+        for facility_key, s in sorted(facility_summary.items()):
+            province_name, district_name, facility_name, hfcode = facility_key
+            avg_score = round(s["score_sum"] / s["records"], 2) if s["records"] else 0
+            overall_achievement = round((s["yes_sum"] / s["questions_sum"]) * 100, 2) if s["questions_sum"] else 0
+            validation_pct = round((s["validated"] / s["records"]) * 100, 2) if s["records"] else 0
+
+            ws_facility.append([
+                province_name,
+                district_name,
+                facility_name,
+                hfcode,
+                s["records"],
+                avg_score,
+                s["yes_sum"],
+                s["questions_sum"],
+                overall_achievement,
+                s["followup_required"],
+                s["validated"],
+                validation_pct,
+            ])
+
+        # ============================================================
+        # Sheet 4: Summary by month
+        # ============================================================
+        ws_month.append([
+            "Year",
+            "Month Number",
+            "Month Name",
+            "Records",
+            "Average QIC %",
+            "Total YES",
+            "Total Questions",
+            "Overall Achievement %",
+            "Follow-up Required Count",
+            "Validated Count",
+            "Validation %",
+        ])
+
+        for month_key, s in sorted(month_summary.items()):
+            year, month_no, month_name = month_key
+            avg_score = round(s["score_sum"] / s["records"], 2) if s["records"] else 0
+            overall_achievement = round((s["yes_sum"] / s["questions_sum"]) * 100, 2) if s["questions_sum"] else 0
+            validation_pct = round((s["validated"] / s["records"]) * 100, 2) if s["records"] else 0
+
+            ws_month.append([
+                year,
+                month_no,
+                month_name,
+                s["records"],
+                avg_score,
+                s["yes_sum"],
+                s["questions_sum"],
+                overall_achievement,
+                s["followup_required"],
+                s["validated"],
+                validation_pct,
+            ])
+
+        # ============================================================
+        # Sheet 5: Data quality issues
+        # ============================================================
+        ws_dq.append([
+            "Record ID",
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Year",
+            "Month",
+            "QIC Meeting Date",
+            "QIC Percent Score",
+            "Detected Data Quality / Follow-up Issues",
+            "Data Quality Issue Note",
+            "Remarks",
+        ])
+
+        if dq_rows:
+            for row in dq_rows:
+                ws_dq.append(row)
+        else:
+            ws_dq.append([
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "No major data quality issues detected in selected records.",
+                "",
+                "",
+            ])
+
+        # ============================================================
+        # Sheet 6: Question summary
+        # ============================================================
+        ws_question.append([
+            "Question Field",
+            "Question",
+            "YES Count",
+            "NO Count",
+            "Total Responses",
+            "YES %",
+            "NO %",
+        ])
+
+        for field, s in question_summary.items():
+            yes_count = s["yes"]
+            no_count = s["no"]
+            total = yes_count + no_count
+            yes_pct = round((yes_count / total) * 100, 2) if total else 0
+            no_pct = round((no_count / total) * 100, 2) if total else 0
+
+            ws_question.append([
+                field,
+                s["question"],
+                yes_count,
+                no_count,
+                total,
+                yes_pct,
+                no_pct,
+            ])
+
+        # ============================================================
+        # Formatting
+        # ============================================================
+        for ws in wb.worksheets:
+            style_worksheet(ws)
+
+            for row in ws.iter_rows(min_row=2):
+                for cell in row:
+                    header_name = ws.cell(row=1, column=cell.column).value
+
+                    if header_name and "%" in str(header_name):
+                        cell.number_format = "0.00"
+
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        filename = f"QIC_Dataset_Export_{timestamp}.xlsx"
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        wb.save(response)
+        return response
 
 class Trainingdetails(admin.StackedInline):
     model = Training
