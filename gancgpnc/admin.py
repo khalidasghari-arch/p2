@@ -1082,84 +1082,336 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
         "bp",
         "anemia",
         "antedepressionscreening",
+        "antedepressiondiagnosed",
         "birthplanningcounseling",
+        "dangersign",
     )
+
     list_filter = (
         SessionProvinceFilter,
         "sessiontype",
+        "sessionround",
         "sessiondate",
         "attendance",
         "dhypertension",
         "anemia",
         "antedepressionscreening",
         "antedepressiondiagnosed",
+        "rpsychosocialcounselor",
         "birthplanningcounseling",
+        "dangersign",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "sessiontype",
+        "sessionround",
         "typeofdangersign",
     )
+
     ordering = ("-sessiondate",)
+    list_per_page = 25
+    save_on_top = True
+
+    actions = ["export_ganc_fourth_session_excel"]
+
+    readonly_fields = (
+        "session_help",
+        "maternal_help",
+        "mental_health_help",
+        "lab_help",
+        "danger_counseling_help",
+    )
 
     fieldsets = (
-        ("Session Information", {
+        ("① Session Information", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Confirm the correct woman, fourth-session date, "
+                "attendance status and present gestational age."
+            ),
             "fields": (
-                "registerid",
-                "sessiontype",
-                "sessionround",
-                "sessiondate",
-                "attendance",
-                "presentga",
-            )
+                "session_help",
+                ("registerid", "sessiondate"),
+                ("sessiontype", "sessionround"),
+                ("attendance", "presentga"),
+            ),
         }),
-        ("Maternal Assessment", {
+
+        ("② Maternal Assessment", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Record blood pressure, weight, MUAC, anemia, supplements, "
+                "nutritional status and required referrals."
+            ),
             "fields": (
-                "bp",
-                "dhypertension",
-                "rhypertensiontoMD",
-                "weight",
-                "anemia",
-                "ironfolate",
-                "ironfolatepluswomen",
-                "pcalcium",
-                "acalcium",
-                "muac",
-                "dmam",
-                "rmam",
-                "dsam",
-                "rsam",
-            )
+                "maternal_help",
+                ("bp", "weight", "muac"),
+                ("dhypertension", "rhypertensiontoMD"),
+                ("anemia", "ironfolate", "ironfolatepluswomen"),
+                ("pcalcium", "acalcium"),
+                ("dmam", "rmam"),
+                ("dsam", "rsam"),
+            ),
         }),
-        ("Mental Health", {
+
+        ("③ Mental Health", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Record antenatal depression screening, diagnosis "
+                "and psychosocial referral."
+            ),
             "fields": (
-                "antedepressionscreening",
-                "antedepressiondiagnosed",
-                "rpsychosocialcounselor",
-            )
+                "mental_health_help",
+                (
+                    "antedepressionscreening",
+                    "antedepressiondiagnosed",
+                    "rpsychosocialcounselor",
+                ),
+            ),
         }),
-        ("Laboratory and Screening", {
+
+        ("④ Laboratory and Screening", {
+            "classes": ("ganc-section", "collapse"),
+            "description": (
+                "Record urine protein findings, cough screening, "
+                "referrals and TT vaccination status."
+            ),
             "fields": (
-                "urinexam",
-                "rpositivepuriatomd",
-                "coughmorethantwoweeks",
-                "rcough",
+                "lab_help",
+                ("urinexam", "rpositivepuriatomd"),
+                ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
-            )
+            ),
         }),
-        ("Danger Signs and Counseling", {
+
+        ("⑤ Danger Signs and Counseling", {
+            "classes": ("ganc-section", "collapse"),
+            "description": (
+                "Record pregnancy danger signs and birth-planning counseling. "
+                "The type of danger sign remains available for data entry."
+            ),
             "fields": (
-                "dangersign",
-                "typeofdangersign",
+                "danger_counseling_help",
+                ("dangersign", "typeofdangersign"),
                 "birthplanningcounseling",
-            )
+            ),
         }),
-        ("Other Information", {
-            "fields": ("remarks",)
+
+        ("⑥ Remarks", {
+            "classes": ("ganc-section", "collapse"),
+            "fields": (
+                "remarks",
+            ),
         }),
     )
 
+    class Media:
+        css = {
+            "all": (
+                "admin/css/ganc_admin.css",
+            )
+        }
+        js = (
+            "admin/js/ganc_admin.js",
+        )
+
+    def session_help(self, obj=None):
+        return (
+            "Confirm the correct woman and complete all fourth ANC "
+            "session information."
+        )
+
+    session_help.short_description = "Session guidance"
+
+    def maternal_help(self, obj=None):
+        return (
+            "Carefully complete blood pressure, nutrition, anemia, "
+            "supplementation and referral fields."
+        )
+
+    maternal_help.short_description = "Maternal assessment guidance"
+
+    def mental_health_help(self, obj=None):
+        return (
+            "When depression is diagnosed, review whether referral "
+            "to a psychosocial counselor is required."
+        )
+
+    mental_health_help.short_description = "Mental health guidance"
+
+    def lab_help(self, obj=None):
+        return (
+            "Complete urine protein, cough screening, referral and "
+            "TT vaccine fields where applicable."
+        )
+
+    lab_help.short_description = "Laboratory guidance"
+
+    def danger_counseling_help(self, obj=None):
+        return (
+            "If a danger sign is present, enter the specific type of "
+            "danger sign and record birth-planning counseling."
+        )
+
+    danger_counseling_help.short_description = "Danger sign guidance"
+
+    def export_ganc_fourth_session_excel(self, request, queryset):
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "GANC Fourth Session"
+
+        headers = [
+            "Register Name",
+            "Facility",
+            "Province",
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Attendance",
+            "Present GA",
+            "BP",
+            "Diagnosed Hypertension",
+            "Referred Hypertension to MD",
+            "Weight",
+            "Anemia",
+            "Iron Folate Routine Dose",
+            "Iron Folate 30+ for Anemic Woman",
+            "Prescribe Calcium",
+            "Absorbed Calcium Last Month",
+            "MUAC",
+            "Diagnosed MAM",
+            "Refer MAM to Nutrition Counsellor",
+            "Diagnosed SAM",
+            "Refer SAM to Higher Level",
+            "Antenatal Depression Screening",
+            "Antenatal Depression Diagnosed",
+            "Refer to Psychosocial Counselor",
+            "Urine Exam / Protein Uria",
+            "Referred Positive Protein Uria to MD",
+            "Cough More Than Two Weeks",
+            "Referred Cough to DOTS Room",
+            "TT Vaccine",
+            "Danger Sign",
+            "Type of Danger Sign",
+            "Birth Planning Counseling",
+            "Remarks",
+        ]
+
+        worksheet.append(headers)
+
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E",
+        )
+        header_font = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        def yes_no(value):
+            if value is True:
+                return "Yes"
+            if value is False:
+                return "No"
+            return ""
+
+        for obj in queryset:
+            worksheet.append([
+                str(obj.registerid) if obj.registerid else "",
+                self.get_facility(obj),
+                self.get_province(obj),
+                obj.sessiontype or "",
+                obj.sessionround or "",
+                (
+                    obj.sessiondate.strftime("%Y-%m-%d")
+                    if obj.sessiondate else ""
+                ),
+                obj.attendance or "",
+                obj.presentga,
+                obj.bp or "",
+                yes_no(obj.dhypertension),
+                yes_no(obj.rhypertensiontoMD),
+                obj.weight,
+                yes_no(obj.anemia),
+                yes_no(obj.ironfolate),
+                yes_no(obj.ironfolatepluswomen),
+                yes_no(obj.pcalcium),
+                yes_no(obj.acalcium),
+                obj.muac,
+                yes_no(obj.dmam),
+                yes_no(obj.rmam),
+                yes_no(obj.dsam),
+                yes_no(obj.rsam),
+                yes_no(obj.antedepressionscreening),
+                yes_no(obj.antedepressiondiagnosed),
+                yes_no(obj.rpsychosocialcounselor),
+                obj.urinexam or "",
+                yes_no(obj.rpositivepuriatomd),
+                yes_no(obj.coughmorethantwoweeks),
+                yes_no(obj.rcough),
+                yes_no(obj.ttvaccine),
+                yes_no(obj.dangersign),
+                obj.typeofdangersign or "",
+                yes_no(obj.birthplanningcounseling),
+                obj.remarks or "",
+            ])
+
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+        for column_cells in worksheet.columns:
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
+            max_length = 0
+
+            for cell in column_cells:
+                if cell.value is not None:
+                    max_length = max(
+                        max_length,
+                        len(str(cell.value)),
+                    )
+
+            worksheet.column_dimensions[column_letter].width = min(
+                max_length + 3,
+                40,
+            )
+
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+        worksheet.row_dimensions[1].height = 35
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="ganc_fourth_session.xlsx"'
+        )
+
+        workbook.save(response)
+        return response
+
+    export_ganc_fourth_session_excel.short_description = (
+        "Export selected GANC Fourth Session records to Excel"
+    )
 
 # ============================================================
 # Delivery
