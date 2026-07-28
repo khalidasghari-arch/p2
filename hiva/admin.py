@@ -845,11 +845,156 @@ class AimpeeAdmin(
         return response
 
 # ============================================================
-# AIM-PPH
+# AIM-PPH DUPLICATE PROTECTION
 # ============================================================
+
+def normalize_aimpph_period_value(value):
+    """
+    Normalize Shamsi year and month values for comparison.
+
+    Examples:
+        " 10 " becomes "10"
+        "01" becomes "1"
+        Persian/Arabic digits are converted to English digits
+        "HAMAL" and "hamal" are treated as the same value
+    """
+    if value in (None, ""):
+        return ""
+
+    text = unicodedata.normalize("NFKC", str(value))
+    text = " ".join(text.split()).casefold()
+
+    normalized_characters = []
+
+    for character in text:
+        if character.isdecimal():
+            try:
+                normalized_characters.append(
+                    str(unicodedata.decimal(character))
+                )
+            except (TypeError, ValueError):
+                normalized_characters.append(character)
+        else:
+            normalized_characters.append(character)
+
+    normalized_text = "".join(normalized_characters)
+
+    # Treat values such as 01 and 1 as the same month
+    if normalized_text.isdigit():
+        return str(int(normalized_text))
+
+    return normalized_text
+
+
+class AimpphDuplicateProtectedAdminForm(AimpphAdminForm):
+    """
+    Extends the existing AIM-PPH admin form.
+
+    Prevents duplicate monthly records using:
+        Health Facility + Shamsi Year + Shamsi Month
+    """
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        facility = cleaned_data.get("aimfacilityname")
+        shamsi_year = cleaned_data.get("shamsiyear")
+        shamsi_month = cleaned_data.get("shamsimonth")
+
+        # Remove accidental spaces before saving
+        if shamsi_year not in (None, ""):
+            shamsi_year = str(shamsi_year).strip()
+            cleaned_data["shamsiyear"] = shamsi_year
+
+        if shamsi_month not in (None, ""):
+            shamsi_month = str(shamsi_month).strip()
+            cleaned_data["shamsimonth"] = shamsi_month
+
+        # Let the normal form validation handle missing fields
+        if not facility or not shamsi_year or not shamsi_month:
+            return cleaned_data
+
+        normalized_year = normalize_aimpph_period_value(
+            shamsi_year
+        )
+        normalized_month = normalize_aimpph_period_value(
+            shamsi_month
+        )
+
+        model = self._meta.model
+        database = router.db_for_write(
+            model,
+            instance=self.instance,
+        )
+
+        duplicate_records = (
+            model._default_manager.using(database)
+            .filter(aimfacilityname_id=facility.pk)
+            .only(
+                "pk",
+                "aimfacilityname_id",
+                "shamsiyear",
+                "shamsimonth",
+            )
+            .order_by("pk")
+        )
+
+        # Allow users to edit the current record
+        if self.instance and self.instance.pk:
+            duplicate_records = duplicate_records.exclude(
+                pk=self.instance.pk
+            )
+
+        existing_record = None
+
+        for record in duplicate_records:
+            existing_year = normalize_aimpph_period_value(
+                record.shamsiyear
+            )
+            existing_month = normalize_aimpph_period_value(
+                record.shamsimonth
+            )
+
+            if (
+                existing_year == normalized_year
+                and existing_month == normalized_month
+            ):
+                existing_record = record
+                break
+
+        if existing_record:
+            duplicate_message = (
+                "Duplicate AIM-PPH entry was not saved. "
+                f"Record ID {existing_record.pk} already exists for "
+                f"{facility}, Shamsi year {shamsi_year}, and "
+                f"Shamsi month {shamsi_month}. "
+                "Please open and update the existing record instead."
+            )
+
+            if "shamsimonth" in self.fields:
+                self.add_error(
+                    "shamsimonth",
+                    duplicate_message,
+                )
+            else:
+                self.add_error(
+                    None,
+                    duplicate_message,
+                )
+
+        return cleaned_data
+
+
+# ============================================================
+# AIM-PPH ADMIN
+# ============================================================
+
 @admin.register(aimpph)
-class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    form = AimpphAdminForm
+class AimpphAdmin(
+    ProvinceRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    form = AimpphDuplicateProtectedAdminForm
 
     list_display = (
         "id",
@@ -869,38 +1014,176 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "ai_total",
     )
 
-    list_filter = (DistrictFilter, AimpeeFacilityFilter)
-    search_fields = ("aimfacilityname__name", "aimfacilityname__hfcode")
+    list_filter = (
+        DistrictFilter,
+        AimpeeFacilityFilter,
+    )
+
+    search_fields = (
+        "aimfacilityname__name",
+        "aimfacilityname__hfcode",
+    )
+
+    list_select_related = (
+        "aimfacilityname__districtfk__provincefk",
+    )
+
     list_per_page = 10
+    save_on_top = True
 
-    actions = ["export_aimpph_to_excel"]
+    actions = [
+        "export_aimpph_to_excel",
+    ]
 
-    @admin.display(description="Province")
+    # --------------------------------------------------------
+    # Province display
+    # --------------------------------------------------------
+    @admin.display(
+        description="Province",
+        ordering="aimfacilityname__districtfk__provincefk__name",
+    )
     def get_province(self, obj):
-        return obj.aimfacilityname.districtfk.provincefk.name
+        facility = getattr(obj, "aimfacilityname", None)
 
+        if not facility:
+            return ""
+
+        district = getattr(facility, "districtfk", None)
+
+        if not district:
+            return ""
+
+        province = getattr(district, "provincefk", None)
+
+        if not province:
+            return ""
+
+        return getattr(province, "name", "")
+
+    # --------------------------------------------------------
+    # Province restriction
+    # --------------------------------------------------------
     def province_filter_kwargs(self, request):
         return {
-            "aimfacilityname__districtfk__provincefk": user_province(request)
+            "aimfacilityname__districtfk__provincefk": (
+                user_province(request)
+            )
         }
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "aimfacilityname" and not request.user.is_superuser:
-            prov = user_province(request)
-            kwargs["queryset"] = (
-                Facility.objects.filter(districtfk__provincefk=prov)
-                if prov else Facility.objects.none()
-            )
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    def formfield_for_foreignkey(
+        self,
+        db_field,
+        request,
+        **kwargs,
+    ):
+        if (
+            db_field.name == "aimfacilityname"
+            and not request.user.is_superuser
+        ):
+            province = user_province(request)
 
-    # ------------------------------------------------------------
-    # Excel Export Action
-    # ------------------------------------------------------------
-    @admin.action(description="Export selected AIM-PPH records to Excel")
-    def export_aimpph_to_excel(self, request, queryset):
+            if province:
+                kwargs["queryset"] = (
+                    Facility.objects
+                    .filter(districtfk__provincefk=province)
+                    .order_by("name")
+                )
+            else:
+                kwargs["queryset"] = Facility.objects.none()
+
+        return super().formfield_for_foreignkey(
+            db_field,
+            request,
+            **kwargs,
+        )
+
+    # --------------------------------------------------------
+    # Concurrent submission and double-click protection
+    # --------------------------------------------------------
+    def _lock_selected_facility(
+        self,
+        request,
+        database,
+    ):
         """
-        Export all fields from AIM-PPH model into Excel.
-        Also includes Province, District, Facility Code, and Facility Name.
+        Lock the selected facility while the AIM-PPH form is
+        being validated and saved.
+
+        This prevents simultaneous admin submissions from
+        creating the same monthly record.
+        """
+        raw_facility_id = request.POST.get("aimfacilityname")
+
+        if not raw_facility_id:
+            return
+
+        try:
+            facility_id = Facility._meta.pk.to_python(
+                raw_facility_id
+            )
+        except (TypeError, ValueError, ValidationError):
+            # The form will display the invalid facility error
+            return
+
+        try:
+            (
+                Facility._default_manager.using(database)
+                .select_for_update()
+                .get(pk=facility_id)
+            )
+        except Facility.DoesNotExist:
+            # The form will handle the invalid facility
+            return
+
+    def changeform_view(
+        self,
+        request,
+        object_id=None,
+        form_url="",
+        extra_context=None,
+    ):
+        """
+        Wrap AIM-PPH POST submissions in a database transaction.
+        """
+        if request.method != "POST":
+            return super().changeform_view(
+                request,
+                object_id,
+                form_url,
+                extra_context,
+            )
+
+        database = router.db_for_write(self.model)
+
+        with transaction.atomic(using=database):
+            self._lock_selected_facility(
+                request,
+                database,
+            )
+
+            return super().changeform_view(
+                request,
+                object_id,
+                form_url,
+                extra_context,
+            )
+
+    # --------------------------------------------------------
+    # Excel Export Action
+    # --------------------------------------------------------
+    @admin.action(
+        description="Export selected AIM-PPH records to Excel"
+    )
+    def export_aimpph_to_excel(
+        self,
+        request,
+        queryset,
+    ):
+        """
+        Export selected AIM-PPH records to Excel.
+
+        Includes Province, District, Facility Code,
+        Facility Name, and every AIM-PPH database field.
         """
 
         queryset = queryset.select_related(
@@ -909,13 +1192,13 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "aimfacilityname__districtfk__provincefk",
         )
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "AIM-PPH Export"
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "AIM-PPH Export"
 
-        # -----------------------------
+        # ----------------------------------------------------
         # Helper functions
-        # -----------------------------
+        # ----------------------------------------------------
         def clean_value(value):
             if value is None:
                 return ""
@@ -926,6 +1209,7 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             if isinstance(value, datetime):
                 if timezone.is_aware(value):
                     value = timezone.localtime(value)
+
                 return value.replace(tzinfo=None)
 
             if isinstance(value, date):
@@ -936,88 +1220,118 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
             return value
 
-        def safe_get(obj, attr_path):
-            """
-            Example:
-            safe_get(obj, "aimfacilityname__districtfk__provincefk__name")
-            """
+        def safe_get(obj, attribute_path):
             current = obj
-            for attr in attr_path.split("__"):
-                current = getattr(current, attr, None)
+
+            for attribute in attribute_path.split("__"):
+                current = getattr(
+                    current,
+                    attribute,
+                    None,
+                )
+
                 if current is None:
                     return ""
+
             return current
 
-        # -----------------------------
+        # ----------------------------------------------------
         # Build export columns
-        # -----------------------------
+        # ----------------------------------------------------
         columns = [
             (
                 "Province",
                 lambda obj: safe_get(
                     obj,
-                    "aimfacilityname__districtfk__provincefk__name"
+                    "aimfacilityname__districtfk__provincefk__name",
                 ),
             ),
             (
                 "District",
                 lambda obj: safe_get(
                     obj,
-                    "aimfacilityname__districtfk__name"
+                    "aimfacilityname__districtfk__name",
                 ),
             ),
             (
                 "HF Code",
                 lambda obj: safe_get(
                     obj,
-                    "aimfacilityname__hfcode"
+                    "aimfacilityname__hfcode",
                 ),
             ),
             (
                 "Facility Name",
                 lambda obj: safe_get(
                     obj,
-                    "aimfacilityname__name"
+                    "aimfacilityname__name",
                 ),
             ),
         ]
 
-        # Add every real database field from the AIM-PPH model
+        # Add every real database field from AIM-PPH
         for field in self.model._meta.fields:
             if isinstance(field, ForeignKey):
                 columns.append(
                     (
-                        str(field.verbose_name),
-                        lambda obj, f=field: str(getattr(obj, f.name, "") or "")
+                        str(field.verbose_name).title(),
+                        lambda obj, current_field=field: str(
+                            getattr(
+                                obj,
+                                current_field.name,
+                                "",
+                            )
+                            or ""
+                        ),
                     )
                 )
+
                 columns.append(
                     (
                         f"{field.name}_id",
-                        lambda obj, f=field: getattr(obj, f.attname, "")
+                        lambda obj, current_field=field: getattr(
+                            obj,
+                            current_field.attname,
+                            "",
+                        ),
                     )
                 )
+
             else:
                 columns.append(
                     (
-                        str(field.verbose_name),
-                        lambda obj, f=field: clean_value(
-                            getattr(obj, f"get_{f.name}_display")()
-                            if f.choices
-                            else getattr(obj, f.name, "")
-                        )
+                        str(field.verbose_name).title(),
+                        lambda obj, current_field=field: clean_value(
+                            getattr(
+                                obj,
+                                f"get_{current_field.name}_display",
+                            )()
+                            if current_field.choices
+                            else getattr(
+                                obj,
+                                current_field.name,
+                                "",
+                            )
+                        ),
                     )
                 )
 
-        # -----------------------------
+        # ----------------------------------------------------
         # Write headers
-        # -----------------------------
-        headers = [col[0] for col in columns]
-        ws.append(headers)
+        # ----------------------------------------------------
+        headers = [
+            column_name
+            for column_name, value_function in columns
+        ]
 
-        header_fill = PatternFill("solid", fgColor="D9EAF7")
+        worksheet.append(headers)
 
-        for cell in ws[1]:
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="D9EAF7",
+        )
+
+        for cell in worksheet[1]:
             cell.font = Font(bold=True)
             cell.fill = header_fill
             cell.alignment = Alignment(
@@ -1026,40 +1340,56 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 wrap_text=True,
             )
 
-        # -----------------------------
+        # ----------------------------------------------------
         # Write data rows
-        # -----------------------------
+        # ----------------------------------------------------
         for obj in queryset:
-            row = [clean_value(func(obj)) for _, func in columns]
-            ws.append(row)
+            row = [
+                clean_value(value_function(obj))
+                for column_name, value_function in columns
+            ]
 
-        # -----------------------------
+            worksheet.append(row)
+
+        # ----------------------------------------------------
         # Excel formatting
-        # -----------------------------
-        ws.freeze_panes = "A2"
-        ws.auto_filter.ref = ws.dimensions
+        # ----------------------------------------------------
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
 
-        for col_num, column_cells in enumerate(ws.columns, start=1):
-            max_length = 0
-            col_letter = get_column_letter(col_num)
+        for column_number, column_cells in enumerate(
+            worksheet.columns,
+            start=1,
+        ):
+            maximum_length = 0
+            column_letter = get_column_letter(column_number)
 
             for cell in column_cells:
-                try:
-                    value_length = len(str(cell.value)) if cell.value is not None else 0
-                    max_length = max(max_length, value_length)
-                except Exception:
-                    pass
+                if cell.value is None:
+                    value_length = 0
+                else:
+                    value_length = len(str(cell.value))
 
-            ws.column_dimensions[col_letter].width = min(max_length + 3, 45)
+                maximum_length = max(
+                    maximum_length,
+                    value_length,
+                )
 
-        # -----------------------------
+            worksheet.column_dimensions[
+                column_letter
+            ].width = min(maximum_length + 3, 45)
+
+        # ----------------------------------------------------
         # Return Excel response
-        # -----------------------------
+        # ----------------------------------------------------
         output = BytesIO()
-        wb.save(output)
+        workbook.save(output)
         output.seek(0)
 
-        filename = f"aimpph_export_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filename = (
+            "aimpph_export_"
+            f"{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        )
 
         response = HttpResponse(
             output.getvalue(),
@@ -1068,7 +1398,10 @@ class AimpphAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "spreadsheetml.sheet"
             ),
         )
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename}"'
+        )
 
         return response
 
