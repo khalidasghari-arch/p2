@@ -1,0 +1,525 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+
+<style>
+    .sl-dashboard { font-family: Arial, sans-serif; }
+    .sl-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+    .sl-title { font-size:26px; font-weight:700; color:#1f4e78; margin:0; }
+    .sl-subtitle { color:#555; margin-top:4px; font-size:13px; }
+
+    .sl-card, .sl-section {
+        background:#fff;
+        border:1px solid #d9e2f3;
+        border-radius:10px;
+        padding:16px;
+        margin-bottom:18px;
+        box-shadow:0 2px 5px rgba(0,0,0,0.04);
+    }
+
+    .sl-filter-grid {
+        display:grid;
+        grid-template-columns:repeat(6, minmax(120px, 1fr));
+        gap:12px;
+        align-items:end;
+    }
+
+    .sl-filter-grid label {
+        display:block;
+        font-weight:600;
+        font-size:12px;
+        color:#333;
+        margin-bottom:4px;
+    }
+
+    .sl-filter-grid input, .sl-filter-grid select {
+        width:100%;
+        padding:7px;
+        border:1px solid #ccc;
+        border-radius:6px;
+    }
+
+    .sl-btn {
+        display:inline-block;
+        padding:8px 14px;
+        background:#1f4e78;
+        color:#fff !important;
+        border-radius:6px;
+        text-decoration:none;
+        border:none;
+        cursor:pointer;
+        font-weight:600;
+    }
+
+    .sl-btn-secondary { background:#607d8b; }
+
+    .sl-kpi-grid {
+        display:grid;
+        grid-template-columns:repeat(7, minmax(120px, 1fr));
+        gap:12px;
+        margin-bottom:18px;
+    }
+
+    .sl-kpi {
+        background:linear-gradient(180deg, #ffffff, #f4f8fb);
+        border:1px solid #d9e2f3;
+        border-radius:10px;
+        padding:14px;
+        text-align:center;
+    }
+
+    .sl-kpi-value {
+        font-size:25px;
+        font-weight:700;
+        color:#1f4e78;
+    }
+
+    .sl-kpi-label {
+        font-size:12px;
+        color:#555;
+        margin-top:4px;
+    }
+
+    .sl-note {
+        padding:12px;
+        background:#fff8e1;
+        border-left:5px solid #f9a825;
+        margin-bottom:16px;
+        font-size:13px;
+        line-height:1.5;
+    }
+
+    .sl-success-note {
+        padding:12px;
+        background:#e8f5e9;
+        border-left:5px solid #2e7d32;
+        margin-bottom:16px;
+        font-size:13px;
+        line-height:1.5;
+    }
+
+    .sl-section h2 {
+        margin-top:0;
+        color:#1f4e78;
+        font-size:19px;
+    }
+
+    table.sl-table {
+        width:100%;
+        border-collapse:collapse;
+        font-size:12px;
+    }
+
+    .sl-table th {
+        background:#1f4e78;
+        color:#fff;
+        padding:8px;
+        border:1px solid #d9e2f3;
+        text-align:left;
+    }
+
+    .sl-table td {
+        padding:7px;
+        border:1px solid #d9e2f3;
+        vertical-align:top;
+    }
+
+    .sl-table tr:nth-child(even) { background:#f7fbff; }
+
+    .bar-cell { min-width:180px; }
+    .bar-wrap {
+        background:#e0e0e0;
+        height:16px;
+        border-radius:10px;
+        overflow:hidden;
+        margin-bottom:4px;
+    }
+
+    .bar-ls { height:16px; background:#42a5f5; border-radius:10px; }
+    .bar-mc { height:16px; background:#66bb6a; border-radius:10px; }
+
+    .badge {
+        display:inline-block;
+        padding:3px 8px;
+        border-radius:12px;
+        font-size:11px;
+        color:#fff;
+        font-weight:600;
+    }
+
+    .badge-green { background:#2e7d32; }
+    .badge-orange { background:#ef6c00; }
+    .badge-gray { background:#607d8b; }
+
+    .two-col {
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:18px;
+    }
+
+    @media (max-width:1100px) {
+        .sl-filter-grid, .sl-kpi-grid, .two-col {
+            grid-template-columns:1fr;
+        }
+    }
+</style>
+
+<div class="sl-dashboard">
+
+    <div class="sl-header">
+        <div>
+            <h1 class="sl-title">Skill Lab Dashboard</h1>
+            <div class="sl-subtitle">
+                Routine dashboard for LS, MC, participants, topics, facilities, trends, first sessions, and success story evidence.
+            </div>
+        </div>
+        <div>
+            <a class="sl-btn" href="?{{ export_query }}">Export Excel</a>
+        </div>
+    </div>
+
+    <div class="sl-card">
+        <form method="get">
+            <div class="sl-filter-grid">
+
+                <div>
+                    <label>Date from</label>
+                    <input type="date" name="date_from" value="{{ filters.date_from }}">
+                </div>
+
+                <div>
+                    <label>Date to</label>
+                    <input type="date" name="date_to" value="{{ filters.date_to }}">
+                </div>
+
+                <div>
+                    <label>Province</label>
+                    <select name="province">
+                        <option value="">All</option>
+                        {% for p in province_options %}
+                            <option value="{{ p.province_id }}" {% if filters.province|stringformat:"s" == p.province_id|stringformat:"s" %}selected{% endif %}>
+                                {{ p.province }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Facility</label>
+                    <select name="facility">
+                        <option value="">All</option>
+                        {% for f in facility_options %}
+                            <option value="{{ f.facility_id }}" {% if filters.facility|stringformat:"s" == f.facility_id|stringformat:"s" %}selected{% endif %}>
+                                {{ f.facility }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Session Type</label>
+                    <select name="session_type">
+                        <option value="">All</option>
+                        {% for value,label in session_type_options %}
+                            <option value="{{ value }}" {% if filters.session_type == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Lab Round</label>
+                    <select name="lab_round">
+                        <option value="">All</option>
+                        {% for r in lab_round_options %}
+                            <option value="{{ r }}" {% if filters.lab_round|stringformat:"s" == r|stringformat:"s" %}selected{% endif %}>
+                                {{ r }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+            </div>
+
+            <div style="margin-top:12px;">
+                <button type="submit" class="sl-btn">Apply filters</button>
+                <a href="?" class="sl-btn sl-btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="sl-kpi-grid">
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.distinct_participants }}</div>
+            <div class="sl-kpi-label">Distinct Participants</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.total_ls }}</div>
+            <div class="sl-kpi-label">LS Instances</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.total_mc }}</div>
+            <div class="sl-kpi-label">MC Instances</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.mc_minus_ls }}</div>
+            <div class="sl-kpi-label">MC - LS</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.distinct_topics }}</div>
+            <div class="sl-kpi-label">Distinct Topics</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.distinct_facilities }}</div>
+            <div class="sl-kpi-label">Facilities</div>
+        </div>
+        <div class="sl-kpi">
+            <div class="sl-kpi-value">{{ kpis.distinct_sessions }}</div>
+            <div class="sl-kpi-label">Sessions</div>
+        </div>
+    </div>
+
+    <div class="sl-note">
+        <strong>Methodology note:</strong> {{ methodology_note }}
+    </div>
+
+    <div class="sl-section">
+        <h2>Province-level LS vs MC comparison</h2>
+        <table class="sl-table">
+            <thead>
+                <tr>
+                    <th>Province</th>
+                    <th>Distinct Participants</th>
+                    <th>Sessions</th>
+                    <th>Facilities</th>
+                    <th>Topics</th>
+                    <th>LS</th>
+                    <th>MC</th>
+                    <th>MC - LS</th>
+                    <th>Visual comparison</th>
+                    <th>Interpretation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in province_rows %}
+                    <tr>
+                        <td><strong>{{ r.province }}</strong></td>
+                        <td>{{ r.participants }}</td>
+                        <td>{{ r.sessions }}</td>
+                        <td>{{ r.facilities }}</td>
+                        <td>{{ r.topics }}</td>
+                        <td>{{ r.ls }}</td>
+                        <td>{{ r.mc }}</td>
+                        <td>
+                            {% if r.mc_minus_ls > 0 %}
+                                <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
+                            {% elif r.mc_minus_ls < 0 %}
+                                <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
+                            {% else %}
+                                <span class="badge badge-gray">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="bar-cell">
+                            <div>LS</div>
+                            <div class="bar-wrap">
+                                <div class="bar-ls" style="width:{{ r.ls_width }}%;"></div>
+                            </div>
+                            <div>MC</div>
+                            <div class="bar-wrap">
+                                <div class="bar-mc" style="width:{{ r.mc_width }}%;"></div>
+                            </div>
+                        </td>
+                        <td>{{ r.interpretation }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="10">No records found for the selected filters.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="two-col">
+        <div class="sl-section">
+            <h2>Bamyan explanation</h2>
+            <div class="sl-success-note">
+                {{ bamyan_narrative }}
+            </div>
+
+            <table class="sl-table">
+                <thead>
+                    <tr>
+                        <th>Facility</th>
+                        <th>LS</th>
+                        <th>MC</th>
+                        <th>MC - LS</th>
+                        <th>Interpretation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in bamyan_facilities %}
+                        <tr>
+                            <td>{{ r.facility }}</td>
+                            <td>{{ r.ls }}</td>
+                            <td>{{ r.mc }}</td>
+                            <td>{{ r.mc_minus_ls }}</td>
+                            <td>{{ r.interpretation }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5">No Bamyan records found for the selected filters.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sl-section">
+            <h2>Success story candidates</h2>
+            <table class="sl-table">
+                <thead>
+                    <tr>
+                        <th>Province</th>
+                        <th>Facility</th>
+                        <th>LS</th>
+                        <th>MC</th>
+                        <th>Story Angle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in story_candidates %}
+                        <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.facility }}</td>
+                            <td>{{ r.ls }}</td>
+                            <td>{{ r.mc }}</td>
+                            <td>{{ r.story_angle }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5">No story candidates available.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <h2>Monthly trend by province</h2>
+        <table class="sl-table">
+            <thead>
+                <tr>
+                    <th>Province</th>
+                    <th>Month</th>
+                    <th>Participants</th>
+                    <th>Topics</th>
+                    <th>LS</th>
+                    <th>MC</th>
+                    <th>MC - LS</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in trend_rows %}
+                    <tr>
+                        <td>{{ r.province }}</td>
+                        <td>{{ r.month_label }}</td>
+                        <td>{{ r.participants }}</td>
+                        <td>{{ r.topics }}</td>
+                        <td>{{ r.ls }}</td>
+                        <td>{{ r.mc }}</td>
+                        <td>{{ r.mc_minus_ls }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7">No trend records found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="sl-section">
+        <h2>First recorded skill lab session by province</h2>
+        <table class="sl-table">
+            <thead>
+                <tr>
+                    <th>Province</th>
+                    <th>First Session Date</th>
+                    <th>First Facility</th>
+                    <th>HF Code</th>
+                    <th>District</th>
+                    <th>Clinical Mentor</th>
+                    <th>Session Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in first_session_rows %}
+                    <tr>
+                        <td>{{ r.province }}</td>
+                        <td>{{ r.first_date }}</td>
+                        <td>{{ r.facility }}</td>
+                        <td>{{ r.hfcode }}</td>
+                        <td>{{ r.district }}</td>
+                        <td>{{ r.mentor }}</td>
+                        <td>{{ r.session_type }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7">No session records found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="sl-section">
+        <h2>Facility-level drivers</h2>
+        <table class="sl-table">
+            <thead>
+                <tr>
+                    <th>Province</th>
+                    <th>District</th>
+                    <th>Facility</th>
+                    <th>HF Code</th>
+                    <th>Participants</th>
+                    <th>Sessions</th>
+                    <th>Topics</th>
+                    <th>LS</th>
+                    <th>MC</th>
+                    <th>MC - LS</th>
+                    <th>Interpretation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in facility_driver_rows %}
+                    <tr>
+                        <td>{{ r.province }}</td>
+                        <td>{{ r.district }}</td>
+                        <td>{{ r.facility }}</td>
+                        <td>{{ r.hfcode }}</td>
+                        <td>{{ r.participants }}</td>
+                        <td>{{ r.sessions }}</td>
+                        <td>{{ r.topics }}</td>
+                        <td>{{ r.ls }}</td>
+                        <td>{{ r.mc }}</td>
+                        <td>{{ r.mc_minus_ls }}</td>
+                        <td>{{ r.interpretation }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="11">No facility-level records found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+{% endblock %}

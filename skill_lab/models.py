@@ -238,6 +238,11 @@ class SkillLabSession(models.Model):
             if end - start > timedelta(hours=12):
                 raise ValidationError("Session duration looks too long (>12 hours). Please verify check-in/check-out.")
 
+class SkillLabDashboard(SkillLabSession):
+    class Meta:
+        proxy = True
+        verbose_name = "Skill Lab Dashboard"
+        verbose_name_plural = "Skill Lab Dashboard"
 
 class SkillLabParticipantRecord(models.Model):
     GENDER_CHOICES = [

@@ -7,9 +7,15 @@ from django.urls import path
 from django.utils.html import format_html
 from django.http import HttpResponse, JsonResponse
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from django.db.models import Count
+from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F
+from django.db.models.functions import TruncMonth
+from django.template.response import TemplateResponse
+from django.http import HttpResponse
+from django.utils import timezone
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 from .models import (
     ThematicArea,
@@ -18,6 +24,7 @@ from .models import (
     SkillLabSession,
     SkillLabParticipantRecord,
     Skill_Lab_Mentee,
+    SkillLabDashboard,
 )
 
 try:
@@ -721,6 +728,527 @@ class SkillLabSessionAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin
 
     export_skilllab_sessions_excel.short_description = "Export selected Skill Lab Sessions with Participant Records to Excel"
 
+
+@admin.register(SkillLabDashboard)
+class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/skilllab/dashboard.html"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    def _get_participant_model(self):
+        """
+        Uses your existing related_name='participant_records'.
+        """
+        rel = SkillLabSession._meta.get_field("participant_records")
+        return rel.related_model, rel.field.name
+
+    def _bool_sum(self, field_name):
+        return Sum(
+            Case(
+                When(**{field_name: True}, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        data = self._build_dashboard_data(request)
+
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Skill Lab Dashboard",
+            **data,
+        }
+
+        return TemplateResponse(request, self.change_list_template, context)
+
+    def _build_dashboard_data(self, request):
+        ParticipantModel, session_fk = self._get_participant_model()
+
+        session_prefix = f"{session_fk}__"
+
+        date_lookup = f"{session_prefix}session_date"
+        province_id_lookup = f"{session_prefix}skill_lab__facility__districtfk__provincefk_id"
+        province_name_lookup = f"{session_prefix}skill_lab__facility__districtfk__provincefk__name"
+        district_name_lookup = f"{session_prefix}skill_lab__facility__districtfk__name"
+        facility_id_lookup = f"{session_prefix}skill_lab__facility_id"
+        facility_name_lookup = f"{session_prefix}skill_lab__facility__name"
+        hfcode_lookup = f"{session_prefix}skill_lab__facility__hfcode"
+
+        sessions_qs = SkillLabSession.objects.select_related(
+            "skill_lab",
+            "skill_lab__facility",
+            "skill_lab__facility__districtfk",
+            "skill_lab__facility__districtfk__provincefk",
+            "mentor_name",
+            "mentor_org",
+        )
+
+        participants_qs = ParticipantModel.objects.select_related(
+            session_fk,
+            f"{session_fk}__skill_lab",
+            f"{session_fk}__skill_lab__facility",
+            f"{session_fk}__skill_lab__facility__districtfk",
+            f"{session_fk}__skill_lab__facility__districtfk__provincefk",
+            "mentee_name",
+            "thematic_area",
+            "topic",
+        )
+
+        province = user_province(request)
+        if province and not request.user.is_superuser:
+            sessions_qs = sessions_qs.filter(
+                skill_lab__facility__districtfk__provincefk=province
+            )
+            participants_qs = participants_qs.filter(
+                **{province_id_lookup: province.id}
+            )
+
+        date_from = request.GET.get("date_from", "").strip()
+        date_to = request.GET.get("date_to", "").strip()
+        province_id = request.GET.get("province", "").strip()
+        facility_id = request.GET.get("facility", "").strip()
+        session_type = request.GET.get("session_type", "").strip()
+        lab_round = request.GET.get("lab_round", "").strip()
+
+        if date_from:
+            sessions_qs = sessions_qs.filter(session_date__gte=date_from)
+            participants_qs = participants_qs.filter(**{f"{date_lookup}__gte": date_from})
+
+        if date_to:
+            sessions_qs = sessions_qs.filter(session_date__lte=date_to)
+            participants_qs = participants_qs.filter(**{f"{date_lookup}__lte": date_to})
+
+        if province_id:
+            sessions_qs = sessions_qs.filter(
+                skill_lab__facility__districtfk__provincefk_id=province_id
+            )
+            participants_qs = participants_qs.filter(**{province_id_lookup: province_id})
+
+        if facility_id:
+            sessions_qs = sessions_qs.filter(skill_lab__facility_id=facility_id)
+            participants_qs = participants_qs.filter(**{facility_id_lookup: facility_id})
+
+        if session_type:
+            sessions_qs = sessions_qs.filter(session_type=session_type)
+            participants_qs = participants_qs.filter(
+                **{f"{session_prefix}session_type": session_type}
+            )
+
+        if lab_round:
+            sessions_qs = sessions_qs.filter(lab_round=lab_round)
+            participants_qs = participants_qs.filter(
+                **{f"{session_prefix}lab_round": lab_round}
+            )
+
+        option_sessions = SkillLabSession.objects.select_related(
+            "skill_lab__facility__districtfk__provincefk"
+        )
+
+        if province and not request.user.is_superuser:
+            option_sessions = option_sessions.filter(
+                skill_lab__facility__districtfk__provincefk=province
+            )
+
+        province_options = list(
+            option_sessions.values(
+                province_id=F("skill_lab__facility__districtfk__provincefk_id"),
+                province=F("skill_lab__facility__districtfk__provincefk__name"),
+            )
+            .exclude(province_id__isnull=True)
+            .distinct()
+            .order_by("province")
+        )
+
+        facility_options = list(
+            option_sessions.values(
+                facility_id=F("skill_lab__facility_id"),
+                facility=F("skill_lab__facility__name"),
+            )
+            .exclude(facility_id__isnull=True)
+            .distinct()
+            .order_by("facility")
+        )
+
+        lab_round_options = list(
+            option_sessions.values_list("lab_round", flat=True)
+            .distinct()
+            .order_by("lab_round")
+        )
+
+        session_type_options = SkillLabSession.SESSION_TYPE_CHOICES
+
+        kpis = participants_qs.aggregate(
+            total_records=Count("id"),
+            distinct_participants=Count("mentee_name", distinct=True),
+            total_ls=self._bool_sum("ls"),
+            total_mc=self._bool_sum("mc"),
+            distinct_topics=Count("topic", distinct=True),
+            distinct_facilities=Count(facility_id_lookup, distinct=True),
+            distinct_sessions=Count(session_fk, distinct=True),
+        )
+
+        for key in kpis:
+            kpis[key] = int(kpis[key] or 0)
+
+        kpis["mc_minus_ls"] = kpis["total_mc"] - kpis["total_ls"]
+
+        province_rows = list(
+            participants_qs.values(
+                province=F(province_name_lookup),
+            )
+            .annotate(
+                participants=Count("mentee_name", distinct=True),
+                sessions=Count(session_fk, distinct=True),
+                facilities=Count(facility_id_lookup, distinct=True),
+                topics=Count("topic", distinct=True),
+                ls=self._bool_sum("ls"),
+                mc=self._bool_sum("mc"),
+                records=Count("id"),
+            )
+            .order_by("province")
+        )
+
+        max_value = max(
+            [max(int(r["ls"] or 0), int(r["mc"] or 0)) for r in province_rows] or [1]
+        )
+
+        for r in province_rows:
+            r["ls"] = int(r["ls"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["mc_minus_ls"] = r["mc"] - r["ls"]
+            r["ls_width"] = round((r["ls"] / max_value) * 100, 1) if max_value else 0
+            r["mc_width"] = round((r["mc"] / max_value) * 100, 1) if max_value else 0
+
+            if r["mc_minus_ls"] > 0:
+                r["interpretation"] = "More MC than LS"
+            elif r["mc_minus_ls"] < 0:
+                r["interpretation"] = "More LS than MC"
+            else:
+                r["interpretation"] = "Balanced"
+
+        facility_rows = list(
+            participants_qs.values(
+                province=F(province_name_lookup),
+                district=F(district_name_lookup),
+                facility=F(facility_name_lookup),
+                hfcode=F(hfcode_lookup),
+            )
+            .annotate(
+                participants=Count("mentee_name", distinct=True),
+                sessions=Count(session_fk, distinct=True),
+                topics=Count("topic", distinct=True),
+                ls=self._bool_sum("ls"),
+                mc=self._bool_sum("mc"),
+                records=Count("id"),
+            )
+            .order_by("province", "district", "facility")
+        )
+
+        for r in facility_rows:
+            r["ls"] = int(r["ls"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["mc_minus_ls"] = r["mc"] - r["ls"]
+
+            if r["mc_minus_ls"] > 0:
+                r["interpretation"] = "Competency assessment instances were higher than learning session instances."
+            elif r["mc_minus_ls"] < 0:
+                r["interpretation"] = "Learning session instances were higher than competency assessment instances."
+            else:
+                r["interpretation"] = "LS and MC were balanced."
+
+        facility_driver_rows = sorted(
+            facility_rows,
+            key=lambda x: abs(x["mc_minus_ls"]),
+            reverse=True,
+        )[:25]
+
+        bamyan_row = None
+        for r in province_rows:
+            if str(r.get("province") or "").strip().lower() == "bamyan":
+                bamyan_row = r
+                break
+
+        bamyan_facilities = [
+            r for r in facility_rows
+            if str(r.get("province") or "").strip().lower() == "bamyan"
+        ]
+        bamyan_facilities = sorted(
+            bamyan_facilities,
+            key=lambda x: x["mc_minus_ls"],
+            reverse=True,
+        )
+
+        if bamyan_row and bamyan_row["mc"] > bamyan_row["ls"]:
+            bamyan_narrative = (
+                f"Bamyan recorded {bamyan_row['mc']} MC instances compared with "
+                f"{bamyan_row['ls']} LS instances. MC was higher by "
+                f"{bamyan_row['mc_minus_ls']} instances. This does not indicate a data error by itself. "
+                f"LS and MC are counted at participant-topic/session level, not as unique health workers. "
+                f"A single participant may be assessed across multiple topics or sessions. "
+                f"Therefore, the higher MC value suggests that competency assessment activities were recorded "
+                f"more frequently than learning session entries in selected Bamyan facilities."
+            )
+        else:
+            bamyan_narrative = (
+                "For the selected filters, Bamyan does not show MC higher than LS, "
+                "or Bamyan is not included in the selected period."
+            )
+
+        trend_rows = list(
+            participants_qs.annotate(
+                month=TruncMonth(date_lookup)
+            )
+            .values(
+                "month",
+                province=F(province_name_lookup),
+            )
+            .annotate(
+                participants=Count("mentee_name", distinct=True),
+                topics=Count("topic", distinct=True),
+                ls=self._bool_sum("ls"),
+                mc=self._bool_sum("mc"),
+            )
+            .order_by("province", "month")
+        )
+
+        for r in trend_rows:
+            r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
+            r["ls"] = int(r["ls"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["mc_minus_ls"] = r["mc"] - r["ls"]
+
+        first_session_rows = []
+
+        first_by_province = list(
+            sessions_qs.values(
+                province_id=F("skill_lab__facility__districtfk__provincefk_id"),
+                province=F("skill_lab__facility__districtfk__provincefk__name"),
+            )
+            .exclude(province_id__isnull=True)
+            .annotate(first_date=Min("session_date"))
+            .order_by("province")
+        )
+
+        for row in first_by_province:
+            first_session = (
+                sessions_qs.filter(
+                    skill_lab__facility__districtfk__provincefk_id=row["province_id"],
+                    session_date=row["first_date"],
+                )
+                .order_by("session_date", "id")
+                .first()
+            )
+
+            facility = first_session.facility if first_session else None
+            district = first_session.district if first_session else None
+
+            first_session_rows.append({
+                "province": row["province"],
+                "first_date": row["first_date"],
+                "facility": facility.name if facility else "",
+                "hfcode": facility.hfcode if facility else "",
+                "district": district.name if district else "",
+                "mentor": str(first_session.mentor_name) if first_session and first_session.mentor_name else "",
+                "session_type": first_session.session_type if first_session else "",
+            })
+
+        story_candidates = []
+        for r in facility_rows:
+            story_score = r["ls"] + r["mc"] + max(r["mc_minus_ls"], 0) * 2
+
+            if r["ls"] > 0 or r["mc"] > 0:
+                story_candidates.append({
+                    **r,
+                    "story_score": story_score,
+                    "story_angle": (
+                        "Competency assessment progress"
+                        if r["mc_minus_ls"] > 0
+                        else "Learning session implementation"
+                    ),
+                })
+
+        story_candidates = sorted(
+            story_candidates,
+            key=lambda x: x["story_score"],
+            reverse=True,
+        )[:15]
+
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+
+        return {
+            "filters": {
+                "date_from": date_from,
+                "date_to": date_to,
+                "province": province_id,
+                "facility": facility_id,
+                "session_type": session_type,
+                "lab_round": lab_round,
+            },
+            "export_query": export_query.urlencode(),
+            "province_options": province_options,
+            "facility_options": facility_options,
+            "session_type_options": session_type_options,
+            "lab_round_options": lab_round_options,
+            "kpis": kpis,
+            "province_rows": province_rows,
+            "facility_rows": facility_rows,
+            "facility_driver_rows": facility_driver_rows,
+            "trend_rows": trend_rows,
+            "first_session_rows": first_session_rows,
+            "story_candidates": story_candidates,
+            "bamyan_row": bamyan_row,
+            "bamyan_facilities": bamyan_facilities,
+            "bamyan_narrative": bamyan_narrative,
+            "methodology_note": (
+                "LS and MC figures represent participant-topic/session instances, not unique health workers. "
+                "A single participant may be included more than once across visits, topics, sessions, or competency assessments."
+            ),
+        }
+
+    def _export_dashboard_excel(self, data):
+        wb = Workbook()
+
+        def style_sheet(ws):
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = border
+
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            for col in ws.columns:
+                max_length = 0
+                col_letter = get_column_letter(col[0].column)
+
+                for cell in col:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 45)
+
+        ws = wb.active
+        ws.title = "Province_Summary"
+        ws.append([
+            "Province", "Distinct Participants", "Sessions", "Facilities",
+            "Topics", "LS", "MC", "MC - LS", "Interpretation",
+        ])
+
+        for r in data["province_rows"]:
+            ws.append([
+                r.get("province"), r.get("participants"), r.get("sessions"),
+                r.get("facilities"), r.get("topics"), r.get("ls"),
+                r.get("mc"), r.get("mc_minus_ls"), r.get("interpretation"),
+            ])
+
+        ws2 = wb.create_sheet("Facility_Detail")
+        ws2.append([
+            "Province", "District", "Facility", "HF Code",
+            "Distinct Participants", "Sessions", "Topics",
+            "LS", "MC", "MC - LS", "Interpretation",
+        ])
+
+        for r in data["facility_rows"]:
+            ws2.append([
+                r.get("province"), r.get("district"), r.get("facility"),
+                r.get("hfcode"), r.get("participants"), r.get("sessions"),
+                r.get("topics"), r.get("ls"), r.get("mc"),
+                r.get("mc_minus_ls"), r.get("interpretation"),
+            ])
+
+        ws3 = wb.create_sheet("Monthly_Trend")
+        ws3.append([
+            "Province", "Month", "Distinct Participants",
+            "Topics", "LS", "MC", "MC - LS",
+        ])
+
+        for r in data["trend_rows"]:
+            ws3.append([
+                r.get("province"), r.get("month_label"), r.get("participants"),
+                r.get("topics"), r.get("ls"), r.get("mc"),
+                r.get("mc_minus_ls"),
+            ])
+
+        ws4 = wb.create_sheet("First_Sessions")
+        ws4.append([
+            "Province", "First Session Date", "First Facility",
+            "HF Code", "District", "Clinical Mentor", "Session Type",
+        ])
+
+        for r in data["first_session_rows"]:
+            ws4.append([
+                r.get("province"), r.get("first_date"), r.get("facility"),
+                r.get("hfcode"), r.get("district"), r.get("mentor"),
+                r.get("session_type"),
+            ])
+
+        ws5 = wb.create_sheet("Story_Candidates")
+        ws5.append([
+            "Province", "District", "Facility", "HF Code",
+            "LS", "MC", "MC - LS", "Story Angle", "Story Score",
+        ])
+
+        for r in data["story_candidates"]:
+            ws5.append([
+                r.get("province"), r.get("district"), r.get("facility"),
+                r.get("hfcode"), r.get("ls"), r.get("mc"),
+                r.get("mc_minus_ls"), r.get("story_angle"),
+                r.get("story_score"),
+            ])
+
+        ws6 = wb.create_sheet("Methodology_Notes")
+        ws6.append(["Topic", "Explanation"])
+        ws6.append(["LS and MC interpretation", data["methodology_note"]])
+        ws6.append(["Bamyan explanation", data["bamyan_narrative"]])
+
+        for sheet in wb.worksheets:
+            style_sheet(sheet)
+
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        filename = f"Skill_Lab_Dashboard_{timestamp}.xlsx"
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response
+    
 # =========================================================
 # Participant Record
 # =========================================================
