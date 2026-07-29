@@ -1092,39 +1092,146 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             reverse=True,
         )[:15]
 
+    # ============================================================
+    # Chart data for Django admin dashboard
+    # ============================================================
+
+        # Add MC share to province rows
+        for r in province_rows:
+            total_lsmc = int(r.get("ls") or 0) + int(r.get("mc") or 0)
+            r["mc_share"] = round((int(r.get("mc") or 0) / total_lsmc) * 100, 1) if total_lsmc else 0
+
+        # Add MC share to facility rows
+        for r in facility_rows:
+            total_lsmc = int(r.get("ls") or 0) + int(r.get("mc") or 0)
+            r["mc_share"] = round((int(r.get("mc") or 0) / total_lsmc) * 100, 1) if total_lsmc else 0
+
+        # Monthly total trend across all selected provinces/facilities
+        monthly_total_rows = list(
+            participants_qs.annotate(
+                month=TruncMonth(date_lookup)
+            )
+            .values("month")
+            .annotate(
+                participants=Count("mentee_name", distinct=True),
+                sessions=Count(session_fk, distinct=True),
+                topics=Count("topic", distinct=True),
+                ls=self._bool_sum("ls"),
+                mc=self._bool_sum("mc"),
+            )
+            .order_by("month")
+        )
+
+        for r in monthly_total_rows:
+            r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
+            r["ls"] = int(r["ls"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["total"] = r["ls"] + r["mc"]
+            r["mc_minus_ls"] = r["mc"] - r["ls"]
+
+        # Top 10 facility drivers by absolute difference between LS and MC
+        top_facility_drivers_chart = sorted(
+            facility_rows,
+            key=lambda x: abs(int(x.get("mc_minus_ls") or 0)),
+            reverse=True,
+        )[:10]
+
+        # Chart-safe data only: strings and numbers
+        chart_data = {
+            "province_ls_mc": [
+                {
+                    "province": r.get("province") or "Unknown",
+                    "LS": int(r.get("ls") or 0),
+                    "MC": int(r.get("mc") or 0),
+                }
+                for r in province_rows
+            ],
+
+            "province_gap": [
+                {
+                    "province": r.get("province") or "Unknown",
+                    "gap": int(r.get("mc_minus_ls") or 0),
+                    "mc_share": float(r.get("mc_share") or 0),
+                }
+                for r in province_rows
+            ],
+
+            "monthly_ls_mc": [
+                {
+                    "month": r.get("month_label") or "Unknown",
+                    "LS": int(r.get("ls") or 0),
+                    "MC": int(r.get("mc") or 0),
+                    "Total": int(r.get("total") or 0),
+                }
+                for r in monthly_total_rows
+            ],
+
+            "facility_drivers": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "LS": int(r.get("ls") or 0),
+                    "MC": int(r.get("mc") or 0),
+                    "gap": int(r.get("mc_minus_ls") or 0),
+                }
+                for r in top_facility_drivers_chart
+            ],
+
+            "bamyan_facilities": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "LS": int(r.get("ls") or 0),
+                    "MC": int(r.get("mc") or 0),
+                    "gap": int(r.get("mc_minus_ls") or 0),
+                }
+                for r in bamyan_facilities
+            ],
+
+            "story_candidates": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "story_score": int(r.get("story_score") or 0),
+                    "LS": int(r.get("ls") or 0),
+                    "MC": int(r.get("mc") or 0),
+                }
+                for r in story_candidates[:10]
+            ],
+        }
+
         export_query = request.GET.copy()
         export_query["export"] = "1"
 
         return {
-            "filters": {
-                "date_from": date_from,
-                "date_to": date_to,
-                "province": province_id,
-                "facility": facility_id,
-                "session_type": session_type,
-                "lab_round": lab_round,
-            },
-            "export_query": export_query.urlencode(),
-            "province_options": province_options,
-            "facility_options": facility_options,
-            "session_type_options": session_type_options,
-            "lab_round_options": lab_round_options,
-            "kpis": kpis,
-            "province_rows": province_rows,
-            "facility_rows": facility_rows,
-            "facility_driver_rows": facility_driver_rows,
-            "trend_rows": trend_rows,
-            "first_session_rows": first_session_rows,
-            "story_candidates": story_candidates,
-            "bamyan_row": bamyan_row,
-            "bamyan_facilities": bamyan_facilities,
-            "bamyan_narrative": bamyan_narrative,
-            "methodology_note": (
-                "LS and MC figures represent participant-topic/session instances, not unique health workers. "
-                "A single participant may be included more than once across visits, topics, sessions, or competency assessments."
-            ),
-        }
-
+                "filters": {
+                    "date_from": date_from,
+                    "date_to": date_to,
+                    "province": province_id,
+                    "facility": facility_id,
+                    "session_type": session_type,
+                    "lab_round": lab_round,
+                },
+                "export_query": export_query.urlencode(),
+                "province_options": province_options,
+                "facility_options": facility_options,
+                "session_type_options": session_type_options,
+                "lab_round_options": lab_round_options,
+                "kpis": kpis,
+                "province_rows": province_rows,
+                "facility_rows": facility_rows,
+                "facility_driver_rows": facility_driver_rows,
+                "trend_rows": trend_rows,
+                "monthly_total_rows": monthly_total_rows,
+                "first_session_rows": first_session_rows,
+                "story_candidates": story_candidates,
+                "bamyan_row": bamyan_row,
+                "bamyan_facilities": bamyan_facilities,
+                "bamyan_narrative": bamyan_narrative,
+                "chart_data": chart_data,
+                "methodology_note": (
+                    "LS and MC figures represent participant-topic/session instances, not unique health workers. "
+                    "A single participant may be included more than once across visits, topics, sessions, or competency assessments."
+                ),
+            }
+    
     def _export_dashboard_excel(self, data):
         wb = Workbook()
 

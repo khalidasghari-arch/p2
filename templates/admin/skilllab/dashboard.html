@@ -1,168 +1,403 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block content_title %}{% endblock %}
 
 {% block content %}
 
 <style>
-    .sl-dashboard { font-family: Arial, sans-serif; }
-    .sl-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
-    .sl-title { font-size:26px; font-weight:700; color:#1f4e78; margin:0; }
-    .sl-subtitle { color:#555; margin-top:4px; font-size:13px; }
-
-    .sl-card, .sl-section {
-        background:#fff;
-        border:1px solid #d9e2f3;
-        border-radius:10px;
-        padding:16px;
-        margin-bottom:18px;
-        box-shadow:0 2px 5px rgba(0,0,0,0.04);
+    :root {
+        --sl-blue: #1f4e78;
+        --sl-blue-2: #1565c0;
+        --sl-green: #2e7d32;
+        --sl-orange: #ef6c00;
+        --sl-red: #c62828;
+        --sl-gray: #607d8b;
+        --sl-light-blue: #f4f8fb;
+        --sl-border: #d9e2f3;
+        --sl-text: #263238;
+        --sl-muted: #607d8b;
     }
 
-    .sl-filter-grid {
-        display:grid;
-        grid-template-columns:repeat(6, minmax(120px, 1fr));
-        gap:12px;
-        align-items:end;
+    .sl-dashboard {
+        font-family: Arial, sans-serif;
+        color: var(--sl-text);
     }
 
-    .sl-filter-grid label {
-        display:block;
-        font-weight:600;
-        font-size:12px;
-        color:#333;
-        margin-bottom:4px;
+    .sl-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
     }
 
-    .sl-filter-grid input, .sl-filter-grid select {
-        width:100%;
-        padding:7px;
-        border:1px solid #ccc;
-        border-radius:6px;
+    .sl-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--sl-blue);
+        margin: 0;
+        line-height: 1.2;
     }
 
-    .sl-btn {
-        display:inline-block;
-        padding:8px 14px;
-        background:#1f4e78;
-        color:#fff !important;
-        border-radius:6px;
-        text-decoration:none;
-        border:none;
-        cursor:pointer;
-        font-weight:600;
+    .sl-subtitle {
+        color: #555;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
     }
 
-    .sl-btn-secondary { background:#607d8b; }
-
-    .sl-kpi-grid {
-        display:grid;
-        grid-template-columns:repeat(7, minmax(120px, 1fr));
-        gap:12px;
-        margin-bottom:18px;
-    }
-
-    .sl-kpi {
-        background:linear-gradient(180deg, #ffffff, #f4f8fb);
-        border:1px solid #d9e2f3;
-        border-radius:10px;
-        padding:14px;
-        text-align:center;
-    }
-
-    .sl-kpi-value {
-        font-size:25px;
-        font-weight:700;
-        color:#1f4e78;
-    }
-
-    .sl-kpi-label {
-        font-size:12px;
-        color:#555;
-        margin-top:4px;
-    }
-
-    .sl-note {
-        padding:12px;
-        background:#fff8e1;
-        border-left:5px solid #f9a825;
-        margin-bottom:16px;
-        font-size:13px;
-        line-height:1.5;
-    }
-
-    .sl-success-note {
-        padding:12px;
-        background:#e8f5e9;
-        border-left:5px solid #2e7d32;
-        margin-bottom:16px;
-        font-size:13px;
-        line-height:1.5;
+    .sl-card,
+    .sl-section {
+        background: #ffffff;
+        border: 1px solid var(--sl-border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
     }
 
     .sl-section h2 {
-        margin-top:0;
-        color:#1f4e78;
-        font-size:19px;
+        margin: 0 0 12px 0;
+        color: var(--sl-blue);
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .sl-section h3 {
+        margin: 0 0 6px 0;
+        color: var(--sl-blue);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .sl-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .sl-filter-grid label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .sl-filter-grid input,
+    .sl-filter-grid select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+        background: #ffffff;
+        min-height: 36px;
+        box-sizing: border-box;
+    }
+
+    .sl-filter-grid input:focus,
+    .sl-filter-grid select:focus {
+        outline: none;
+        border-color: var(--sl-blue);
+        box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
+    }
+
+    .sl-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        background: var(--sl-blue);
+        color: #ffffff !important;
+        border-radius: 7px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    .sl-btn:hover {
+        background: #173b5b;
+        color: #ffffff !important;
+    }
+
+    .sl-btn-secondary {
+        background: var(--sl-gray);
+    }
+
+    .sl-btn-secondary:hover {
+        background: #455a64;
+    }
+
+    .sl-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(120px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .sl-kpi {
+        background: linear-gradient(180deg, #ffffff, var(--sl-light-blue));
+        border: 1px solid var(--sl-border);
+        border-radius: 12px;
+        padding: 14px 10px;
+        text-align: center;
+        min-height: 84px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .sl-kpi-value {
+        font-size: 27px;
+        font-weight: 800;
+        color: var(--sl-blue);
+        line-height: 1.1;
+    }
+
+    .sl-kpi-label {
+        font-size: 12px;
+        color: #555;
+        margin-top: 6px;
+        line-height: 1.3;
+    }
+
+    .sl-note {
+        padding: 12px 14px;
+        background: #fff8e1;
+        border-left: 5px solid #f9a825;
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .sl-success-note {
+        padding: 12px 14px;
+        background: #e8f5e9;
+        border-left: 5px solid var(--sl-green);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .sl-info-note {
+        padding: 12px 14px;
+        background: #e3f2fd;
+        border-left: 5px solid var(--sl-blue-2);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 12px;
+    }
+
+    .chart-card {
+        background: #ffffff;
+        border: 1px solid var(--sl-border);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
+    }
+
+    .chart-card p {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.4;
+    }
+
+    .chart-box {
+        position: relative;
+        height: 330px;
+        width: 100%;
+    }
+
+    .chart-box-large {
+        height: 390px;
+    }
+
+    .chart-empty {
+        display: none;
+        height: 160px;
+        border: 1px dashed #ccd6e0;
+        border-radius: 10px;
+        align-items: center;
+        justify-content: center;
+        color: #607d8b;
+        font-size: 13px;
+        text-align: center;
+        padding: 12px;
     }
 
     table.sl-table {
-        width:100%;
-        border-collapse:collapse;
-        font-size:12px;
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
     }
 
     .sl-table th {
-        background:#1f4e78;
-        color:#fff;
-        padding:8px;
-        border:1px solid #d9e2f3;
-        text-align:left;
+        background: var(--sl-blue);
+        color: #ffffff;
+        padding: 8px;
+        border: 1px solid var(--sl-border);
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
     }
 
     .sl-table td {
-        padding:7px;
-        border:1px solid #d9e2f3;
-        vertical-align:top;
+        padding: 7px;
+        border: 1px solid var(--sl-border);
+        vertical-align: top;
+        line-height: 1.4;
     }
 
-    .sl-table tr:nth-child(even) { background:#f7fbff; }
+    .sl-table tr:nth-child(even) {
+        background: #f7fbff;
+    }
 
-    .bar-cell { min-width:180px; }
+    .sl-table tr:hover {
+        background: #eef6ff;
+    }
+
+    .bar-cell {
+        min-width: 190px;
+    }
+
+    .bar-label {
+        font-size: 11px;
+        color: #455a64;
+        margin-bottom: 2px;
+    }
+
     .bar-wrap {
-        background:#e0e0e0;
-        height:16px;
-        border-radius:10px;
-        overflow:hidden;
-        margin-bottom:4px;
+        background: #e0e0e0;
+        height: 16px;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 5px;
     }
 
-    .bar-ls { height:16px; background:#42a5f5; border-radius:10px; }
-    .bar-mc { height:16px; background:#66bb6a; border-radius:10px; }
+    .bar-ls {
+        height: 16px;
+        background: #42a5f5;
+        border-radius: 10px;
+    }
+
+    .bar-mc {
+        height: 16px;
+        background: #66bb6a;
+        border-radius: 10px;
+    }
 
     .badge {
-        display:inline-block;
-        padding:3px 8px;
-        border-radius:12px;
-        font-size:11px;
-        color:#fff;
-        font-weight:600;
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        color: #ffffff;
+        font-weight: 700;
+        white-space: nowrap;
     }
 
-    .badge-green { background:#2e7d32; }
-    .badge-orange { background:#ef6c00; }
-    .badge-gray { background:#607d8b; }
+    .badge-green {
+        background: var(--sl-green);
+    }
+
+    .badge-blue {
+        background: var(--sl-blue-2);
+    }
+
+    .badge-orange {
+        background: var(--sl-orange);
+    }
+
+    .badge-gray {
+        background: var(--sl-gray);
+    }
+
+    .badge-red {
+        background: var(--sl-red);
+    }
 
     .two-col {
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:18px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
     }
 
-    @media (max-width:1100px) {
-        .sl-filter-grid, .sl-kpi-grid, .two-col {
-            grid-template-columns:1fr;
+    .table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+    }
+
+    .small-muted {
+        color: var(--sl-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .sl-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .sl-search {
+        min-width: 260px;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+    }
+
+    .sl-footer-note {
+        margin-top: 12px;
+        color: #607d8b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 1200px) {
+        .sl-filter-grid,
+        .sl-kpi-grid {
+            grid-template-columns: repeat(2, minmax(120px, 1fr));
+        }
+
+        .chart-grid,
+        .two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .sl-header {
+            flex-direction: column;
+        }
+
+        .sl-filter-grid,
+        .sl-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sl-title {
+            font-size: 23px;
+        }
+
+        .chart-box {
+            height: 300px;
         }
     }
 </style>
@@ -176,6 +411,7 @@
                 Routine dashboard for LS, MC, participants, topics, facilities, trends, first sessions, and success story evidence.
             </div>
         </div>
+
         <div>
             <a class="sl-btn" href="?{{ export_query }}">Export Excel</a>
         </div>
@@ -245,7 +481,7 @@
 
             </div>
 
-            <div style="margin-top:12px;">
+            <div style="margin-top:14px;">
                 <button type="submit" class="sl-btn">Apply filters</button>
                 <a href="?" class="sl-btn sl-btn-secondary">Reset</a>
             </div>
@@ -254,31 +490,37 @@
 
     <div class="sl-kpi-grid">
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.distinct_participants }}</div>
+            <div class="sl-kpi-value">{{ kpis.distinct_participants|default:0 }}</div>
             <div class="sl-kpi-label">Distinct Participants</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.total_ls }}</div>
+            <div class="sl-kpi-value">{{ kpis.total_ls|default:0 }}</div>
             <div class="sl-kpi-label">LS Instances</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.total_mc }}</div>
+            <div class="sl-kpi-value">{{ kpis.total_mc|default:0 }}</div>
             <div class="sl-kpi-label">MC Instances</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.mc_minus_ls }}</div>
+            <div class="sl-kpi-value">{{ kpis.mc_minus_ls|default:0 }}</div>
             <div class="sl-kpi-label">MC - LS</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.distinct_topics }}</div>
+            <div class="sl-kpi-value">{{ kpis.distinct_topics|default:0 }}</div>
             <div class="sl-kpi-label">Distinct Topics</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.distinct_facilities }}</div>
+            <div class="sl-kpi-value">{{ kpis.distinct_facilities|default:0 }}</div>
             <div class="sl-kpi-label">Facilities</div>
         </div>
+
         <div class="sl-kpi">
-            <div class="sl-kpi-value">{{ kpis.distinct_sessions }}</div>
+            <div class="sl-kpi-value">{{ kpis.distinct_sessions|default:0 }}</div>
             <div class="sl-kpi-label">Sessions</div>
         </div>
     </div>
@@ -287,74 +529,332 @@
         <strong>Methodology note:</strong> {{ methodology_note }}
     </div>
 
+    {{ chart_data|json_script:"skilllab-chart-data" }}
+
     <div class="sl-section">
-        <h2>Province-level LS vs MC comparison</h2>
-        <table class="sl-table">
-            <thead>
-                <tr>
-                    <th>Province</th>
-                    <th>Distinct Participants</th>
-                    <th>Sessions</th>
-                    <th>Facilities</th>
-                    <th>Topics</th>
-                    <th>LS</th>
-                    <th>MC</th>
-                    <th>MC - LS</th>
-                    <th>Visual comparison</th>
-                    <th>Interpretation</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in province_rows %}
+        <h2>Visual analytics</h2>
+
+        <div class="sl-info-note">
+            These charts use the same participant-level LS and MC logic as the dashboard tables.
+            They help explain province-level performance, facility-level drivers, Bamyan’s MC greater than LS pattern,
+            monthly trends, and success story candidates.
+        </div>
+
+        <div class="chart-grid">
+
+            <div class="chart-card">
+                <h3>Province LS vs MC comparison</h3>
+                <p>Compares learning session instances and model competency assessment instances by province.</p>
+                <div class="chart-box">
+                    <canvas id="provinceLsMcChart"></canvas>
+                    <div class="chart-empty" id="provinceLsMcChartEmpty">No chart data available.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Province MC minus LS gap</h3>
+                <p>Shows where competency assessment instances are higher or lower than learning session instances.</p>
+                <div class="chart-box">
+                    <canvas id="provinceGapChart"></canvas>
+                    <div class="chart-empty" id="provinceGapChartEmpty">No chart data available.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Monthly LS and MC trend</h3>
+                <p>Shows whether LS and MC activity increased, decreased, or shifted over time.</p>
+                <div class="chart-box">
+                    <canvas id="monthlyTrendChart"></canvas>
+                    <div class="chart-empty" id="monthlyTrendChartEmpty">No chart data available.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Top facility-level drivers</h3>
+                <p>Highlights facilities with the largest difference between LS and MC.</p>
+                <div class="chart-box chart-box-large">
+                    <canvas id="facilityDriversChart"></canvas>
+                    <div class="chart-empty" id="facilityDriversChartEmpty">No chart data available.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Bamyan facility explanation</h3>
+                <p>Shows which Bamyan facilities explain why MC is higher than LS.</p>
+                <div class="chart-box">
+                    <canvas id="bamyanChart"></canvas>
+                    <div class="chart-empty" id="bamyanChartEmpty">No Bamyan chart data available for the selected filters.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Success story candidates</h3>
+                <p>Ranks facilities that may be useful for case studies or field success stories.</p>
+                <div class="chart-box chart-box-large">
+                    <canvas id="storyCandidatesChart"></canvas>
+                    <div class="chart-empty" id="storyCandidatesChartEmpty">No story candidate chart data available.</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <div class="sl-toolbar">
+            <h2 style="margin-bottom:0;">Province-level LS vs MC comparison</h2>
+            <input type="text" class="sl-search" id="provinceSearch" placeholder="Search province...">
+        </div>
+
+        <div class="table-scroll">
+            <table class="sl-table" id="provinceTable">
+                <thead>
                     <tr>
-                        <td><strong>{{ r.province }}</strong></td>
-                        <td>{{ r.participants }}</td>
-                        <td>{{ r.sessions }}</td>
-                        <td>{{ r.facilities }}</td>
-                        <td>{{ r.topics }}</td>
-                        <td>{{ r.ls }}</td>
-                        <td>{{ r.mc }}</td>
-                        <td>
-                            {% if r.mc_minus_ls > 0 %}
-                                <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
-                            {% elif r.mc_minus_ls < 0 %}
-                                <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
-                            {% else %}
-                                <span class="badge badge-gray">0</span>
-                            {% endif %}
-                        </td>
-                        <td class="bar-cell">
-                            <div>LS</div>
-                            <div class="bar-wrap">
-                                <div class="bar-ls" style="width:{{ r.ls_width }}%;"></div>
-                            </div>
-                            <div>MC</div>
-                            <div class="bar-wrap">
-                                <div class="bar-mc" style="width:{{ r.mc_width }}%;"></div>
-                            </div>
-                        </td>
-                        <td>{{ r.interpretation }}</td>
+                        <th>Province</th>
+                        <th>Distinct Participants</th>
+                        <th>Sessions</th>
+                        <th>Facilities</th>
+                        <th>Topics</th>
+                        <th>LS</th>
+                        <th>MC</th>
+                        <th>MC - LS</th>
+                        <th>Visual comparison</th>
+                        <th>Interpretation</th>
                     </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="10">No records found for the selected filters.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for r in province_rows %}
+                        <tr>
+                            <td><strong>{{ r.province|default:"Unknown" }}</strong></td>
+                            <td>{{ r.participants|default:0 }}</td>
+                            <td>{{ r.sessions|default:0 }}</td>
+                            <td>{{ r.facilities|default:0 }}</td>
+                            <td>{{ r.topics|default:0 }}</td>
+                            <td>{{ r.ls|default:0 }}</td>
+                            <td>{{ r.mc|default:0 }}</td>
+                            <td>
+                                {% if r.mc_minus_ls > 0 %}
+                                    <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
+                                {% elif r.mc_minus_ls < 0 %}
+                                    <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="bar-cell">
+                                <div class="bar-label">LS</div>
+                                <div class="bar-wrap">
+                                    <div class="bar-ls" style="width:{{ r.ls_width|default:0 }}%;"></div>
+                                </div>
+
+                                <div class="bar-label">MC</div>
+                                <div class="bar-wrap">
+                                    <div class="bar-mc" style="width:{{ r.mc_width|default:0 }}%;"></div>
+                                </div>
+                            </td>
+                            <td>{{ r.interpretation }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="10">No records found for the selected filters.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sl-footer-note">
+            LS and MC are counted as participant-topic/session instances. They should not be interpreted as unique health worker counts.
+        </div>
     </div>
 
     <div class="two-col">
         <div class="sl-section">
             <h2>Bamyan explanation</h2>
+
             <div class="sl-success-note">
                 {{ bamyan_narrative }}
             </div>
 
+            <div class="table-scroll">
+                <table class="sl-table">
+                    <thead>
+                        <tr>
+                            <th>Facility</th>
+                            <th>LS</th>
+                            <th>MC</th>
+                            <th>MC - LS</th>
+                            <th>Interpretation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in bamyan_facilities %}
+                            <tr>
+                                <td>{{ r.facility }}</td>
+                                <td>{{ r.ls|default:0 }}</td>
+                                <td>{{ r.mc|default:0 }}</td>
+                                <td>
+                                    {% if r.mc_minus_ls > 0 %}
+                                        <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
+                                    {% elif r.mc_minus_ls < 0 %}
+                                        <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
+                                    {% else %}
+                                        <span class="badge badge-gray">0</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.interpretation }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5">No Bamyan records found for the selected filters.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="sl-section">
+            <h2>Success story candidates</h2>
+
+            <div class="small-muted" style="margin-bottom:10px;">
+                Facilities are prioritized based on LS volume, MC volume, and positive competency assessment activity. These are suggested candidates and should be verified with field staff.
+            </div>
+
+            <div class="table-scroll">
+                <table class="sl-table">
+                    <thead>
+                        <tr>
+                            <th>Province</th>
+                            <th>Facility</th>
+                            <th>LS</th>
+                            <th>MC</th>
+                            <th>MC - LS</th>
+                            <th>Story Angle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in story_candidates %}
+                            <tr>
+                                <td>{{ r.province }}</td>
+                                <td>{{ r.facility }}</td>
+                                <td>{{ r.ls|default:0 }}</td>
+                                <td>{{ r.mc|default:0 }}</td>
+                                <td>{{ r.mc_minus_ls|default:0 }}</td>
+                                <td>{{ r.story_angle }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6">No story candidates available for the selected filters.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <div class="sl-toolbar">
+            <h2 style="margin-bottom:0;">Monthly trend by province</h2>
+            <input type="text" class="sl-search" id="trendSearch" placeholder="Search province or month...">
+        </div>
+
+        <div class="table-scroll">
+            <table class="sl-table" id="trendTable">
+                <thead>
+                    <tr>
+                        <th>Province</th>
+                        <th>Month</th>
+                        <th>Participants</th>
+                        <th>Topics</th>
+                        <th>LS</th>
+                        <th>MC</th>
+                        <th>MC - LS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in trend_rows %}
+                        <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.month_label }}</td>
+                            <td>{{ r.participants|default:0 }}</td>
+                            <td>{{ r.topics|default:0 }}</td>
+                            <td>{{ r.ls|default:0 }}</td>
+                            <td>{{ r.mc|default:0 }}</td>
+                            <td>
+                                {% if r.mc_minus_ls > 0 %}
+                                    <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
+                                {% elif r.mc_minus_ls < 0 %}
+                                    <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7">No trend records found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <h2>First recorded skill lab session by province</h2>
+
+        <div class="table-scroll">
             <table class="sl-table">
                 <thead>
                     <tr>
+                        <th>Province</th>
+                        <th>First Session Date</th>
+                        <th>First Facility</th>
+                        <th>HF Code</th>
+                        <th>District</th>
+                        <th>Clinical Mentor</th>
+                        <th>Session Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in first_session_rows %}
+                        <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.first_date }}</td>
+                            <td>{{ r.facility }}</td>
+                            <td>{{ r.hfcode }}</td>
+                            <td>{{ r.district }}</td>
+                            <td>{{ r.mentor }}</td>
+                            <td>{{ r.session_type }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7">No session records found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <div class="sl-toolbar">
+            <h2 style="margin-bottom:0;">Facility-level drivers</h2>
+            <input type="text" class="sl-search" id="facilitySearch" placeholder="Search province, district, facility...">
+        </div>
+
+        <div class="table-scroll">
+            <table class="sl-table" id="facilityTable">
+                <thead>
+                    <tr>
+                        <th>Province</th>
+                        <th>District</th>
                         <th>Facility</th>
+                        <th>HF Code</th>
+                        <th>Participants</th>
+                        <th>Sessions</th>
+                        <th>Topics</th>
                         <th>LS</th>
                         <th>MC</th>
                         <th>MC - LS</th>
@@ -362,164 +862,423 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for r in bamyan_facilities %}
+                    {% for r in facility_driver_rows %}
                         <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.district }}</td>
                             <td>{{ r.facility }}</td>
-                            <td>{{ r.ls }}</td>
-                            <td>{{ r.mc }}</td>
-                            <td>{{ r.mc_minus_ls }}</td>
+                            <td>{{ r.hfcode }}</td>
+                            <td>{{ r.participants|default:0 }}</td>
+                            <td>{{ r.sessions|default:0 }}</td>
+                            <td>{{ r.topics|default:0 }}</td>
+                            <td>{{ r.ls|default:0 }}</td>
+                            <td>{{ r.mc|default:0 }}</td>
+                            <td>
+                                {% if r.mc_minus_ls > 0 %}
+                                    <span class="badge badge-green">+{{ r.mc_minus_ls }}</span>
+                                {% elif r.mc_minus_ls < 0 %}
+                                    <span class="badge badge-orange">{{ r.mc_minus_ls }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">0</span>
+                                {% endif %}
+                            </td>
                             <td>{{ r.interpretation }}</td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="5">No Bamyan records found for the selected filters.</td>
+                            <td colspan="11">No facility-level records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-
-        <div class="sl-section">
-            <h2>Success story candidates</h2>
-            <table class="sl-table">
-                <thead>
-                    <tr>
-                        <th>Province</th>
-                        <th>Facility</th>
-                        <th>LS</th>
-                        <th>MC</th>
-                        <th>Story Angle</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in story_candidates %}
-                        <tr>
-                            <td>{{ r.province }}</td>
-                            <td>{{ r.facility }}</td>
-                            <td>{{ r.ls }}</td>
-                            <td>{{ r.mc }}</td>
-                            <td>{{ r.story_angle }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="5">No story candidates available.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="sl-section">
-        <h2>Monthly trend by province</h2>
-        <table class="sl-table">
-            <thead>
-                <tr>
-                    <th>Province</th>
-                    <th>Month</th>
-                    <th>Participants</th>
-                    <th>Topics</th>
-                    <th>LS</th>
-                    <th>MC</th>
-                    <th>MC - LS</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in trend_rows %}
-                    <tr>
-                        <td>{{ r.province }}</td>
-                        <td>{{ r.month_label }}</td>
-                        <td>{{ r.participants }}</td>
-                        <td>{{ r.topics }}</td>
-                        <td>{{ r.ls }}</td>
-                        <td>{{ r.mc }}</td>
-                        <td>{{ r.mc_minus_ls }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="7">No trend records found.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="sl-section">
-        <h2>First recorded skill lab session by province</h2>
-        <table class="sl-table">
-            <thead>
-                <tr>
-                    <th>Province</th>
-                    <th>First Session Date</th>
-                    <th>First Facility</th>
-                    <th>HF Code</th>
-                    <th>District</th>
-                    <th>Clinical Mentor</th>
-                    <th>Session Type</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in first_session_rows %}
-                    <tr>
-                        <td>{{ r.province }}</td>
-                        <td>{{ r.first_date }}</td>
-                        <td>{{ r.facility }}</td>
-                        <td>{{ r.hfcode }}</td>
-                        <td>{{ r.district }}</td>
-                        <td>{{ r.mentor }}</td>
-                        <td>{{ r.session_type }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="7">No session records found.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="sl-section">
-        <h2>Facility-level drivers</h2>
-        <table class="sl-table">
-            <thead>
-                <tr>
-                    <th>Province</th>
-                    <th>District</th>
-                    <th>Facility</th>
-                    <th>HF Code</th>
-                    <th>Participants</th>
-                    <th>Sessions</th>
-                    <th>Topics</th>
-                    <th>LS</th>
-                    <th>MC</th>
-                    <th>MC - LS</th>
-                    <th>Interpretation</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in facility_driver_rows %}
-                    <tr>
-                        <td>{{ r.province }}</td>
-                        <td>{{ r.district }}</td>
-                        <td>{{ r.facility }}</td>
-                        <td>{{ r.hfcode }}</td>
-                        <td>{{ r.participants }}</td>
-                        <td>{{ r.sessions }}</td>
-                        <td>{{ r.topics }}</td>
-                        <td>{{ r.ls }}</td>
-                        <td>{{ r.mc }}</td>
-                        <td>{{ r.mc_minus_ls }}</td>
-                        <td>{{ r.interpretation }}</td>
-                    </tr>
-                {% empty %}
-                    <tr>
-                        <td colspan="11">No facility-level records found.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+(function () {
+    function getChartData() {
+        const chartElement = document.getElementById("skilllab-chart-data");
+        if (!chartElement) {
+            return {};
+        }
+
+        try {
+            return JSON.parse(chartElement.textContent || "{}");
+        } catch (error) {
+            console.error("Could not parse Skill Lab chart data:", error);
+            return {};
+        }
+    }
+
+    const chartData = getChartData();
+
+    const chartColors = {
+        ls: "rgba(66, 165, 245, 0.78)",
+        lsBorder: "rgba(66, 165, 245, 1)",
+        mc: "rgba(102, 187, 106, 0.78)",
+        mcBorder: "rgba(102, 187, 106, 1)",
+        gap: "rgba(31, 78, 120, 0.78)",
+        gapBorder: "rgba(31, 78, 120, 1)",
+        total: "rgba(239, 108, 0, 0.78)",
+        totalBorder: "rgba(239, 108, 0, 1)",
+        story: "rgba(123, 31, 162, 0.76)",
+        storyBorder: "rgba(123, 31, 162, 1)"
+    };
+
+    function numberFormatter(value) {
+        return Number(value || 0).toLocaleString();
+    }
+
+    function showEmpty(canvasId) {
+        const canvas = document.getElementById(canvasId);
+        const emptyBox = document.getElementById(canvasId + "Empty");
+
+        if (canvas) {
+            canvas.style.display = "none";
+        }
+
+        if (emptyBox) {
+            emptyBox.style.display = "flex";
+        }
+    }
+
+    function hasRows(rows) {
+        return Array.isArray(rows) && rows.length > 0;
+    }
+
+    function baseOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        boxWidth: 14,
+                        padding: 14
+                    }
+                },
+                tooltip: {
+                    mode: "index",
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ": " + numberFormatter(context.raw);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 45,
+                        minRotation: 0
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return numberFormatter(value);
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    function horizontalOptions() {
+        return {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: {
+                        boxWidth: 14,
+                        padding: 14
+                    }
+                },
+                tooltip: {
+                    mode: "index",
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ": " + numberFormatter(context.raw);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return numberFormatter(value);
+                        }
+                    }
+                },
+                y: {
+                    ticks: {
+                        autoSkip: false
+                    },
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        };
+    }
+
+    function createGroupedBarChart(canvasId, rows, labelKey, firstKey, secondKey, firstLabel, secondLabel) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || !hasRows(rows)) {
+            showEmpty(canvasId);
+            return;
+        }
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row[labelKey]),
+                datasets: [
+                    {
+                        label: firstLabel,
+                        data: rows.map(row => Number(row[firstKey] || 0)),
+                        backgroundColor: chartColors.ls,
+                        borderColor: chartColors.lsBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    },
+                    {
+                        label: secondLabel,
+                        data: rows.map(row => Number(row[secondKey] || 0)),
+                        backgroundColor: chartColors.mc,
+                        borderColor: chartColors.mcBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: baseOptions()
+        });
+    }
+
+    function createHorizontalGroupedBarChart(canvasId, rows, labelKey, firstKey, secondKey, firstLabel, secondLabel) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || !hasRows(rows)) {
+            showEmpty(canvasId);
+            return;
+        }
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row[labelKey]),
+                datasets: [
+                    {
+                        label: firstLabel,
+                        data: rows.map(row => Number(row[firstKey] || 0)),
+                        backgroundColor: chartColors.ls,
+                        borderColor: chartColors.lsBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    },
+                    {
+                        label: secondLabel,
+                        data: rows.map(row => Number(row[secondKey] || 0)),
+                        backgroundColor: chartColors.mc,
+                        borderColor: chartColors.mcBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: horizontalOptions()
+        });
+    }
+
+    function createSingleHorizontalBarChart(canvasId, rows, labelKey, valueKey, labelName, colorKey) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || !hasRows(rows)) {
+            showEmpty(canvasId);
+            return;
+        }
+
+        let fillColor = chartColors.gap;
+        let borderColor = chartColors.gapBorder;
+
+        if (colorKey === "story") {
+            fillColor = chartColors.story;
+            borderColor = chartColors.storyBorder;
+        }
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row[labelKey]),
+                datasets: [
+                    {
+                        label: labelName,
+                        data: rows.map(row => Number(row[valueKey] || 0)),
+                        backgroundColor: fillColor,
+                        borderColor: borderColor,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: horizontalOptions()
+        });
+    }
+
+    function createLineChart(canvasId, rows) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || !hasRows(rows)) {
+            showEmpty(canvasId);
+            return;
+        }
+
+        new Chart(canvas, {
+            type: "line",
+            data: {
+                labels: rows.map(row => row.month),
+                datasets: [
+                    {
+                        label: "LS",
+                        data: rows.map(row => Number(row.LS || 0)),
+                        borderColor: chartColors.lsBorder,
+                        backgroundColor: chartColors.ls,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: "MC",
+                        data: rows.map(row => Number(row.MC || 0)),
+                        borderColor: chartColors.mcBorder,
+                        backgroundColor: chartColors.mc,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    },
+                    {
+                        label: "Total LS + MC",
+                        data: rows.map(row => Number(row.Total || 0)),
+                        borderColor: chartColors.totalBorder,
+                        backgroundColor: chartColors.total,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }
+                ]
+            },
+            options: baseOptions()
+        });
+    }
+
+    function enableTableSearch(inputId, tableId) {
+        const input = document.getElementById(inputId);
+        const table = document.getElementById(tableId);
+
+        if (!input || !table) {
+            return;
+        }
+
+        input.addEventListener("input", function () {
+            const query = input.value.toLowerCase().trim();
+            const rows = table.querySelectorAll("tbody tr");
+
+            rows.forEach(function (row) {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? "" : "none";
+            });
+        });
+    }
+
+    if (typeof Chart === "undefined") {
+        showEmpty("provinceLsMcChart");
+        showEmpty("provinceGapChart");
+        showEmpty("monthlyTrendChart");
+        showEmpty("facilityDriversChart");
+        showEmpty("bamyanChart");
+        showEmpty("storyCandidatesChart");
+        console.error("Chart.js did not load. Please check internet access or use a local Chart.js static file.");
+    } else {
+        createGroupedBarChart(
+            "provinceLsMcChart",
+            chartData.province_ls_mc,
+            "province",
+            "LS",
+            "MC",
+            "LS",
+            "MC"
+        );
+
+        createSingleHorizontalBarChart(
+            "provinceGapChart",
+            chartData.province_gap,
+            "province",
+            "gap",
+            "MC minus LS",
+            "gap"
+        );
+
+        createLineChart(
+            "monthlyTrendChart",
+            chartData.monthly_ls_mc
+        );
+
+        createHorizontalGroupedBarChart(
+            "facilityDriversChart",
+            chartData.facility_drivers,
+            "facility",
+            "LS",
+            "MC",
+            "LS",
+            "MC"
+        );
+
+        createHorizontalGroupedBarChart(
+            "bamyanChart",
+            chartData.bamyan_facilities,
+            "facility",
+            "LS",
+            "MC",
+            "LS",
+            "MC"
+        );
+
+        createSingleHorizontalBarChart(
+            "storyCandidatesChart",
+            chartData.story_candidates,
+            "facility",
+            "story_score",
+            "Story priority score",
+            "story"
+        );
+    }
+
+    enableTableSearch("provinceSearch", "provinceTable");
+    enableTableSearch("trendSearch", "trendTable");
+    enableTableSearch("facilitySearch", "facilityTable");
+})();
+</script>
 
 {% endblock %}
