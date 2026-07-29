@@ -98,7 +98,8 @@
     }
 
     .sl-filter-grid input:focus,
-    .sl-filter-grid select:focus {
+    .sl-filter-grid select:focus,
+    .sl-search:focus {
         outline: none;
         border-color: var(--sl-blue);
         box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
@@ -330,6 +331,47 @@
         background: var(--sl-red);
     }
 
+    .participant-status-success {
+        background: #2e7d32;
+        color: #ffffff;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .participant-status-warning {
+        background: #ef6c00;
+        color: #ffffff;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .participant-status-neutral {
+        background: #607d8b;
+        color: #ffffff;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .topic-list-cell {
+        min-width: 180px;
+        max-width: 300px;
+        line-height: 1.45;
+        white-space: normal;
+    }
+
+    .participant-profile-table th {
+        white-space: normal;
+    }
+
     .two-col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -399,6 +441,11 @@
         .chart-box {
             height: 300px;
         }
+
+        .sl-search {
+            width: 100%;
+            min-width: 100%;
+        }
     }
 </style>
 
@@ -408,7 +455,7 @@
         <div>
             <h1 class="sl-title">Skill Lab Dashboard</h1>
             <div class="sl-subtitle">
-                Routine dashboard for LS, MC, participants, topics, facilities, trends, first sessions, and success story evidence.
+                Routine dashboard for LS, MC, participants, topics, facilities, trends, first sessions, success story evidence, and participant profiles.
             </div>
         </div>
 
@@ -831,6 +878,118 @@
                     {% empty %}
                         <tr>
                             <td colspan="7">No session records found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="sl-section">
+        <div class="sl-toolbar">
+            <h2 style="margin-bottom:0;">Participant profile by facility</h2>
+            <input type="text" class="sl-search" id="participantProfileSearch" placeholder="Search participant, facility, topic...">
+        </div>
+
+        <div class="small-muted" style="margin-bottom:10px;">
+            This table groups participants by Skill Lab facility and shows which topics they received LS, which topics they received MC, and which topics still need graduation or follow-up competency assessment.
+        </div>
+
+        <div class="sl-note">
+            <strong>Interpretation:</strong>
+            “Needs graduation / follow-up” means the participant has LS or MC activity recorded for a topic, but the topic is not yet counted as graduated/completed based on MC, competency status, or checklist score.
+        </div>
+
+        <div class="table-scroll">
+            <table class="sl-table participant-profile-table" id="participantProfileTable">
+                <thead>
+                    <tr>
+                        <th>Province</th>
+                        <th>District</th>
+                        <th>Skill Lab Facility</th>
+                        <th>HF Code</th>
+                        <th>Participant</th>
+                        <th>Participant Facility</th>
+                        <th>Position</th>
+                        <th>Sessions</th>
+                        <th>Topics</th>
+                        <th>LS Count</th>
+                        <th>MC Count</th>
+                        <th>Graduated</th>
+                        <th>Needs Graduation</th>
+                        <th>LS Topics</th>
+                        <th>MC Topics</th>
+                        <th>Graduated Topics</th>
+                        <th>Topics Needing Graduation</th>
+                        <th>Last Session Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for r in participant_profile_rows %}
+                        <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.district }}</td>
+                            <td>{{ r.skill_lab_facility }}</td>
+                            <td>{{ r.hfcode }}</td>
+                            <td><strong>{{ r.participant_name }}</strong></td>
+                            <td>{{ r.participant_facility }}</td>
+                            <td>{{ r.participant_position }}</td>
+                            <td>{{ r.session_count|default:0 }}</td>
+                            <td>{{ r.topic_count|default:0 }}</td>
+                            <td>{{ r.ls_count|default:0 }}</td>
+                            <td>{{ r.mc_count|default:0 }}</td>
+                            <td>{{ r.graduated_count|default:0 }}</td>
+                            <td>
+                                {% if r.needs_count > 0 %}
+                                    <span class="badge badge-orange">{{ r.needs_count }}</span>
+                                {% else %}
+                                    <span class="badge badge-green">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="topic-list-cell">
+                                {% if r.ls_topics_text %}
+                                    {{ r.ls_topics_text|linebreaksbr }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="topic-list-cell">
+                                {% if r.mc_topics_text %}
+                                    {{ r.mc_topics_text|linebreaksbr }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="topic-list-cell">
+                                {% if r.graduated_topics_text %}
+                                    {{ r.graduated_topics_text|linebreaksbr }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="topic-list-cell">
+                                {% if r.needs_topics_text %}
+                                    {{ r.needs_topics_text|linebreaksbr }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ r.last_session_date }}</td>
+                            <td>
+                                {% if r.status_badge == "success" %}
+                                    <span class="participant-status-success">{{ r.overall_status }}</span>
+                                {% elif r.status_badge == "warning" %}
+                                    <span class="participant-status-warning">{{ r.overall_status }}</span>
+                                {% else %}
+                                    <span class="participant-status-neutral">{{ r.overall_status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="19">No participant profile records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -1278,6 +1437,7 @@
     enableTableSearch("provinceSearch", "provinceTable");
     enableTableSearch("trendSearch", "trendTable");
     enableTableSearch("facilitySearch", "facilityTable");
+    enableTableSearch("participantProfileSearch", "participantProfileTable");
 })();
 </script>
 

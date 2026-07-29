@@ -809,6 +809,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             f"{session_fk}__skill_lab__facility__districtfk",
             f"{session_fk}__skill_lab__facility__districtfk__provincefk",
             "mentee_name",
+            "mentee_name__hfname",
+            "mentee_name__position",
             "thematic_area",
             "topic",
         )
@@ -1197,6 +1199,235 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             ],
         }
 
+        # ============================================================
+        # Participant Profile Table
+        # Grouped by Skill Lab facility + participant
+        # Shows LS topics, MC topics, graduated topics, and pending topics
+        # ============================================================
+
+        def safe_text(value):
+            if value is None:
+                return ""
+            return str(value).strip()
+
+        def yes_no(value):
+            return "Yes" if value else "No"
+
+        def get_participant_facility(mentee):
+            try:
+                return mentee.hfname.name if mentee and mentee.hfname else ""
+            except Exception:
+                return ""
+
+        def get_participant_position(mentee):
+            try:
+                return str(mentee.position) if mentee and mentee.position else ""
+            except Exception:
+                return ""
+
+        def is_topic_graduated(pr):
+            """
+            Graduation logic:
+            1. If MC is checked, topic is treated as competency completed.
+            2. If competency_status clearly says competent/completed/passed/graduated, it is graduated.
+            3. If checklist_score is available and >= 80, it is graduated.
+            """
+
+            status = safe_text(getattr(pr, "competency_status", "")).lower()
+            score = getattr(pr, "checklist_score", None)
+
+            negative_terms = [
+                "not competent",
+                "not yet",
+                "needs",
+                "incomplete",
+                "failed",
+                "fail",
+            ]
+
+            positive_terms = [
+                "competent",
+                "model competent",
+                "completed",
+                "complete",
+                "passed",
+                "pass",
+                "graduated",
+            ]
+
+            if any(term in status for term in negative_terms):
+                return False
+
+            if any(term in status for term in positive_terms):
+                return True
+
+            try:
+                if score is not None and float(score) >= 80:
+                    return True
+            except Exception:
+                pass
+
+            if getattr(pr, "mc", False):
+                return True
+
+            return False
+
+
+        participant_profiles = {}
+        participant_detail_rows = []
+
+        profile_records = participants_qs.order_by(
+            f"{session_prefix}skill_lab__facility__districtfk__provincefk__name",
+            f"{session_prefix}skill_lab__facility__districtfk__name",
+            f"{session_prefix}skill_lab__facility__name",
+            f"{session_prefix}session_date",
+            "id",
+        )
+
+        for pr in profile_records:
+            session = getattr(pr, session_fk, None)
+            mentee = getattr(pr, "mentee_name", None)
+
+            if not session:
+                continue
+
+            skill_lab_facility = session.facility
+            skill_lab_district = session.district
+            skill_lab_province = session.province
+
+            participant_name = safe_text(mentee) if mentee else "Unknown participant"
+            participant_id = getattr(mentee, "id", None)
+
+            topic_name = safe_text(getattr(pr, "topic", None)) or "Unknown topic"
+            thematic_name = safe_text(getattr(pr, "thematic_area", None)) or "Unknown thematic area"
+
+            graduated = is_topic_graduated(pr)
+
+            profile_key = (
+                getattr(skill_lab_facility, "id", None),
+                participant_id,
+                participant_name,
+            )
+
+            if profile_key not in participant_profiles:
+                participant_profiles[profile_key] = {
+                    "province": safe_text(getattr(skill_lab_province, "name", "")),
+                    "district": safe_text(getattr(skill_lab_district, "name", "")),
+                    "skill_lab_facility": safe_text(getattr(skill_lab_facility, "name", "")),
+                    "hfcode": safe_text(getattr(skill_lab_facility, "hfcode", "")),
+                    "participant_name": participant_name,
+                    "participant_facility": get_participant_facility(mentee),
+                    "participant_position": get_participant_position(mentee),
+                    "sessions": set(),
+                    "topics_all": set(),
+                    "ls_topics": set(),
+                    "mc_topics": set(),
+                    "graduated_topics": set(),
+                    "needs_graduation_topics": set(),
+                    "last_session_date": None,
+                }
+
+            profile = participant_profiles[profile_key]
+
+            profile["sessions"].add(getattr(session, "id", None))
+            profile["topics_all"].add(topic_name)
+
+            session_date = getattr(session, "session_date", None)
+            if session_date:
+                if not profile["last_session_date"] or session_date > profile["last_session_date"]:
+                    profile["last_session_date"] = session_date
+
+            if getattr(pr, "ls", False):
+                profile["ls_topics"].add(topic_name)
+
+            if getattr(pr, "mc", False):
+                profile["mc_topics"].add(topic_name)
+
+            if graduated:
+                profile["graduated_topics"].add(topic_name)
+
+            participant_detail_rows.append({
+                "province": profile["province"],
+                "district": profile["district"],
+                "skill_lab_facility": profile["skill_lab_facility"],
+                "hfcode": profile["hfcode"],
+                "participant_name": participant_name,
+                "participant_facility": profile["participant_facility"],
+                "participant_position": profile["participant_position"],
+                "session_date": session_date,
+                "lab_round": getattr(session, "lab_round", ""),
+                "session_type": getattr(session, "session_type", ""),
+                "thematic_area": thematic_name,
+                "topic": topic_name,
+                "ls": yes_no(getattr(pr, "ls", False)),
+                "mc": yes_no(getattr(pr, "mc", False)),
+                "competency_status": safe_text(getattr(pr, "competency_status", "")),
+                "checklist_score": getattr(pr, "checklist_score", ""),
+                "topic_status": "Graduated / Completed" if graduated else "Needs graduation / follow-up MC",
+            })
+
+        participant_profile_rows = []
+
+        for _key, profile in participant_profiles.items():
+            active_topics = profile["ls_topics"] | profile["mc_topics"]
+
+            # Any LS/MC topic not graduated is considered pending graduation/follow-up
+            profile["needs_graduation_topics"] = active_topics - profile["graduated_topics"]
+
+            ls_topics = sorted(profile["ls_topics"])
+            mc_topics = sorted(profile["mc_topics"])
+            graduated_topics = sorted(profile["graduated_topics"])
+            needs_topics = sorted(profile["needs_graduation_topics"])
+
+            ls_count = len(ls_topics)
+            mc_count = len(mc_topics)
+            graduated_count = len(graduated_topics)
+            needs_count = len(needs_topics)
+
+            if needs_count > 0:
+                overall_status = "Needs graduation / follow-up"
+                status_badge = "warning"
+            elif graduated_count > 0:
+                overall_status = "Graduated / completed"
+                status_badge = "success"
+            else:
+                overall_status = "No LS/MC topic recorded"
+                status_badge = "neutral"
+
+            participant_profile_rows.append({
+                "province": profile["province"],
+                "district": profile["district"],
+                "skill_lab_facility": profile["skill_lab_facility"],
+                "hfcode": profile["hfcode"],
+                "participant_name": profile["participant_name"],
+                "participant_facility": profile["participant_facility"],
+                "participant_position": profile["participant_position"],
+                "session_count": len([x for x in profile["sessions"] if x]),
+                "topic_count": len(profile["topics_all"]),
+                "ls_count": ls_count,
+                "mc_count": mc_count,
+                "graduated_count": graduated_count,
+                "needs_count": needs_count,
+                "ls_topics_text": "\n".join(ls_topics),
+                "mc_topics_text": "\n".join(mc_topics),
+                "graduated_topics_text": "\n".join(graduated_topics),
+                "needs_topics_text": "\n".join(needs_topics),
+                "last_session_date": profile["last_session_date"],
+                "overall_status": overall_status,
+                "status_badge": status_badge,
+            })
+
+        participant_profile_rows = sorted(
+            participant_profile_rows,
+            key=lambda x: (
+                x["province"],
+                x["district"],
+                x["skill_lab_facility"],
+                -x["needs_count"],
+                x["participant_name"],
+            ),
+        )
+
         export_query = request.GET.copy()
         export_query["export"] = "1"
 
@@ -1226,6 +1457,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "bamyan_facilities": bamyan_facilities,
                 "bamyan_narrative": bamyan_narrative,
                 "chart_data": chart_data,
+                "participant_profile_rows": participant_profile_rows,
+                "participant_detail_rows": participant_detail_rows,
                 "methodology_note": (
                     "LS and MC figures represent participant-topic/session instances, not unique health workers. "
                     "A single participant may be included more than once across visits, topics, sessions, or competency assessments."
@@ -1342,6 +1575,95 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
         ws6.append(["Topic", "Explanation"])
         ws6.append(["LS and MC interpretation", data["methodology_note"]])
         ws6.append(["Bamyan explanation", data["bamyan_narrative"]])
+
+        ws7 = wb.create_sheet("Participant_Profile")
+        ws7.append([
+            "Province",
+            "District",
+            "Skill Lab Facility",
+            "HF Code",
+            "Participant Name",
+            "Participant Facility",
+            "Participant Position",
+            "Session Count",
+            "Topic Count",
+            "LS Topic Count",
+            "MC Topic Count",
+            "Graduated Topic Count",
+            "Needs Graduation Topic Count",
+            "LS Topics",
+            "MC Topics",
+            "Graduated Topics",
+            "Topics Needing Graduation",
+            "Last Session Date",
+            "Overall Status",
+        ])
+
+        for r in data.get("participant_profile_rows", []):
+            ws7.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("skill_lab_facility"),
+                r.get("hfcode"),
+                r.get("participant_name"),
+                r.get("participant_facility"),
+                r.get("participant_position"),
+                r.get("session_count"),
+                r.get("topic_count"),
+                r.get("ls_count"),
+                r.get("mc_count"),
+                r.get("graduated_count"),
+                r.get("needs_count"),
+                r.get("ls_topics_text"),
+                r.get("mc_topics_text"),
+                r.get("graduated_topics_text"),
+                r.get("needs_topics_text"),
+                r.get("last_session_date"),
+                r.get("overall_status"),
+            ])
+
+
+        ws8 = wb.create_sheet("Participant_Topic_Detail")
+        ws8.append([
+            "Province",
+            "District",
+            "Skill Lab Facility",
+            "HF Code",
+            "Participant Name",
+            "Participant Facility",
+            "Participant Position",
+            "Session Date",
+            "Lab Round",
+            "Session Type",
+            "Thematic Area",
+            "Topic",
+            "LS",
+            "MC",
+            "Competency Status",
+            "Checklist Score",
+            "Topic Status",
+        ])
+
+        for r in data.get("participant_detail_rows", []):
+            ws8.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("skill_lab_facility"),
+                r.get("hfcode"),
+                r.get("participant_name"),
+                r.get("participant_facility"),
+                r.get("participant_position"),
+                r.get("session_date"),
+                r.get("lab_round"),
+                r.get("session_type"),
+                r.get("thematic_area"),
+                r.get("topic"),
+                r.get("ls"),
+                r.get("mc"),
+                r.get("competency_status"),
+                r.get("checklist_score"),
+                r.get("topic_status"),
+            ])
 
         for sheet in wb.worksheets:
             style_sheet(sheet)
