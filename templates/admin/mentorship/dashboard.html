@@ -672,7 +672,6 @@
                 <thead>
                     <tr>
                         <th>Province</th>
-                        <th>Visits</th>
                         <th>Facilities</th>
                         <th>Mentees</th>
                         <th>Mentors</th>
@@ -691,7 +690,6 @@
                     {% for r in province_rows %}
                         <tr>
                             <td><strong>{{ r.province|default:"Unknown" }}</strong></td>
-                            <td>{{ r.visits|default:0 }}</td>
                             <td>{{ r.facilities|default:0 }}</td>
                             <td>{{ r.mentees|default:0 }}</td>
                             <td>{{ r.mentors|default:0 }}</td>
@@ -730,7 +728,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="14">No records found for the selected filters.</td>
+                            <td colspan="13">No records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -794,7 +792,6 @@
                             <th>Province</th>
                             <th>First Visit Date</th>
                             <th>First Facility</th>
-                            <th>District</th>
                             <th>Visit Round</th>
                         </tr>
                     </thead>
@@ -804,12 +801,11 @@
                                 <td>{{ r.province }}</td>
                                 <td>{{ r.first_date }}</td>
                                 <td>{{ r.facility }}</td>
-                                <td>{{ r.district }}</td>
                                 <td>{{ r.visit_round }}</td>
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="5">No visit records found.</td>
+                                <td colspan="4">No visit records found.</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -831,7 +827,6 @@
                         <th>Province</th>
                         <th>Month</th>
                         <th>Mentees</th>
-                        <th>Visits</th>
                         <th>Topics</th>
                         <th>LS</th>
                         <th>PC</th>
@@ -845,7 +840,6 @@
                             <td>{{ r.province }}</td>
                             <td>{{ r.month_label }}</td>
                             <td>{{ r.mentees|default:0 }}</td>
-                            <td>{{ r.visits|default:0 }}</td>
                             <td>{{ r.topics|default:0 }}</td>
                             <td>{{ r.ls|default:0 }}</td>
                             <td>{{ r.pc|default:0 }}</td>
@@ -854,7 +848,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="9">No trend records found.</td>
+                            <td colspan="8">No trend records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -882,12 +876,10 @@
                 <thead>
                     <tr>
                         <th>Province</th>
-                        <th>District</th>
                         <th>Mentorship Facility</th>
                         <th>Mentee</th>
                         <th>Position</th>
                         <th>Gender</th>
-                        <th>Visits</th>
                         <th>Topics</th>
                         <th>LS Count</th>
                         <th>PC Count</th>
@@ -908,12 +900,10 @@
                     {% for r in mentee_profile_rows %}
                         <tr>
                             <td>{{ r.province }}</td>
-                            <td>{{ r.district }}</td>
                             <td>{{ r.facility }}</td>
                             <td><strong>{{ r.mentee }}</strong></td>
                             <td>{{ r.position }}</td>
                             <td>{{ r.gender }}</td>
-                            <td>{{ r.visit_count|default:0 }}</td>
                             <td>{{ r.topic_count|default:0 }}</td>
                             <td>{{ r.ls_count|default:0 }}</td>
                             <td>{{ r.pc_count|default:0 }}</td>
@@ -974,7 +964,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="20">No mentee profile records found for the selected filters.</td>
+                            <td colspan="18">No mentee profile records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -985,7 +975,7 @@
     <div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Facility-level drivers</h2>
-            <input type="text" class="mh-search" id="facilitySearch" placeholder="Search province, district, facility...">
+            <input type="text" class="mh-search" id="facilitySearch" placeholder="Search province or facility...">
         </div>
 
         <div class="table-scroll">
@@ -993,9 +983,7 @@
                 <thead>
                     <tr>
                         <th>Province</th>
-                        <th>District</th>
                         <th>Facility</th>
-                        <th>Visits</th>
                         <th>Mentees</th>
                         <th>Mentors</th>
                         <th>Thematics</th>
@@ -1012,9 +1000,7 @@
                     {% for r in facility_driver_rows %}
                         <tr>
                             <td>{{ r.province }}</td>
-                            <td>{{ r.district }}</td>
                             <td>{{ r.facility }}</td>
-                            <td>{{ r.visits|default:0 }}</td>
                             <td>{{ r.mentees|default:0 }}</td>
                             <td>{{ r.mentors|default:0 }}</td>
                             <td>{{ r.thematics|default:0 }}</td>
@@ -1036,7 +1022,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="14">No facility-level records found.</td>
+                            <td colspan="12">No facility-level records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
