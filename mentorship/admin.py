@@ -4,7 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
     ThematicMentorship, MentorshipTopics, MenteeTopicStatus,
-    Mentorshipvisit, Mentorshipdetails, Staff
+    Mentorshipvisit, Mentorshipdetails, Staff, MentorshipDashboard,
 )
 from hiva.admin_utils import ProvinceRestrictedAdminMixin, user_province
 from django.utils.html import format_html
@@ -16,6 +16,15 @@ from django.urls import path, reverse
 from django.http import HttpResponse
 from django.utils import timezone
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F, Q
+from django.db.models.functions import TruncMonth
+from django.template.response import TemplateResponse
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.html import format_html
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # =====================================================
@@ -806,3 +815,929 @@ MentorshipDashboardMixin, admin.ModelAdmin):
         ).values("id", "name").order_by("name")
 
         return JsonResponse(list(topics), safe=False)
+@admin.register(MentorshipDashboard)
+class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/mentorship/dashboard.html"
+
+    # ------------------------------------------------------------
+    # Dashboard permissions
+    # ------------------------------------------------------------
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    # ------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------
+    def _bool_sum(self, field_name):
+        return Sum(
+            Case(
+                When(**{field_name: True}, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        data = self._build_dashboard_data(request)
+
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Mentorship Dashboard",
+            **data,
+        }
+
+        return TemplateResponse(
+            request,
+            self.change_list_template,
+            context,
+        )
+
+    def _base_querysets(self, request):
+        visits_qs = Mentorshipvisit.objects.select_related(
+            "facilityfk",
+            "facilityfk__districtfk",
+            "facilityfk__districtfk__provincefk",
+        )
+
+        details_qs = Mentorshipdetails.objects.select_related(
+            "mentorshipvistfk",
+            "mentorshipvistfk__facilityfk",
+            "mentorshipvistfk__facilityfk__districtfk",
+            "mentorshipvistfk__facilityfk__districtfk__provincefk",
+            "menteename",
+            "menteename__hfname",
+            "menteename__position",
+            "thematicname",
+            "topicname",
+            "mentor",
+        ).filter(
+            mentorshipvistfk__isnull=False
+        )
+
+        prov_id = _prov_id(request)
+
+        if prov_id and not request.user.is_superuser:
+            visits_qs = visits_qs.filter(
+                facilityfk__districtfk__provincefk_id=prov_id
+            )
+            details_qs = details_qs.filter(
+                mentorshipvistfk__facilityfk__districtfk__provincefk_id=prov_id
+            )
+
+        return visits_qs, details_qs
+
+    def _apply_filters(self, request, visits_qs, details_qs):
+        date_from = request.GET.get("date_from", "").strip()
+        date_to = request.GET.get("date_to", "").strip()
+        province_id = request.GET.get("province", "").strip()
+        facility_id = request.GET.get("facility", "").strip()
+        mentor_id = request.GET.get("mentor", "").strip()
+        thematic_id = request.GET.get("thematic", "").strip()
+        visit_round = request.GET.get("visit_round", "").strip()
+
+        if date_from:
+            visits_qs = visits_qs.filter(visitdate__gte=date_from)
+            details_qs = details_qs.filter(mentorshipvistfk__visitdate__gte=date_from)
+
+        if date_to:
+            visits_qs = visits_qs.filter(visitdate__lte=date_to)
+            details_qs = details_qs.filter(mentorshipvistfk__visitdate__lte=date_to)
+
+        if province_id:
+            visits_qs = visits_qs.filter(
+                facilityfk__districtfk__provincefk_id=province_id
+            )
+            details_qs = details_qs.filter(
+                mentorshipvistfk__facilityfk__districtfk__provincefk_id=province_id
+            )
+
+        if facility_id:
+            visits_qs = visits_qs.filter(facilityfk_id=facility_id)
+            details_qs = details_qs.filter(mentorshipvistfk__facilityfk_id=facility_id)
+
+        if mentor_id:
+            details_qs = details_qs.filter(mentor_id=mentor_id)
+            visits_qs = visits_qs.filter(items__mentor_id=mentor_id).distinct()
+
+        if thematic_id:
+            details_qs = details_qs.filter(thematicname_id=thematic_id)
+            visits_qs = visits_qs.filter(items__thematicname_id=thematic_id).distinct()
+
+        if visit_round:
+            visits_qs = visits_qs.filter(visitround=visit_round)
+            details_qs = details_qs.filter(mentorshipvistfk__visitround=visit_round)
+
+        filters = {
+            "date_from": date_from,
+            "date_to": date_to,
+            "province": province_id,
+            "facility": facility_id,
+            "mentor": mentor_id,
+            "thematic": thematic_id,
+            "visit_round": visit_round,
+        }
+
+        return visits_qs, details_qs, filters
+
+    def _build_dashboard_data(self, request):
+        visits_qs, details_qs = self._base_querysets(request)
+        option_visits_qs, option_details_qs = self._base_querysets(request)
+
+        visits_qs, details_qs, filters = self._apply_filters(
+            request,
+            visits_qs,
+            details_qs,
+        )
+
+        # ------------------------------------------------------------
+        # Filter options
+        # ------------------------------------------------------------
+        province_options = list(
+            option_visits_qs.values(
+                province_id=F("facilityfk__districtfk__provincefk_id"),
+                province=F("facilityfk__districtfk__provincefk__name"),
+            )
+            .exclude(province_id__isnull=True)
+            .distinct()
+            .order_by("province")
+        )
+
+        facility_options = list(
+            option_visits_qs.values(
+                facility_id=F("facilityfk_id"),
+                facility=F("facilityfk__name"),
+            )
+            .exclude(facility_id__isnull=True)
+            .distinct()
+            .order_by("facility")
+        )
+
+        mentor_options = [
+        {
+            "mentor_id": row["mentor_id"],
+            "mentor": row["mentor__name"] or "",
+        }
+        for row in (
+            option_details_qs
+            .exclude(mentor_id__isnull=True)
+            .values("mentor_id", "mentor__name")
+            .distinct()
+            .order_by("mentor__name")
+            )
+        ]
+
+        thematic_options = [
+        {
+            "thematic_id": row["id"],
+            "thematic": row["name"] or "",
+        }
+        for row in (
+            ThematicMentorship.objects
+            .values("id", "name")
+            .order_by("name")
+            )
+        ]
+
+        visit_round_options = list(
+            option_visits_qs.values_list("visitround", flat=True)
+            .exclude(visitround__isnull=True)
+            .distinct()
+            .order_by("visitround")
+        )
+
+        # ------------------------------------------------------------
+        # KPI cards
+        # ------------------------------------------------------------
+        kpis = details_qs.aggregate(
+            total_records=Count("id"),
+            distinct_mentees=Count("menteename", distinct=True),
+            distinct_visits=Count("mentorshipvistfk", distinct=True),
+            distinct_facilities=Count("mentorshipvistfk__facilityfk", distinct=True),
+            distinct_mentors=Count("mentor", distinct=True),
+            distinct_thematics=Count("thematicname", distinct=True),
+            distinct_topics=Count("topicname", distinct=True),
+            total_ls=self._bool_sum("ls"),
+            total_pc=self._bool_sum("pc"),
+            total_mc=self._bool_sum("mc"),
+        )
+
+        for key in kpis:
+            kpis[key] = int(kpis[key] or 0)
+
+        kpis["competency_instances"] = kpis["total_pc"] + kpis["total_mc"]
+        kpis["competency_minus_ls"] = kpis["competency_instances"] - kpis["total_ls"]
+
+        mentor_visit_keys = set(
+            details_qs.exclude(mentor_id__isnull=True)
+            .exclude(mentorshipvistfk__visitdate__isnull=True)
+            .values_list("mentorshipvistfk__visitdate", "mentor_id")
+        )
+        kpis["mentor_visit_instances"] = len(mentor_visit_keys)
+
+        # ------------------------------------------------------------
+        # Province summary
+        # ------------------------------------------------------------
+        province_rows = list(
+            details_qs.values(
+                province=F("mentorshipvistfk__facilityfk__districtfk__provincefk__name"),
+            )
+            .annotate(
+                visits=Count("mentorshipvistfk", distinct=True),
+                mentor_visit_instances=Count("mentor", distinct=True),
+                facilities=Count("mentorshipvistfk__facilityfk", distinct=True),
+                mentees=Count("menteename", distinct=True),
+                mentors=Count("mentor", distinct=True),
+                thematics=Count("thematicname", distinct=True),
+                topics=Count("topicname", distinct=True),
+                ls=self._bool_sum("ls"),
+                pc=self._bool_sum("pc"),
+                mc=self._bool_sum("mc"),
+                records=Count("id"),
+            )
+            .order_by("province")
+        )
+
+        max_province_value = max(
+            [
+                max(
+                    int(r["ls"] or 0),
+                    int(r["pc"] or 0),
+                    int(r["mc"] or 0),
+                )
+                for r in province_rows
+            ] or [1]
+        )
+
+        for r in province_rows:
+            r["ls"] = int(r["ls"] or 0)
+            r["pc"] = int(r["pc"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["competency_instances"] = r["pc"] + r["mc"]
+            r["competency_minus_ls"] = r["competency_instances"] - r["ls"]
+
+            r["ls_width"] = round((r["ls"] / max_province_value) * 100, 1) if max_province_value else 0
+            r["pc_width"] = round((r["pc"] / max_province_value) * 100, 1) if max_province_value else 0
+            r["mc_width"] = round((r["mc"] / max_province_value) * 100, 1) if max_province_value else 0
+
+            if r["mc"] > r["ls"]:
+                r["interpretation"] = "MC is higher than LS; competency demonstration instances exceeded learning session instances."
+            elif r["competency_instances"] > r["ls"]:
+                r["interpretation"] = "PC + MC is higher than LS; competency activity was strong."
+            elif r["ls"] > r["competency_instances"]:
+                r["interpretation"] = "LS is higher than competency instances; mentees may need follow-up PC/MC."
+            else:
+                r["interpretation"] = "LS and competency activity are balanced."
+
+        # ------------------------------------------------------------
+        # Facility summary
+        # ------------------------------------------------------------
+        facility_rows = list(
+            details_qs.values(
+                province=F("mentorshipvistfk__facilityfk__districtfk__provincefk__name"),
+                district=F("mentorshipvistfk__facilityfk__districtfk__name"),
+                facility=F("mentorshipvistfk__facilityfk__name"),
+                hfcode=F("mentorshipvistfk__facilityfk__hfcode"),
+            )
+            .annotate(
+                visits=Count("mentorshipvistfk", distinct=True),
+                mentees=Count("menteename", distinct=True),
+                mentors=Count("mentor", distinct=True),
+                thematics=Count("thematicname", distinct=True),
+                topics=Count("topicname", distinct=True),
+                ls=self._bool_sum("ls"),
+                pc=self._bool_sum("pc"),
+                mc=self._bool_sum("mc"),
+                records=Count("id"),
+            )
+            .order_by("province", "district", "facility")
+        )
+
+        for r in facility_rows:
+            r["ls"] = int(r["ls"] or 0)
+            r["pc"] = int(r["pc"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["competency_instances"] = r["pc"] + r["mc"]
+            r["competency_minus_ls"] = r["competency_instances"] - r["ls"]
+
+            if r["mc"] > r["ls"]:
+                r["interpretation"] = "MC activity was higher than LS."
+            elif r["competency_instances"] > r["ls"]:
+                r["interpretation"] = "Competency assessment activity was higher than LS."
+            elif r["ls"] > r["competency_instances"]:
+                r["interpretation"] = "LS activity was higher; follow-up PC/MC may be needed."
+            else:
+                r["interpretation"] = "Balanced LS and competency activity."
+
+        facility_driver_rows = sorted(
+            facility_rows,
+            key=lambda x: abs(x["competency_minus_ls"]),
+            reverse=True,
+        )[:25]
+
+        # ------------------------------------------------------------
+        # Monthly trend
+        # ------------------------------------------------------------
+        monthly_total_rows = list(
+            details_qs.annotate(
+                month=TruncMonth("mentorshipvistfk__visitdate")
+            )
+            .values("month")
+            .annotate(
+                mentees=Count("menteename", distinct=True),
+                visits=Count("mentorshipvistfk", distinct=True),
+                topics=Count("topicname", distinct=True),
+                ls=self._bool_sum("ls"),
+                pc=self._bool_sum("pc"),
+                mc=self._bool_sum("mc"),
+            )
+            .order_by("month")
+        )
+
+        for r in monthly_total_rows:
+            r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
+            r["ls"] = int(r["ls"] or 0)
+            r["pc"] = int(r["pc"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["competency_instances"] = r["pc"] + r["mc"]
+            r["total"] = r["ls"] + r["pc"] + r["mc"]
+
+        trend_rows = list(
+            details_qs.annotate(
+                month=TruncMonth("mentorshipvistfk__visitdate")
+            )
+            .values(
+                "month",
+                province=F("mentorshipvistfk__facilityfk__districtfk__provincefk__name"),
+            )
+            .annotate(
+                mentees=Count("menteename", distinct=True),
+                visits=Count("mentorshipvistfk", distinct=True),
+                topics=Count("topicname", distinct=True),
+                ls=self._bool_sum("ls"),
+                pc=self._bool_sum("pc"),
+                mc=self._bool_sum("mc"),
+            )
+            .order_by("province", "month")
+        )
+
+        for r in trend_rows:
+            r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
+            r["ls"] = int(r["ls"] or 0)
+            r["pc"] = int(r["pc"] or 0)
+            r["mc"] = int(r["mc"] or 0)
+            r["competency_instances"] = r["pc"] + r["mc"]
+
+        # ------------------------------------------------------------
+        # First mentorship visit by province
+        # ------------------------------------------------------------
+        first_visit_rows = []
+
+        first_by_province = list(
+            visits_qs.values(
+                province_id=F("facilityfk__districtfk__provincefk_id"),
+                province=F("facilityfk__districtfk__provincefk__name"),
+            )
+            .exclude(province_id__isnull=True)
+            .annotate(first_date=Min("visitdate"))
+            .order_by("province")
+        )
+
+        for row in first_by_province:
+            first_visit = (
+                visits_qs.filter(
+                    facilityfk__districtfk__provincefk_id=row["province_id"],
+                    visitdate=row["first_date"],
+                )
+                .order_by("visitdate", "id")
+                .first()
+            )
+
+            facility = first_visit.facilityfk if first_visit else None
+            district = facility.districtfk if facility else None
+
+            first_visit_rows.append({
+                "province": row["province"],
+                "first_date": row["first_date"],
+                "facility": facility.name if facility else "",
+                "hfcode": facility.hfcode if facility else "",
+                "district": district.name if district else "",
+                "visit_round": first_visit.visitround if first_visit else "",
+            })
+
+        # ------------------------------------------------------------
+        # Mentee profile table
+        # ------------------------------------------------------------
+        mentee_profiles = {}
+
+        detail_records = details_qs.order_by(
+            "mentorshipvistfk__facilityfk__districtfk__provincefk__name",
+            "mentorshipvistfk__facilityfk__districtfk__name",
+            "mentorshipvistfk__facilityfk__name",
+            "menteename__firstname",
+            "mentorshipvistfk__visitdate",
+            "id",
+        )
+
+        mentee_ids = list(
+            detail_records.exclude(menteename_id__isnull=True)
+            .values_list("menteename_id", flat=True)
+            .distinct()
+        )
+
+        topic_status_map = {}
+        if mentee_ids:
+            status_rows = MenteeTopicStatus.objects.filter(
+                mentee_id__in=mentee_ids
+            ).values(
+                "mentee_id",
+                "topic_id",
+                "status",
+                "consecutive_ls",
+                "last_session_type",
+                "last_date",
+                "competent_date",
+            )
+
+            for s in status_rows:
+                topic_status_map[(s["mentee_id"], s["topic_id"])] = s
+
+        def safe_text(value):
+            return str(value).strip() if value is not None else ""
+
+        def get_gender_text(value):
+            if value is True:
+                return "Female"
+            if value is False:
+                return "Male"
+            return ""
+
+        for d in detail_records:
+            visit = d.mentorshipvistfk
+            facility = visit.facilityfk if visit else None
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+            mentee = d.menteename
+            topic = d.topicname
+
+            if not mentee:
+                continue
+
+            topic_name = safe_text(topic) or "Unknown topic"
+            thematic_name = safe_text(d.thematicname) or "Unknown thematic area"
+
+            profile_key = (
+                facility.id if facility else None,
+                mentee.id,
+            )
+
+            if profile_key not in mentee_profiles:
+                mentee_profiles[profile_key] = {
+                    "province": safe_text(getattr(province, "name", "")),
+                    "district": safe_text(getattr(district, "name", "")),
+                    "facility": safe_text(getattr(facility, "name", "")),
+                    "hfcode": safe_text(getattr(facility, "hfcode", "")),
+                    "mentee": safe_text(mentee),
+                    "mentee_facility": safe_text(getattr(mentee.hfname, "name", "")) if mentee.hfname else "",
+                    "position": safe_text(mentee.position),
+                    "gender": get_gender_text(mentee.gender),
+                    "visits": set(),
+                    "topics_all": set(),
+                    "ls_topics": set(),
+                    "pc_topics": set(),
+                    "mc_topics": set(),
+                    "competent_topics": set(),
+                    "needs_graduation_topics": set(),
+                    "last_visit_date": None,
+                }
+
+            profile = mentee_profiles[profile_key]
+
+            if visit:
+                profile["visits"].add(visit.id)
+
+                if visit.visitdate:
+                    if not profile["last_visit_date"] or visit.visitdate > profile["last_visit_date"]:
+                        profile["last_visit_date"] = visit.visitdate
+
+            profile["topics_all"].add(topic_name)
+
+            if d.ls:
+                profile["ls_topics"].add(topic_name)
+
+            if d.pc:
+                profile["pc_topics"].add(topic_name)
+                profile["competent_topics"].add(topic_name)
+
+            if d.mc:
+                profile["mc_topics"].add(topic_name)
+                profile["competent_topics"].add(topic_name)
+
+            status = topic_status_map.get((mentee.id, topic.id if topic else None))
+            if status and status.get("status") == "COMPETENT":
+                profile["competent_topics"].add(topic_name)
+
+        mentee_profile_rows = []
+
+        for _key, profile in mentee_profiles.items():
+            active_topics = (
+                profile["ls_topics"]
+                | profile["pc_topics"]
+                | profile["mc_topics"]
+            )
+
+            profile["needs_graduation_topics"] = active_topics - profile["competent_topics"]
+
+            ls_topics = sorted(profile["ls_topics"])
+            pc_topics = sorted(profile["pc_topics"])
+            mc_topics = sorted(profile["mc_topics"])
+            competent_topics = sorted(profile["competent_topics"])
+            needs_topics = sorted(profile["needs_graduation_topics"])
+
+            needs_count = len(needs_topics)
+            competent_count = len(competent_topics)
+
+            if needs_count > 0:
+                overall_status = "Needs graduation / follow-up"
+                status_badge = "warning"
+            elif competent_count > 0:
+                overall_status = "Competent / graduated"
+                status_badge = "success"
+            else:
+                overall_status = "No competency progress recorded"
+                status_badge = "neutral"
+
+            mentee_profile_rows.append({
+                "province": profile["province"],
+                "district": profile["district"],
+                "facility": profile["facility"],
+                "hfcode": profile["hfcode"],
+                "mentee": profile["mentee"],
+                "mentee_facility": profile["mentee_facility"],
+                "position": profile["position"],
+                "gender": profile["gender"],
+                "visit_count": len(profile["visits"]),
+                "topic_count": len(profile["topics_all"]),
+                "ls_count": len(ls_topics),
+                "pc_count": len(pc_topics),
+                "mc_count": len(mc_topics),
+                "competent_count": competent_count,
+                "needs_count": needs_count,
+                "ls_topics_text": "\n".join(ls_topics),
+                "pc_topics_text": "\n".join(pc_topics),
+                "mc_topics_text": "\n".join(mc_topics),
+                "competent_topics_text": "\n".join(competent_topics),
+                "needs_topics_text": "\n".join(needs_topics),
+                "last_visit_date": profile["last_visit_date"],
+                "overall_status": overall_status,
+                "status_badge": status_badge,
+            })
+
+        mentee_profile_rows = sorted(
+            mentee_profile_rows,
+            key=lambda x: (
+                x["province"],
+                x["district"],
+                x["facility"],
+                -x["needs_count"],
+                x["mentee"],
+            ),
+        )
+
+        # ------------------------------------------------------------
+        # Story candidates
+        # ------------------------------------------------------------
+        story_candidates = []
+
+        for r in facility_rows:
+            story_score = (
+                int(r["ls"] or 0)
+                + int(r["pc"] or 0) * 2
+                + int(r["mc"] or 0) * 3
+                + int(r["topics"] or 0)
+            )
+
+            if r["ls"] > 0 or r["pc"] > 0 or r["mc"] > 0:
+                story_candidates.append({
+                    **r,
+                    "story_score": story_score,
+                    "story_angle": (
+                        "Strong competency progress"
+                        if r["competency_instances"] > r["ls"]
+                        else "Strong learning session implementation with follow-up need"
+                    ),
+                })
+
+        story_candidates = sorted(
+            story_candidates,
+            key=lambda x: x["story_score"],
+            reverse=True,
+        )[:15]
+
+        # ------------------------------------------------------------
+        # Chart data
+        # ------------------------------------------------------------
+        chart_data = {
+            "province_lspcmc": [
+                {
+                    "province": r.get("province") or "Unknown",
+                    "LS": int(r.get("ls") or 0),
+                    "PC": int(r.get("pc") or 0),
+                    "MC": int(r.get("mc") or 0),
+                }
+                for r in province_rows
+            ],
+            "province_competency_gap": [
+                {
+                    "province": r.get("province") or "Unknown",
+                    "gap": int(r.get("competency_minus_ls") or 0),
+                }
+                for r in province_rows
+            ],
+            "monthly_lspcmc": [
+                {
+                    "month": r.get("month_label") or "Unknown",
+                    "LS": int(r.get("ls") or 0),
+                    "PC": int(r.get("pc") or 0),
+                    "MC": int(r.get("mc") or 0),
+                    "Total": int(r.get("total") or 0),
+                }
+                for r in monthly_total_rows
+            ],
+            "facility_drivers": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "LS": int(r.get("ls") or 0),
+                    "PC": int(r.get("pc") or 0),
+                    "MC": int(r.get("mc") or 0),
+                }
+                for r in facility_driver_rows[:10]
+            ],
+            "story_candidates": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "story_score": int(r.get("story_score") or 0),
+                    "LS": int(r.get("ls") or 0),
+                    "PC": int(r.get("pc") or 0),
+                    "MC": int(r.get("mc") or 0),
+                }
+                for r in story_candidates[:10]
+            ],
+            "mentee_needs": [
+                {
+                    "mentee": (r.get("mentee") or "Unknown")[:38],
+                    "needs": int(r.get("needs_count") or 0),
+                    "competent": int(r.get("competent_count") or 0),
+                }
+                for r in sorted(
+                    mentee_profile_rows,
+                    key=lambda x: x["needs_count"],
+                    reverse=True,
+                )[:10]
+            ],
+        }
+
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+
+        return {
+            "filters": filters,
+            "export_query": export_query.urlencode(),
+            "province_options": province_options,
+            "facility_options": facility_options,
+            "mentor_options": mentor_options,
+            "thematic_options": thematic_options,
+            "visit_round_options": visit_round_options,
+            "kpis": kpis,
+            "province_rows": province_rows,
+            "facility_rows": facility_rows,
+            "facility_driver_rows": facility_driver_rows,
+            "trend_rows": trend_rows,
+            "monthly_total_rows": monthly_total_rows,
+            "first_visit_rows": first_visit_rows,
+            "mentee_profile_rows": mentee_profile_rows,
+            "story_candidates": story_candidates,
+            "chart_data": chart_data,
+            "methodology_note": (
+                "LS, PC, and MC figures represent mentorship detail instances, not unique mentees. "
+                "A single mentee may appear multiple times across visits, thematic areas, topics, mentors, or competency assessments."
+            ),
+        }
+
+    def _export_dashboard_excel(self, data):
+        wb = Workbook()
+
+        def style_sheet(ws):
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = border
+
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            for col in ws.columns:
+                max_length = 0
+                col_letter = get_column_letter(col[0].column)
+
+                for cell in col:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 50)
+
+        ws = wb.active
+        ws.title = "Province_Summary"
+        ws.append([
+            "Province", "Visits", "Facilities", "Mentees", "Mentors",
+            "Thematics", "Topics", "LS", "PC", "MC",
+            "PC + MC", "Competency - LS", "Interpretation",
+        ])
+
+        for r in data["province_rows"]:
+            ws.append([
+                r.get("province"),
+                r.get("visits"),
+                r.get("facilities"),
+                r.get("mentees"),
+                r.get("mentors"),
+                r.get("thematics"),
+                r.get("topics"),
+                r.get("ls"),
+                r.get("pc"),
+                r.get("mc"),
+                r.get("competency_instances"),
+                r.get("competency_minus_ls"),
+                r.get("interpretation"),
+            ])
+
+        ws2 = wb.create_sheet("Facility_Detail")
+        ws2.append([
+            "Province", "District", "Facility", "HF Code",
+            "Visits", "Mentees", "Mentors", "Thematics", "Topics",
+            "LS", "PC", "MC", "PC + MC", "Competency - LS",
+            "Interpretation",
+        ])
+
+        for r in data["facility_rows"]:
+            ws2.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("visits"),
+                r.get("mentees"),
+                r.get("mentors"),
+                r.get("thematics"),
+                r.get("topics"),
+                r.get("ls"),
+                r.get("pc"),
+                r.get("mc"),
+                r.get("competency_instances"),
+                r.get("competency_minus_ls"),
+                r.get("interpretation"),
+            ])
+
+        ws3 = wb.create_sheet("Monthly_Trend")
+        ws3.append([
+            "Province", "Month", "Mentees", "Visits", "Topics",
+            "LS", "PC", "MC", "PC + MC",
+        ])
+
+        for r in data["trend_rows"]:
+            ws3.append([
+                r.get("province"),
+                r.get("month_label"),
+                r.get("mentees"),
+                r.get("visits"),
+                r.get("topics"),
+                r.get("ls"),
+                r.get("pc"),
+                r.get("mc"),
+                r.get("competency_instances"),
+            ])
+
+        ws4 = wb.create_sheet("First_Visits")
+        ws4.append([
+            "Province", "First Visit Date", "First Facility",
+            "HF Code", "District", "Visit Round",
+        ])
+
+        for r in data["first_visit_rows"]:
+            ws4.append([
+                r.get("province"),
+                r.get("first_date"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("district"),
+                r.get("visit_round"),
+            ])
+
+        ws5 = wb.create_sheet("Mentee_Profile")
+        ws5.append([
+            "Province", "District", "Facility", "HF Code",
+            "Mentee", "Mentee Facility", "Position", "Gender",
+            "Visit Count", "Topic Count", "LS Count", "PC Count", "MC Count",
+            "Competent Count", "Needs Graduation Count",
+            "LS Topics", "PC Topics", "MC Topics",
+            "Competent Topics", "Topics Needing Graduation",
+            "Last Visit Date", "Overall Status",
+        ])
+
+        for r in data["mentee_profile_rows"]:
+            ws5.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("mentee"),
+                r.get("mentee_facility"),
+                r.get("position"),
+                r.get("gender"),
+                r.get("visit_count"),
+                r.get("topic_count"),
+                r.get("ls_count"),
+                r.get("pc_count"),
+                r.get("mc_count"),
+                r.get("competent_count"),
+                r.get("needs_count"),
+                r.get("ls_topics_text"),
+                r.get("pc_topics_text"),
+                r.get("mc_topics_text"),
+                r.get("competent_topics_text"),
+                r.get("needs_topics_text"),
+                r.get("last_visit_date"),
+                r.get("overall_status"),
+            ])
+
+        ws6 = wb.create_sheet("Story_Candidates")
+        ws6.append([
+            "Province", "District", "Facility", "HF Code",
+            "LS", "PC", "MC", "PC + MC", "Story Angle", "Story Score",
+        ])
+
+        for r in data["story_candidates"]:
+            ws6.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("ls"),
+                r.get("pc"),
+                r.get("mc"),
+                r.get("competency_instances"),
+                r.get("story_angle"),
+                r.get("story_score"),
+            ])
+
+        ws7 = wb.create_sheet("Methodology_Notes")
+        ws7.append(["Topic", "Explanation"])
+        ws7.append(["LS / PC / MC interpretation", data["methodology_note"]])
+        ws7.append([
+            "Graduation logic",
+            "A topic is counted as competent/graduated when PC or MC is recorded, or when MenteeTopicStatus is COMPETENT.",
+        ])
+
+        for sheet in wb.worksheets:
+            style_sheet(sheet)
+
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        filename = f"Mentorship_Dashboard_{timestamp}.xlsx"
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response

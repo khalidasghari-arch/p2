@@ -126,3 +126,9 @@ class Mentorshipdetails(models.Model):
 
     def __str__(self):
         return f"Detail #{self.pk}"
+
+class MentorshipDashboard(Mentorshipvisit):
+    class Meta:
+        proxy = True
+        verbose_name = "Mentorship Dashboard"
+        verbose_name_plural = "Mentorship Dashboard"
