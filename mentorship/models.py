@@ -130,5 +130,5 @@ class Mentorshipdetails(models.Model):
 class MentorshipDashboard(Mentorshipvisit):
     class Meta:
         proxy = True
-        verbose_name = "Mentorship Dashboard"
-        verbose_name_plural = "Mentorship Dashboard"
+        verbose_name = "MENTORSHIP DASHBOARD"
+        verbose_name_plural = "MENTORSHIP DASHBOARD"

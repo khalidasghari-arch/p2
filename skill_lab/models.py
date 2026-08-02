@@ -241,8 +241,8 @@ class SkillLabSession(models.Model):
 class SkillLabDashboard(SkillLabSession):
     class Meta:
         proxy = True
-        verbose_name = "Skill Lab Dashboard"
-        verbose_name_plural = "Skill Lab Dashboard"
+        verbose_name = "SKILL LAB DASHBOARD"
+        verbose_name_plural = "SKILL LAB DASHBOARD"
 
 class SkillLabParticipantRecord(models.Model):
     GENDER_CHOICES = [
