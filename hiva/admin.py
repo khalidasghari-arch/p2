@@ -1410,6 +1410,9 @@ class AimpphAdmin(
 class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/aimpph/dashboard.html"
 
+    # ============================================================
+    # Permissions
+    # ============================================================
     def has_add_permission(self, request):
         return False
 
@@ -1427,9 +1430,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             return {"view": True}
         return {}
 
-    # ------------------------------------------------------------
+    # ============================================================
     # Helpers
-    # ------------------------------------------------------------
+    # ============================================================
     def _province_id(self, request):
         province = user_province(request)
         return getattr(province, "id", province) if province else None
@@ -1443,23 +1446,84 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def _safe_rate(self, numerator, denominator, decimals=1):
         numerator = self._safe_int(numerator)
         denominator = self._safe_int(denominator)
+
         if denominator <= 0:
             return 0
+
         return round((numerator / denominator) * 100, decimals)
 
     def _sum_fields(self, queryset, fields):
         aggregation = {
-            field: Sum(field)
+            f"sum_{field}": Sum(field)
             for field in fields
         }
 
         result = queryset.aggregate(**aggregation)
 
         return {
-            field: self._safe_int(result.get(field))
+            field: self._safe_int(result.get(f"sum_{field}"))
             for field in fields
         }
 
+    def _normalize_sum_fields(self, row, fields):
+        for field in fields:
+            row[field] = self._safe_int(row.get(f"sum_{field}"))
+        return row
+
+    def _calculated_births(self, row_or_totals):
+        """
+        Temporary dashboard correction:
+        Total Births = Vaginal Births + C-section Births
+        """
+        return (
+            self._safe_int(row_or_totals.get("births_vaginal"))
+            + self._safe_int(row_or_totals.get("births_csection"))
+        )
+
+    def _calculated_pph_total(self, row_or_totals):
+        """
+        Temporary dashboard correction:
+        Indicator 10 = Indicator 6 + Indicator 7 + Indicator 8 + Indicator 9
+        """
+        return (
+            self._safe_int(row_or_totals.get("pph_vaginal_501_999"))
+            + self._safe_int(row_or_totals.get("pph_cs_1000_plus"))
+            + self._safe_int(row_or_totals.get("pph_referral_in_outside_aim"))
+            + self._safe_int(row_or_totals.get("pph_referral_in_aim"))
+        )
+
+    def _percent_change(self, pre_i, pre_p):
+        pre_i = self._safe_int(pre_i)
+        pre_p = self._safe_int(pre_p)
+
+        if pre_i == 0:
+            return ""
+
+        return round(((pre_p - pre_i) / pre_i) * 100, 1)
+
+    def _progress_filter(self, queryset, progress_type):
+        """
+        Supports common PRE-I / PRE-P spelling variations.
+        """
+        if progress_type == "PRE-I":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-I")
+                | Q(bl_progress__iexact="PRE I")
+                | Q(bl_progress__iexact="PREI")
+            )
+
+        if progress_type == "PRE-P":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-P")
+                | Q(bl_progress__iexact="PRE P")
+                | Q(bl_progress__iexact="PREP")
+            )
+
+        return queryset.none()
+
+    # ============================================================
+    # Main View
+    # ============================================================
     def changelist_view(self, request, extra_context=None):
         data = self._build_dashboard_data(request)
 
@@ -1502,8 +1566,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         shamsiyear = request.GET.get("shamsiyear", "").strip()
         shamsimonth = request.GET.get("shamsimonth", "").strip()
         bl_progress = request.GET.get("bl_progress", "").strip()
-        afiat_flag = request.GET.get("afiat_flag", "").strip()
-        status = request.GET.get("status", "").strip()
 
         if province_id:
             queryset = queryset.filter(
@@ -1528,12 +1590,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         if bl_progress:
             queryset = queryset.filter(bl_progress=bl_progress)
 
-        if afiat_flag in ("1", "0"):
-            queryset = queryset.filter(afiat_flag=(afiat_flag == "1"))
-
-        if status:
-            queryset = queryset.filter(status=status)
-
         filters = {
             "province": province_id,
             "facility": facility_id,
@@ -1542,19 +1598,104 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "shamsiyear": shamsiyear,
             "shamsimonth": shamsimonth,
             "bl_progress": bl_progress,
-            "afiat_flag": afiat_flag,
-            "status": status,
         }
 
         return queryset, filters
+
+    def _build_indicator_comparison_rows(self, queryset, indicator_fields):
+        pre_i_qs = self._progress_filter(queryset, "PRE-I")
+        pre_p_qs = self._progress_filter(queryset, "PRE-P")
+
+        pre_i_totals = self._sum_fields(pre_i_qs, indicator_fields)
+        pre_p_totals = self._sum_fields(pre_p_qs, indicator_fields)
+
+        pre_i_totals["total_births"] = self._calculated_births(pre_i_totals)
+        pre_p_totals["total_births"] = self._calculated_births(pre_p_totals)
+
+        pre_i_totals["pph_total"] = self._calculated_pph_total(pre_i_totals)
+        pre_p_totals["pph_total"] = self._calculated_pph_total(pre_p_totals)
+
+        comparison_indicators = [
+            ("1. Total births - calculated as vaginal + C-section", "total_births"),
+            ("2. Number of births - vaginal delivery", "births_vaginal"),
+            ("3. Number of births - C-section", "births_csection"),
+            ("4. Oxytocin immediately after birth", "oxytocin_immediate"),
+            ("5. Antepartum hemorrhage", "antepartum_hemorrhage"),
+            ("6. PPH after vaginal delivery 501–999 cc", "pph_vaginal_501_999"),
+            ("7. PPH after C-section ≥1000 cc", "pph_cs_1000_plus"),
+            ("8. PPH referrals in from outside AIM facilities", "pph_referral_in_outside_aim"),
+            ("9. PPH referrals in from AIM facilities", "pph_referral_in_aim"),
+            ("10. Total number of PPH cases - calculated indicators 6–9", "pph_total"),
+            ("QBL 0–500 ml", "qbl_0_500"),
+            ("QBL 501–999 ml", "qbl_501_999"),
+            ("QBL 1000–1499 ml", "qbl_1000_1499"),
+            ("QBL 1500–1999 ml", "qbl_1500_1999"),
+            ("QBL 2000–2499 ml", "qbl_2000_2499"),
+            ("QBL >2500 ml", "qbl_2500_plus"),
+            ("QBL unknown", "qbl_unknown"),
+            ("QBL total", "qbl_total"),
+            ("Transfers out for PPH", "transfers_out_pph"),
+            ("Maternal deaths due to PPH transfer", "maternal_death_pph_transfer"),
+            ("Maternal deaths due to other transfer causes", "maternal_death_other_transfer"),
+            ("Total maternal deaths transfer", "maternal_death_total_transfer"),
+            ("Cause: uterine atony", "cause_uterine_atony"),
+            ("Cause: severe lacerations", "cause_severe_lacerations"),
+            ("Cause: retained products", "cause_retained_products"),
+            ("Cause: DIC", "cause_dic"),
+            ("Cause: ruptured uterus", "cause_ruptured_uterus"),
+            ("Cause: abruption placenta", "cause_abruption"),
+            ("Cause: placenta previa", "cause_placenta_previa"),
+            ("Cause: placenta accreta", "cause_placenta_accreta"),
+            ("Cause: other", "cause_other"),
+            ("Cause: unknown", "cause_unknown"),
+            ("Total causes of PPH", "causes_total"),
+            ("PPH management by medication - uterotonic", "pph_medication_uterotonic"),
+            ("AI: uterine compression", "ai_uterine_compression"),
+            ("AI: manual removal of placenta", "ai_manual_placenta"),
+            ("AI: aortic compression", "ai_aortic_compression"),
+            ("AI: UBT", "ai_ubt"),
+            ("AI: laceration repair", "ai_lac_repair"),
+            ("AI: B-Lynch / UAL", "ai_blynch_ual"),
+            ("AI: NASG", "ai_nasg"),
+            ("AI: ruptured uterus repair", "ai_ruptured_uterus_repair"),
+            ("AI: PPH hysterectomy", "ai_pph_hysterectomy"),
+            ("AI: hysterectomy other causes", "ai_hysterectomy_other"),
+            ("Total advanced interventions", "ai_total"),
+        ]
+
+        rows = []
+
+        for label, field in comparison_indicators:
+            pre_i = self._safe_int(pre_i_totals.get(field))
+            pre_p = self._safe_int(pre_p_totals.get(field))
+            change = pre_p - pre_i
+            percent_change = self._percent_change(pre_i, pre_p)
+
+            if change > 0:
+                direction = "Increased"
+            elif change < 0:
+                direction = "Decreased"
+            else:
+                direction = "No change"
+
+            rows.append({
+                "indicator": label,
+                "pre_i": pre_i,
+                "pre_p": pre_p,
+                "change": change,
+                "percent_change": percent_change,
+                "direction": direction,
+            })
+
+        return rows
 
     def _build_dashboard_data(self, request):
         base_qs = self._base_queryset(request)
         queryset, filters = self._apply_filters(request, base_qs)
 
-        # ------------------------------------------------------------
+        # ============================================================
         # Filter options
-        # ------------------------------------------------------------
+        # ============================================================
         province_options = [
             {
                 "province_id": row["aimfacilityname__districtfk__provincefk_id"],
@@ -1626,16 +1767,11 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .order_by("bl_progress")
         )
 
-        status_options = [
-            {"value": "draft", "label": "Draft"},
-            {"value": "submitted", "label": "Submitted"},
-        ]
-
-        # ------------------------------------------------------------
-        # Indicator fields
-        # ------------------------------------------------------------
+        # ============================================================
+        # Fields used for aggregation
+        # Do not rely on stored total_births and pph_total.
+        # ============================================================
         indicator_fields = [
-            "total_births",
             "births_vaginal",
             "births_csection",
             "oxytocin_immediate",
@@ -1644,7 +1780,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "pph_cs_1000_plus",
             "pph_referral_in_outside_aim",
             "pph_referral_in_aim",
-            "pph_total",
             "qbl_0_500",
             "qbl_501_999",
             "qbl_1000_1499",
@@ -1682,11 +1817,18 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "ai_total",
         ]
 
-        totals = self._sum_fields(queryset, indicator_fields)
+        sum_annotations = {
+            f"sum_{field}": Sum(field)
+            for field in indicator_fields
+        }
 
-        # ------------------------------------------------------------
+        totals = self._sum_fields(queryset, indicator_fields)
+        totals["total_births"] = self._calculated_births(totals)
+        totals["pph_total"] = self._calculated_pph_total(totals)
+
+        # ============================================================
         # KPI cards
-        # ------------------------------------------------------------
+        # ============================================================
         kpis = {
             "records": queryset.count(),
             "facilities": queryset.values("aimfacilityname_id").distinct().count(),
@@ -1702,58 +1844,33 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "ai_total": totals["ai_total"],
         }
 
-        kpis["csection_rate"] = self._safe_rate(
-            kpis["births_csection"],
-            kpis["total_births"],
-        )
-        kpis["oxytocin_rate"] = self._safe_rate(
-            kpis["oxytocin_immediate"],
-            kpis["total_births"],
-        )
-        kpis["pph_rate"] = self._safe_rate(
-            kpis["pph_total"],
-            kpis["total_births"],
-        )
-        kpis["transfer_rate_among_pph"] = self._safe_rate(
-            kpis["transfers_out_pph"],
-            kpis["pph_total"],
-        )
-        kpis["ai_rate_among_pph"] = self._safe_rate(
-            kpis["ai_total"],
-            kpis["pph_total"],
-        )
+        kpis["csection_rate"] = self._safe_rate(kpis["births_csection"], kpis["total_births"])
+        kpis["oxytocin_rate"] = self._safe_rate(kpis["oxytocin_immediate"], kpis["total_births"])
+        kpis["pph_rate"] = self._safe_rate(kpis["pph_total"], kpis["total_births"])
+        kpis["transfer_rate_among_pph"] = self._safe_rate(kpis["transfers_out_pph"], kpis["pph_total"])
+        kpis["ai_rate_among_pph"] = self._safe_rate(kpis["ai_total"], kpis["pph_total"])
         kpis["pph_death_rate_among_pph"] = self._safe_rate(
             kpis["maternal_death_pph_transfer"],
             kpis["pph_total"],
         )
 
-        # ------------------------------------------------------------
-        # Progress rows: baseline/progress comparison
-        # ------------------------------------------------------------
+        # ============================================================
+        # Baseline / Progress summary
+        # ============================================================
         progress_rows = list(
             queryset.values("bl_progress")
             .annotate(
                 records=Count("id"),
                 facilities=Count("aimfacilityname", distinct=True),
-                total_births=Sum("total_births"),
-                births_csection=Sum("births_csection"),
-                oxytocin_immediate=Sum("oxytocin_immediate"),
-                pph_total=Sum("pph_total"),
-                transfers_out_pph=Sum("transfers_out_pph"),
-                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
-                ai_total=Sum("ai_total"),
+                **sum_annotations,
             )
             .order_by("bl_progress")
         )
 
         for r in progress_rows:
-            r["total_births"] = self._safe_int(r["total_births"])
-            r["births_csection"] = self._safe_int(r["births_csection"])
-            r["oxytocin_immediate"] = self._safe_int(r["oxytocin_immediate"])
-            r["pph_total"] = self._safe_int(r["pph_total"])
-            r["transfers_out_pph"] = self._safe_int(r["transfers_out_pph"])
-            r["maternal_death_pph_transfer"] = self._safe_int(r["maternal_death_pph_transfer"])
-            r["ai_total"] = self._safe_int(r["ai_total"])
+            self._normalize_sum_fields(r, indicator_fields)
+            r["total_births"] = self._calculated_births(r)
+            r["pph_total"] = self._calculated_pph_total(r)
 
             r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
             r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
@@ -1761,9 +1878,17 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             r["transfer_rate"] = self._safe_rate(r["transfers_out_pph"], r["pph_total"])
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
-        # ------------------------------------------------------------
+        # ============================================================
+        # PRE-I vs PRE-P comparison
+        # ============================================================
+        indicator_comparison_rows = self._build_indicator_comparison_rows(
+            queryset,
+            indicator_fields,
+        )
+
+        # ============================================================
         # Province summary
-        # ------------------------------------------------------------
+        # ============================================================
         province_rows = list(
             queryset.values(
                 province=F("aimfacilityname__districtfk__provincefk__name"),
@@ -1771,34 +1896,25 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .annotate(
                 records=Count("id"),
                 facilities=Count("aimfacilityname", distinct=True),
-                total_births=Sum("total_births"),
-                births_vaginal=Sum("births_vaginal"),
-                births_csection=Sum("births_csection"),
-                oxytocin_immediate=Sum("oxytocin_immediate"),
-                pph_total=Sum("pph_total"),
-                transfers_out_pph=Sum("transfers_out_pph"),
-                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
-                ai_total=Sum("ai_total"),
+                **sum_annotations,
             )
             .order_by("province")
         )
 
         for r in province_rows:
-            for field in [
-                "records", "facilities", "total_births", "births_vaginal",
-                "births_csection", "oxytocin_immediate", "pph_total",
-                "transfers_out_pph", "maternal_death_pph_transfer", "ai_total",
-            ]:
-                r[field] = self._safe_int(r.get(field))
+            self._normalize_sum_fields(r, indicator_fields)
+            r["total_births"] = self._calculated_births(r)
+            r["pph_total"] = self._calculated_pph_total(r)
 
             r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
             r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
             r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["transfer_rate"] = self._safe_rate(r["transfers_out_pph"], r["pph_total"])
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
-        # ------------------------------------------------------------
+        # ============================================================
         # Facility summary
-        # ------------------------------------------------------------
+        # ============================================================
         facility_rows = list(
             queryset.values(
                 province=F("aimfacilityname__districtfk__provincefk__name"),
@@ -1808,29 +1924,20 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             .annotate(
                 records=Count("id"),
-                total_births=Sum("total_births"),
-                births_vaginal=Sum("births_vaginal"),
-                births_csection=Sum("births_csection"),
-                oxytocin_immediate=Sum("oxytocin_immediate"),
-                pph_total=Sum("pph_total"),
-                transfers_out_pph=Sum("transfers_out_pph"),
-                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
-                ai_total=Sum("ai_total"),
+                **sum_annotations,
             )
             .order_by("province", "district", "facility")
         )
 
         for r in facility_rows:
-            for field in [
-                "records", "total_births", "births_vaginal",
-                "births_csection", "oxytocin_immediate", "pph_total",
-                "transfers_out_pph", "maternal_death_pph_transfer", "ai_total",
-            ]:
-                r[field] = self._safe_int(r.get(field))
+            self._normalize_sum_fields(r, indicator_fields)
+            r["total_births"] = self._calculated_births(r)
+            r["pph_total"] = self._calculated_pph_total(r)
 
             r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
             r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
             r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["transfer_rate"] = self._safe_rate(r["transfers_out_pph"], r["pph_total"])
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
             if r["pph_total"] > 0 and r["ai_total"] == 0:
@@ -1854,42 +1961,39 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             reverse=True,
         )[:25]
 
-        # ------------------------------------------------------------
+        # ============================================================
         # Monthly trend
-        # ------------------------------------------------------------
+        # ============================================================
         monthly_rows = list(
             queryset.values("gre_year", "gre_month", "period")
             .annotate(
                 records=Count("id"),
                 facilities=Count("aimfacilityname", distinct=True),
-                total_births=Sum("total_births"),
-                births_csection=Sum("births_csection"),
-                oxytocin_immediate=Sum("oxytocin_immediate"),
-                pph_total=Sum("pph_total"),
-                transfers_out_pph=Sum("transfers_out_pph"),
-                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
-                ai_total=Sum("ai_total"),
+                **sum_annotations,
             )
             .order_by("gre_year", "gre_month", "period")
         )
 
         for r in monthly_rows:
-            for field in [
-                "records", "facilities", "total_births", "births_csection",
-                "oxytocin_immediate", "pph_total", "transfers_out_pph",
-                "maternal_death_pph_transfer", "ai_total",
-            ]:
-                r[field] = self._safe_int(r.get(field))
+            self._normalize_sum_fields(r, indicator_fields)
+            r["total_births"] = self._calculated_births(r)
+            r["pph_total"] = self._calculated_pph_total(r)
 
-            r["month_label"] = f"{r.get('gre_month') or ''} {r.get('gre_year') or ''}".strip() or r.get("period") or "Unknown"
+            r["month_label"] = (
+                f"{r.get('gre_month') or ''} {r.get('gre_year') or ''}".strip()
+                or r.get("period")
+                or "Unknown"
+            )
+
             r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
             r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
             r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["transfer_rate"] = self._safe_rate(r["transfers_out_pph"], r["pph_total"])
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
-        # ------------------------------------------------------------
-        # Distribution tables
-        # ------------------------------------------------------------
+        # ============================================================
+        # Distribution rows
+        # ============================================================
         qbl_rows = [
             {"category": "0–500 ml", "value": totals["qbl_0_500"]},
             {"category": "501–999 ml", "value": totals["qbl_501_999"]},
@@ -1926,9 +2030,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             {"category": "Hysterectomy other causes", "value": totals["ai_hysterectomy_other"]},
         ]
 
-        # ------------------------------------------------------------
+        # ============================================================
         # Data quality checks
-        # ------------------------------------------------------------
+        # ============================================================
         data_quality_rows = []
 
         for obj in queryset:
@@ -1937,6 +2041,11 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             province = district.provincefk if district else None
 
             issues = []
+
+            birth_components = (
+                self._safe_int(obj.births_vaginal)
+                + self._safe_int(obj.births_csection)
+            )
 
             pph_components = (
                 self._safe_int(obj.pph_vaginal_501_999)
@@ -1981,21 +2090,16 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 + self._safe_int(obj.ai_hysterectomy_other)
             )
 
-            birth_components = (
-                self._safe_int(obj.births_vaginal)
-                + self._safe_int(obj.births_csection)
-            )
-
             death_components = (
                 self._safe_int(obj.maternal_death_pph_transfer)
                 + self._safe_int(obj.maternal_death_other_transfer)
             )
 
             if self._safe_int(obj.total_births) != birth_components:
-                issues.append("Total births does not equal vaginal + C-section births")
+                issues.append("Stored total births does not equal vaginal + C-section births")
 
             if self._safe_int(obj.pph_total) != pph_components:
-                issues.append("PPH total does not equal indicators 6–9")
+                issues.append("Stored PPH total does not equal indicators 6–9")
 
             if self._safe_int(obj.qbl_total) != qbl_components:
                 issues.append("QBL total does not equal QBL category sum")
@@ -2009,8 +2113,8 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             if self._safe_int(obj.maternal_death_total_transfer) != death_components:
                 issues.append("Maternal death total does not equal PPH + other maternal deaths")
 
-            if self._safe_int(obj.pph_total) > self._safe_int(obj.total_births):
-                issues.append("PPH total is higher than total births")
+            if pph_components > birth_components and birth_components > 0:
+                issues.append("Calculated PPH total is higher than calculated total births")
 
             if issues:
                 data_quality_rows.append({
@@ -2024,9 +2128,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     "issues": "; ".join(issues),
                 })
 
-        # ------------------------------------------------------------
+        # ============================================================
         # Chart data
-        # ------------------------------------------------------------
+        # ============================================================
         chart_data = {
             "progress_rates": [
                 {
@@ -2064,16 +2168,33 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 for r in facility_rows_top_pph_rate[:10]
             ],
             "qbl_distribution": [
-                {"category": r["category"], "value": int(r["value"] or 0)}
+                {
+                    "category": r["category"],
+                    "value": int(r["value"] or 0),
+                }
                 for r in qbl_rows
             ],
             "cause_distribution": [
-                {"category": r["category"], "value": int(r["value"] or 0)}
+                {
+                    "category": r["category"],
+                    "value": int(r["value"] or 0),
+                }
                 for r in sorted(cause_rows, key=lambda x: x["value"], reverse=True)[:10]
             ],
             "ai_distribution": [
-                {"category": r["category"], "value": int(r["value"] or 0)}
+                {
+                    "category": r["category"],
+                    "value": int(r["value"] or 0),
+                }
                 for r in sorted(ai_rows, key=lambda x: x["value"], reverse=True)[:10]
+            ],
+            "indicator_comparison": [
+                {
+                    "indicator": r["indicator"][:45],
+                    "PRE-I": int(r["pre_i"] or 0),
+                    "PRE-P": int(r["pre_p"] or 0),
+                }
+                for r in indicator_comparison_rows[:20]
             ],
         }
 
@@ -2090,9 +2211,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "shamsiyear_options": shamsiyear_options,
             "shamsimonth_options": shamsimonth_options,
             "bl_progress_options": bl_progress_options,
-            "status_options": status_options,
             "kpis": kpis,
             "progress_rows": progress_rows,
+            "indicator_comparison_rows": indicator_comparison_rows,
             "province_rows": province_rows,
             "facility_rows": facility_rows,
             "facility_rows_top_pph": facility_rows_top_pph,
@@ -2104,10 +2225,10 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "data_quality_rows": data_quality_rows,
             "chart_data": chart_data,
             "methodology_note": (
-                "AIM-PPH dashboard indicators are aggregated from submitted facility-month records. "
-                "Rates are calculated using summed numerators and denominators for the selected filters. "
-                "PPH rate uses PPH total divided by total births; oxytocin rate uses oxytocin immediately after birth divided by total births; "
-                "advanced intervention rate uses total advanced interventions divided by total PPH cases."
+                "AIM-PPH dashboard indicators are aggregated from facility-month records. "
+                "For temporary dashboard correction, Total Births is calculated as Vaginal Births + C-section Births because the stored total_births field is currently inconsistent. "
+                "Total PPH cases is calculated as the sum of indicators 6–9. "
+                "Rates are calculated using summed numerators and corrected denominators for the selected filters."
             ),
         }
 
@@ -2146,15 +2267,26 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     if cell.value is not None:
                         max_length = max(max_length, len(str(cell.value)))
 
-                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 50)
+                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 55)
 
         ws = wb.active
         ws.title = "Progress_Summary"
         ws.append([
-            "Baseline / Progress", "Records", "Facilities", "Total Births",
-            "C-section Births", "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
-            "PPH Total", "PPH Rate %", "Transfers Out PPH",
-            "Maternal Death PPH Transfer", "Advanced Interventions", "AI among PPH %",
+            "Baseline / Progress",
+            "Records",
+            "Facilities",
+            "Corrected Total Births",
+            "Vaginal Births",
+            "C-section Births",
+            "C-section Rate %",
+            "Oxytocin",
+            "Oxytocin Rate %",
+            "10. Total PPH Cases 6-9",
+            "PPH Rate %",
+            "Transfers Out PPH",
+            "PPH Deaths",
+            "Advanced Interventions",
+            "AI among PPH %",
         ])
 
         for r in data["progress_rows"]:
@@ -2163,6 +2295,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("records"),
                 r.get("facilities"),
                 r.get("total_births"),
+                r.get("births_vaginal"),
                 r.get("births_csection"),
                 r.get("csection_rate"),
                 r.get("oxytocin_immediate"),
@@ -2175,17 +2308,47 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("ai_rate"),
             ])
 
-        ws2 = wb.create_sheet("Province_Summary")
+        ws2 = wb.create_sheet("PREI_PREP_Comparison")
         ws2.append([
-            "Province", "Records", "Facilities", "Total Births",
-            "Vaginal Births", "C-section Births", "C-section Rate %",
-            "Oxytocin", "Oxytocin Rate %", "PPH Total", "PPH Rate %",
-            "Transfers Out PPH", "Maternal Death PPH Transfer",
-            "Advanced Interventions", "AI among PPH %",
+            "Indicator",
+            "PRE-I",
+            "PRE-P",
+            "Change",
+            "% Change",
+            "Direction",
+        ])
+
+        for r in data["indicator_comparison_rows"]:
+            ws2.append([
+                r.get("indicator"),
+                r.get("pre_i"),
+                r.get("pre_p"),
+                r.get("change"),
+                r.get("percent_change"),
+                r.get("direction"),
+            ])
+
+        ws3 = wb.create_sheet("Province_Summary")
+        ws3.append([
+            "Province",
+            "Records",
+            "Facilities",
+            "Corrected Total Births",
+            "Vaginal Births",
+            "C-section Births",
+            "C-section Rate %",
+            "Oxytocin",
+            "Oxytocin Rate %",
+            "10. Total PPH Cases 6-9",
+            "PPH Rate %",
+            "Transfers Out PPH",
+            "PPH Deaths",
+            "Advanced Interventions",
+            "AI among PPH %",
         ])
 
         for r in data["province_rows"]:
-            ws2.append([
+            ws3.append([
                 r.get("province"),
                 r.get("records"),
                 r.get("facilities"),
@@ -2203,18 +2366,30 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("ai_rate"),
             ])
 
-        ws3 = wb.create_sheet("Facility_Summary")
-        ws3.append([
-            "Province", "District", "Facility", "HF Code", "Records",
-            "Total Births", "Vaginal Births", "C-section Births",
-            "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
-            "PPH Total", "PPH Rate %", "Transfers Out PPH",
-            "Maternal Death PPH Transfer", "Advanced Interventions",
-            "AI among PPH %", "Interpretation",
+        ws4 = wb.create_sheet("Facility_Summary")
+        ws4.append([
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Records",
+            "Corrected Total Births",
+            "Vaginal Births",
+            "C-section Births",
+            "C-section Rate %",
+            "Oxytocin",
+            "Oxytocin Rate %",
+            "10. Total PPH Cases 6-9",
+            "PPH Rate %",
+            "Transfers Out PPH",
+            "PPH Deaths",
+            "Advanced Interventions",
+            "AI among PPH %",
+            "Interpretation",
         ])
 
         for r in data["facility_rows"]:
-            ws3.append([
+            ws4.append([
                 r.get("province"),
                 r.get("district"),
                 r.get("facility"),
@@ -2235,24 +2410,36 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("interpretation"),
             ])
 
-        ws4 = wb.create_sheet("Monthly_Trend")
-        ws4.append([
-            "Gregorian Year", "Gregorian Month", "Period", "Records",
-            "Facilities", "Total Births", "C-section Births",
-            "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
-            "PPH Total", "PPH Rate %", "Transfers Out PPH",
-            "Maternal Death PPH Transfer", "Advanced Interventions",
+        ws5 = wb.create_sheet("Monthly_Trend")
+        ws5.append([
+            "Gregorian Year",
+            "Gregorian Month",
+            "Period",
+            "Records",
+            "Facilities",
+            "Corrected Total Births",
+            "Vaginal Births",
+            "C-section Births",
+            "C-section Rate %",
+            "Oxytocin",
+            "Oxytocin Rate %",
+            "10. Total PPH Cases 6-9",
+            "PPH Rate %",
+            "Transfers Out PPH",
+            "PPH Deaths",
+            "Advanced Interventions",
             "AI among PPH %",
         ])
 
         for r in data["monthly_rows"]:
-            ws4.append([
+            ws5.append([
                 r.get("gre_year"),
                 r.get("gre_month"),
                 r.get("period"),
                 r.get("records"),
                 r.get("facilities"),
                 r.get("total_births"),
+                r.get("births_vaginal"),
                 r.get("births_csection"),
                 r.get("csection_rate"),
                 r.get("oxytocin_immediate"),
@@ -2265,29 +2452,35 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("ai_rate"),
             ])
 
-        ws5 = wb.create_sheet("QBL_Distribution")
-        ws5.append(["QBL Category", "Count"])
+        ws6 = wb.create_sheet("QBL_Distribution")
+        ws6.append(["QBL Category", "Count"])
         for r in data["qbl_rows"]:
-            ws5.append([r.get("category"), r.get("value")])
-
-        ws6 = wb.create_sheet("Cause_Distribution")
-        ws6.append(["Cause of PPH", "Count"])
-        for r in data["cause_rows"]:
             ws6.append([r.get("category"), r.get("value")])
 
-        ws7 = wb.create_sheet("Advanced_Interventions")
-        ws7.append(["Advanced Intervention", "Count"])
-        for r in data["ai_rows"]:
+        ws7 = wb.create_sheet("Cause_Distribution")
+        ws7.append(["Cause of PPH", "Count"])
+        for r in data["cause_rows"]:
             ws7.append([r.get("category"), r.get("value")])
 
-        ws8 = wb.create_sheet("Data_Quality")
-        ws8.append([
-            "Record ID", "Province", "District", "Facility", "HF Code",
-            "Period", "Baseline / Progress", "Issue",
+        ws8 = wb.create_sheet("Advanced_Interventions")
+        ws8.append(["Advanced Intervention", "Count"])
+        for r in data["ai_rows"]:
+            ws8.append([r.get("category"), r.get("value")])
+
+        ws9 = wb.create_sheet("Data_Quality")
+        ws9.append([
+            "Record ID",
+            "Province",
+            "District",
+            "Facility",
+            "HF Code",
+            "Period",
+            "Baseline / Progress",
+            "Issue",
         ])
 
         for r in data["data_quality_rows"]:
-            ws8.append([
+            ws9.append([
                 r.get("id"),
                 r.get("province"),
                 r.get("district"),
@@ -2298,10 +2491,13 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("issues"),
             ])
 
-        ws9 = wb.create_sheet("Methodology_Notes")
-        ws9.append(["Topic", "Explanation"])
-        ws9.append(["Dashboard methodology", data["methodology_note"]])
-        ws9.append(["Data quality checks", "The dashboard checks whether calculated totals match their component indicators."])
+        ws10 = wb.create_sheet("Methodology_Notes")
+        ws10.append(["Topic", "Explanation"])
+        ws10.append(["Dashboard methodology", data["methodology_note"]])
+        ws10.append([
+            "Temporary correction",
+            "Total Births is calculated as Vaginal Births + C-section Births. Total PPH cases is calculated as indicators 6–9.",
+        ])
 
         for sheet in wb.worksheets:
             style_sheet(sheet)

@@ -74,7 +74,7 @@
 
     .pph-filter-grid {
         display: grid;
-        grid-template-columns: repeat(9, minmax(110px, 1fr));
+        grid-template-columns: repeat(7, minmax(110px, 1fr));
         gap: 12px;
         align-items: end;
     }
@@ -313,12 +313,6 @@
         gap: 18px;
     }
 
-    .three-col {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 18px;
-    }
-
     .small-muted {
         color: var(--pph-muted);
         font-size: 12px;
@@ -348,21 +342,6 @@
         line-height: 1.5;
     }
 
-    .rate-good {
-        color: var(--pph-green);
-        font-weight: 700;
-    }
-
-    .rate-warning {
-        color: var(--pph-orange);
-        font-weight: 700;
-    }
-
-    .rate-danger {
-        color: var(--pph-red);
-        font-weight: 700;
-    }
-
     @media (max-width: 1400px) {
         .pph-filter-grid,
         .pph-kpi-grid {
@@ -370,8 +349,7 @@
         }
 
         .chart-grid,
-        .two-col,
-        .three-col {
+        .two-col {
             grid-template-columns: 1fr;
         }
     }
@@ -407,7 +385,7 @@
         <div>
             <h1 class="pph-title">AIM-PPH Dashboard</h1>
             <div class="pph-subtitle">
-                Professional dashboard for AIM postpartum hemorrhage clinical data, facility progress, oxytocin coverage, PPH burden, QBL distribution, causes of PPH, advanced interventions, transfers, deaths, and data quality.
+                Dashboard for AIM postpartum hemorrhage clinical data, progress comparison, corrected total births, calculated PPH total, QBL distribution, causes of PPH, advanced interventions, and data quality.
             </div>
         </div>
 
@@ -504,27 +482,6 @@
                     </select>
                 </div>
 
-                <div>
-                    <label>AFIAT</label>
-                    <select name="afiat_flag">
-                        <option value="">All</option>
-                        <option value="1" {% if filters.afiat_flag == "1" %}selected{% endif %}>Yes</option>
-                        <option value="0" {% if filters.afiat_flag == "0" %}selected{% endif %}>No</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label>Status</label>
-                    <select name="status">
-                        <option value="">All</option>
-                        {% for s in status_options %}
-                            <option value="{{ s.value }}" {% if filters.status == s.value %}selected{% endif %}>
-                                {{ s.label }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
             </div>
 
             <div style="margin-top:14px;">
@@ -547,36 +504,9 @@
 
         <div class="pph-kpi">
             <div class="pph-kpi-value">{{ kpis.total_births|default:0 }}</div>
-            <div class="pph-kpi-label">Total Births</div>
+            <div class="pph-kpi-label">Corrected Total Births</div>
         </div>
 
-        <div class="pph-kpi">
-            <div class="pph-kpi-value">{{ kpis.oxytocin_rate|default:0 }}%</div>
-            <div class="pph-kpi-label">Oxytocin Coverage</div>
-        </div>
-
-        <div class="pph-kpi">
-            <div class="pph-kpi-value">{{ kpis.pph_total|default:0 }}</div>
-            <div class="pph-kpi-label">Total PPH Cases</div>
-        </div>
-
-        <div class="pph-kpi">
-            <div class="pph-kpi-value">{{ kpis.pph_rate|default:0 }}%</div>
-            <div class="pph-kpi-label">PPH Rate</div>
-        </div>
-
-        <div class="pph-kpi">
-            <div class="pph-kpi-value">{{ kpis.ai_total|default:0 }}</div>
-            <div class="pph-kpi-label">Advanced Interventions</div>
-        </div>
-
-        <div class="pph-kpi">
-            <div class="pph-kpi-value">{{ kpis.ai_rate_among_pph|default:0 }}%</div>
-            <div class="pph-kpi-label">AI among PPH</div>
-        </div>
-    </div>
-
-    <div class="pph-kpi-grid">
         <div class="pph-kpi">
             <div class="pph-kpi-value">{{ kpis.births_vaginal|default:0 }}</div>
             <div class="pph-kpi-label">Vaginal Births</div>
@@ -590,6 +520,23 @@
         <div class="pph-kpi">
             <div class="pph-kpi-value">{{ kpis.csection_rate|default:0 }}%</div>
             <div class="pph-kpi-label">C-section Rate</div>
+        </div>
+
+        <div class="pph-kpi">
+            <div class="pph-kpi-value">{{ kpis.oxytocin_rate|default:0 }}%</div>
+            <div class="pph-kpi-label">Oxytocin Coverage</div>
+        </div>
+
+        <div class="pph-kpi">
+            <div class="pph-kpi-value">{{ kpis.pph_total|default:0 }}</div>
+            <div class="pph-kpi-label">10. Total PPH Cases 6–9</div>
+        </div>
+    </div>
+
+    <div class="pph-kpi-grid">
+        <div class="pph-kpi">
+            <div class="pph-kpi-value">{{ kpis.pph_rate|default:0 }}%</div>
+            <div class="pph-kpi-label">PPH Rate</div>
         </div>
 
         <div class="pph-kpi">
@@ -616,6 +563,16 @@
             <div class="pph-kpi-value">{{ kpis.pph_death_rate_among_pph|default:0 }}%</div>
             <div class="pph-kpi-label">PPH Death Rate among PPH</div>
         </div>
+
+        <div class="pph-kpi">
+            <div class="pph-kpi-value">{{ kpis.ai_total|default:0 }}</div>
+            <div class="pph-kpi-label">Advanced Interventions</div>
+        </div>
+
+        <div class="pph-kpi">
+            <div class="pph-kpi-value">{{ kpis.ai_rate_among_pph|default:0 }}%</div>
+            <div class="pph-kpi-label">AI among PPH</div>
+        </div>
     </div>
 
     <div class="pph-note">
@@ -628,14 +585,14 @@
         <h2>Visual analytics</h2>
 
         <div class="pph-info-note">
-            These charts show AIM-PPH progress using aggregated facility-month records. They compare baseline/progress periods, monthly trends, province performance, facility-level PPH rate, QBL distribution, causes of PPH, and advanced interventions.
+            The dashboard temporarily uses corrected total births and calculated PPH total. Corrected Total Births = Vaginal Births + C-section Births. Total PPH cases = indicators 6–9.
         </div>
 
         <div class="chart-grid">
 
             <div class="chart-card">
                 <h3>Baseline / progress rate comparison</h3>
-                <p>Compares oxytocin coverage, PPH rate, and advanced intervention rate among PPH cases by baseline/progress category.</p>
+                <p>Compares oxytocin coverage, PPH rate, and advanced intervention rate among PPH cases.</p>
                 <div class="chart-box">
                     <canvas id="progressRateChart"></canvas>
                     <div class="chart-empty" id="progressRateChartEmpty">No progress chart data available.</div>
@@ -644,7 +601,7 @@
 
             <div class="chart-card">
                 <h3>Monthly AIM-PPH trend</h3>
-                <p>Shows births, PPH cases, oxytocin use, and advanced interventions over time.</p>
+                <p>Shows corrected births, calculated PPH cases, oxytocin use, and advanced interventions over time.</p>
                 <div class="chart-box">
                     <canvas id="monthlyTrendChart"></canvas>
                     <div class="chart-empty" id="monthlyTrendChartEmpty">No monthly trend data available.</div>
@@ -653,7 +610,7 @@
 
             <div class="chart-card">
                 <h3>Province births, PPH, and advanced interventions</h3>
-                <p>Compares total births, PPH cases, and advanced interventions by province.</p>
+                <p>Compares corrected births, calculated PPH cases, and advanced interventions by province.</p>
                 <div class="chart-box">
                     <canvas id="provincePphChart"></canvas>
                     <div class="chart-empty" id="provincePphChartEmpty">No province chart data available.</div>
@@ -662,7 +619,7 @@
 
             <div class="chart-card">
                 <h3>Top facilities by PPH rate</h3>
-                <p>Highlights facilities with the highest PPH rate among facilities with reported births.</p>
+                <p>Highlights facilities with the highest calculated PPH rate.</p>
                 <div class="chart-box chart-box-large">
                     <canvas id="facilityPphRateChart"></canvas>
                     <div class="chart-empty" id="facilityPphRateChartEmpty">No facility PPH rate data available.</div>
@@ -680,7 +637,7 @@
 
             <div class="chart-card">
                 <h3>Top causes of PPH</h3>
-                <p>Shows the leading documented causes of postpartum hemorrhage.</p>
+                <p>Shows leading documented causes of postpartum hemorrhage.</p>
                 <div class="chart-box chart-box-large">
                     <canvas id="causeChart"></canvas>
                     <div class="chart-empty" id="causeChartEmpty">No cause distribution data available.</div>
@@ -689,10 +646,19 @@
 
             <div class="chart-card">
                 <h3>Advanced interventions</h3>
-                <p>Shows the distribution of advanced interventions conducted for PPH management.</p>
+                <p>Shows advanced interventions conducted for PPH management.</p>
                 <div class="chart-box chart-box-large">
                     <canvas id="aiChart"></canvas>
                     <div class="chart-empty" id="aiChartEmpty">No advanced intervention data available.</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>PRE-I vs PRE-P selected indicators</h3>
+                <p>Shows PRE-I and PRE-P comparison for the first key indicators.</p>
+                <div class="chart-box chart-box-large">
+                    <canvas id="indicatorComparisonChart"></canvas>
+                    <div class="chart-empty" id="indicatorComparisonChartEmpty">No indicator comparison data available.</div>
                 </div>
             </div>
 
@@ -712,12 +678,13 @@
                         <th>Baseline / Progress</th>
                         <th>Records</th>
                         <th>Facilities</th>
-                        <th>Total Births</th>
+                        <th>Corrected Total Births</th>
+                        <th>Vaginal Births</th>
                         <th>C-section Births</th>
                         <th>C-section Rate</th>
                         <th>Oxytocin</th>
                         <th>Oxytocin Rate</th>
-                        <th>PPH Total</th>
+                        <th>10. Total PPH Cases 6–9</th>
                         <th>PPH Rate</th>
                         <th>Transfers Out PPH</th>
                         <th>PPH Deaths</th>
@@ -732,6 +699,7 @@
                             <td>{{ r.records|default:0 }}</td>
                             <td>{{ r.facilities|default:0 }}</td>
                             <td>{{ r.total_births|default:0 }}</td>
+                            <td>{{ r.births_vaginal|default:0 }}</td>
                             <td>{{ r.births_csection|default:0 }}</td>
                             <td>{{ r.csection_rate|default:0 }}%</td>
                             <td>{{ r.oxytocin_immediate|default:0 }}</td>
@@ -745,7 +713,71 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="14">No progress records found for the selected filters.</td>
+                            <td colspan="15">No progress records found for the selected filters.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pph-section">
+        <div class="pph-toolbar">
+            <h2 style="margin-bottom:0;">PRE-I vs PRE-P indicator comparison</h2>
+            <input type="text" class="pph-search" id="indicatorComparisonSearch" placeholder="Search indicator...">
+        </div>
+
+        <div class="pph-info-note">
+            This table compares all AIM-PPH indicators between PRE-I and PRE-P. Total Births is calculated as Vaginal Births + C-section Births, and Total PPH cases is calculated as indicators 6–9.
+        </div>
+
+        <div class="table-scroll">
+            <table class="pph-table" id="indicatorComparisonTable">
+                <thead>
+                    <tr>
+                        <th>Indicator</th>
+                        <th>PRE-I</th>
+                        <th>PRE-P</th>
+                        <th>Change</th>
+                        <th>% Change</th>
+                        <th>Direction</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in indicator_comparison_rows %}
+                        <tr>
+                            <td><strong>{{ r.indicator }}</strong></td>
+                            <td>{{ r.pre_i|default:0 }}</td>
+                            <td>{{ r.pre_p|default:0 }}</td>
+                            <td>
+                                {% if r.change > 0 %}
+                                    <span class="badge badge-green">+{{ r.change }}</span>
+                                {% elif r.change < 0 %}
+                                    <span class="badge badge-red">{{ r.change }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if r.percent_change == "" %}
+                                    -
+                                {% else %}
+                                    {{ r.percent_change }}%
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if r.direction == "Increased" %}
+                                    <span class="badge badge-green">{{ r.direction }}</span>
+                                {% elif r.direction == "Decreased" %}
+                                    <span class="badge badge-orange">{{ r.direction }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">{{ r.direction }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6">No PRE-I or PRE-P comparison records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -766,12 +798,12 @@
                         <th>Province</th>
                         <th>Records</th>
                         <th>Facilities</th>
-                        <th>Total Births</th>
+                        <th>Corrected Total Births</th>
                         <th>Vaginal Births</th>
                         <th>C-section Births</th>
                         <th>C-section Rate</th>
                         <th>Oxytocin Rate</th>
-                        <th>PPH Total</th>
+                        <th>10. Total PPH Cases 6–9</th>
                         <th>PPH Rate</th>
                         <th>Transfers Out PPH</th>
                         <th>PPH Deaths</th>
@@ -822,11 +854,12 @@
                         <th>Period</th>
                         <th>Records</th>
                         <th>Facilities</th>
-                        <th>Total Births</th>
+                        <th>Corrected Total Births</th>
+                        <th>Vaginal Births</th>
                         <th>C-section Births</th>
                         <th>C-section Rate</th>
                         <th>Oxytocin Rate</th>
-                        <th>PPH Total</th>
+                        <th>10. Total PPH Cases 6–9</th>
                         <th>PPH Rate</th>
                         <th>Transfers Out PPH</th>
                         <th>PPH Deaths</th>
@@ -843,6 +876,7 @@
                             <td>{{ r.records|default:0 }}</td>
                             <td>{{ r.facilities|default:0 }}</td>
                             <td>{{ r.total_births|default:0 }}</td>
+                            <td>{{ r.births_vaginal|default:0 }}</td>
                             <td>{{ r.births_csection|default:0 }}</td>
                             <td>{{ r.csection_rate|default:0 }}%</td>
                             <td>{{ r.oxytocin_rate|default:0 }}%</td>
@@ -855,7 +889,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="15">No monthly trend records found.</td>
+                            <td colspan="16">No monthly trend records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -1008,12 +1042,12 @@
                         <th>Facility</th>
                         <th>HF Code</th>
                         <th>Records</th>
-                        <th>Total Births</th>
+                        <th>Corrected Total Births</th>
                         <th>Vaginal Births</th>
                         <th>C-section Births</th>
                         <th>C-section Rate</th>
                         <th>Oxytocin Rate</th>
-                        <th>PPH Total</th>
+                        <th>10. Total PPH Cases 6–9</th>
                         <th>PPH Rate</th>
                         <th>Transfers Out PPH</th>
                         <th>PPH Deaths</th>
@@ -1053,7 +1087,7 @@
         </div>
 
         <div class="pph-footer-note">
-            Facility-level rates are calculated from summed numerators and denominators for the selected records.
+            Facility-level rates are calculated from summed numerators and corrected denominators for the selected records.
         </div>
     </div>
 
@@ -1271,7 +1305,7 @@
                 labels: rows.map(row => row.month),
                 datasets: [
                     {
-                        label: "Births",
+                        label: "Corrected births",
                         data: rows.map(row => Number(row.Births || 0)),
                         borderColor: chartColors.birthsBorder,
                         backgroundColor: chartColors.births,
@@ -1281,7 +1315,7 @@
                         pointHoverRadius: 6
                     },
                     {
-                        label: "PPH",
+                        label: "Calculated PPH",
                         data: rows.map(row => Number(row.PPH || 0)),
                         borderColor: chartColors.pphBorder,
                         backgroundColor: chartColors.pph,
@@ -1331,7 +1365,7 @@
                 labels: rows.map(row => row.province),
                 datasets: [
                     {
-                        label: "Births",
+                        label: "Corrected births",
                         data: rows.map(row => Number(row.Births || 0)),
                         backgroundColor: chartColors.births,
                         borderColor: chartColors.birthsBorder,
@@ -1339,7 +1373,7 @@
                         borderRadius: 6
                     },
                     {
-                        label: "PPH",
+                        label: "Calculated PPH",
                         data: rows.map(row => Number(row.PPH || 0)),
                         backgroundColor: chartColors.pph,
                         borderColor: chartColors.pphBorder,
@@ -1357,6 +1391,42 @@
                 ]
             },
             options: baseOptions(false)
+        });
+    }
+
+    function createIndicatorComparisonChart() {
+        const rows = chartData.indicator_comparison;
+        const canvas = document.getElementById("indicatorComparisonChart");
+
+        if (!canvas || !hasRows(rows)) {
+            showEmpty("indicatorComparisonChart");
+            return;
+        }
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row.indicator),
+                datasets: [
+                    {
+                        label: "PRE-I",
+                        data: rows.map(row => Number(row["PRE-I"] || 0)),
+                        backgroundColor: chartColors.births,
+                        borderColor: chartColors.birthsBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    },
+                    {
+                        label: "PRE-P",
+                        data: rows.map(row => Number(row["PRE-P"] || 0)),
+                        backgroundColor: chartColors.oxytocin,
+                        borderColor: chartColors.oxytocinBorder,
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: horizontalOptions(false)
         });
     }
 
@@ -1432,18 +1502,20 @@
         showEmpty("qblChart");
         showEmpty("causeChart");
         showEmpty("aiChart");
+        showEmpty("indicatorComparisonChart");
         console.error("Chart.js did not load. Please check internet access or use a local Chart.js static file.");
     } else {
         createProgressRateChart();
         createMonthlyTrendChart();
         createProvincePphChart();
+        createIndicatorComparisonChart();
 
         createSingleHorizontalChart(
             "facilityPphRateChart",
             chartData.facility_pph_rate,
             "facility",
             "PPH rate",
-            "PPH rate",
+            "Calculated PPH rate",
             "pph",
             true
         );
@@ -1480,6 +1552,7 @@
     }
 
     enableTableSearch("progressSearch", "progressTable");
+    enableTableSearch("indicatorComparisonSearch", "indicatorComparisonTable");
     enableTableSearch("provinceSearch", "provinceTable");
     enableTableSearch("monthlySearch", "monthlyTable");
     enableTableSearch("facilitySearch", "facilityTable");
