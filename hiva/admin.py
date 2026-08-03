@@ -1,4 +1,5 @@
 from urllib.parse import urlencode
+from django.db.models import Sum, Count, F
 import openpyxl
 from datetime import datetime
 from django.http import HttpResponse
@@ -57,7 +58,7 @@ from .models import (
     Participationtype,
     Position,
     WhoChildbirthChecklistMonthly,
-    QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear
+    QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, AimPPHDashboard,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -1405,6 +1406,916 @@ class AimpphAdmin(
 
         return response
 
+@admin.register(AimPPHDashboard)
+class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/aimpph/dashboard.html"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    # ------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------
+    def _province_id(self, request):
+        province = user_province(request)
+        return getattr(province, "id", province) if province else None
+
+    def _safe_int(self, value):
+        try:
+            return int(value or 0)
+        except Exception:
+            return 0
+
+    def _safe_rate(self, numerator, denominator, decimals=1):
+        numerator = self._safe_int(numerator)
+        denominator = self._safe_int(denominator)
+        if denominator <= 0:
+            return 0
+        return round((numerator / denominator) * 100, decimals)
+
+    def _sum_fields(self, queryset, fields):
+        aggregation = {
+            field: Sum(field)
+            for field in fields
+        }
+
+        result = queryset.aggregate(**aggregation)
+
+        return {
+            field: self._safe_int(result.get(field))
+            for field in fields
+        }
+
+    def changelist_view(self, request, extra_context=None):
+        data = self._build_dashboard_data(request)
+
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "AIM-PPH Dashboard",
+            **data,
+        }
+
+        return TemplateResponse(
+            request,
+            self.change_list_template,
+            context,
+        )
+
+    def _base_queryset(self, request):
+        queryset = aimpph.objects.select_related(
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+        province_id = self._province_id(request)
+
+        if province_id and not request.user.is_superuser:
+            queryset = queryset.filter(
+                aimfacilityname__districtfk__provincefk_id=province_id
+            )
+
+        return queryset
+
+    def _apply_filters(self, request, queryset):
+        province_id = request.GET.get("province", "").strip()
+        facility_id = request.GET.get("facility", "").strip()
+        gre_year = request.GET.get("gre_year", "").strip()
+        gre_month = request.GET.get("gre_month", "").strip()
+        shamsiyear = request.GET.get("shamsiyear", "").strip()
+        shamsimonth = request.GET.get("shamsimonth", "").strip()
+        bl_progress = request.GET.get("bl_progress", "").strip()
+        afiat_flag = request.GET.get("afiat_flag", "").strip()
+        status = request.GET.get("status", "").strip()
+
+        if province_id:
+            queryset = queryset.filter(
+                aimfacilityname__districtfk__provincefk_id=province_id
+            )
+
+        if facility_id:
+            queryset = queryset.filter(aimfacilityname_id=facility_id)
+
+        if gre_year:
+            queryset = queryset.filter(gre_year=gre_year)
+
+        if gre_month:
+            queryset = queryset.filter(gre_month=gre_month)
+
+        if shamsiyear:
+            queryset = queryset.filter(shamsiyear=shamsiyear)
+
+        if shamsimonth:
+            queryset = queryset.filter(shamsimonth=shamsimonth)
+
+        if bl_progress:
+            queryset = queryset.filter(bl_progress=bl_progress)
+
+        if afiat_flag in ("1", "0"):
+            queryset = queryset.filter(afiat_flag=(afiat_flag == "1"))
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        filters = {
+            "province": province_id,
+            "facility": facility_id,
+            "gre_year": gre_year,
+            "gre_month": gre_month,
+            "shamsiyear": shamsiyear,
+            "shamsimonth": shamsimonth,
+            "bl_progress": bl_progress,
+            "afiat_flag": afiat_flag,
+            "status": status,
+        }
+
+        return queryset, filters
+
+    def _build_dashboard_data(self, request):
+        base_qs = self._base_queryset(request)
+        queryset, filters = self._apply_filters(request, base_qs)
+
+        # ------------------------------------------------------------
+        # Filter options
+        # ------------------------------------------------------------
+        province_options = [
+            {
+                "province_id": row["aimfacilityname__districtfk__provincefk_id"],
+                "province": row["aimfacilityname__districtfk__provincefk__name"] or "",
+            }
+            for row in (
+                base_qs
+                .exclude(aimfacilityname__districtfk__provincefk_id__isnull=True)
+                .values(
+                    "aimfacilityname__districtfk__provincefk_id",
+                    "aimfacilityname__districtfk__provincefk__name",
+                )
+                .distinct()
+                .order_by("aimfacilityname__districtfk__provincefk__name")
+            )
+        ]
+
+        facility_options = [
+            {
+                "facility_id": row["aimfacilityname_id"],
+                "facility": row["aimfacilityname__name"] or "",
+            }
+            for row in (
+                base_qs
+                .exclude(aimfacilityname_id__isnull=True)
+                .values("aimfacilityname_id", "aimfacilityname__name")
+                .distinct()
+                .order_by("aimfacilityname__name")
+            )
+        ]
+
+        gre_year_options = list(
+            base_qs.values_list("gre_year", flat=True)
+            .exclude(gre_year__isnull=True)
+            .exclude(gre_year="")
+            .distinct()
+            .order_by("gre_year")
+        )
+
+        gre_month_options = list(
+            base_qs.values_list("gre_month", flat=True)
+            .exclude(gre_month__isnull=True)
+            .exclude(gre_month="")
+            .distinct()
+            .order_by("gre_month")
+        )
+
+        shamsiyear_options = list(
+            base_qs.values_list("shamsiyear", flat=True)
+            .exclude(shamsiyear__isnull=True)
+            .exclude(shamsiyear="")
+            .distinct()
+            .order_by("shamsiyear")
+        )
+
+        shamsimonth_options = list(
+            base_qs.values_list("shamsimonth", flat=True)
+            .exclude(shamsimonth__isnull=True)
+            .exclude(shamsimonth="")
+            .distinct()
+            .order_by("shamsimonth")
+        )
+
+        bl_progress_options = list(
+            base_qs.values_list("bl_progress", flat=True)
+            .exclude(bl_progress__isnull=True)
+            .exclude(bl_progress="")
+            .distinct()
+            .order_by("bl_progress")
+        )
+
+        status_options = [
+            {"value": "draft", "label": "Draft"},
+            {"value": "submitted", "label": "Submitted"},
+        ]
+
+        # ------------------------------------------------------------
+        # Indicator fields
+        # ------------------------------------------------------------
+        indicator_fields = [
+            "total_births",
+            "births_vaginal",
+            "births_csection",
+            "oxytocin_immediate",
+            "antepartum_hemorrhage",
+            "pph_vaginal_501_999",
+            "pph_cs_1000_plus",
+            "pph_referral_in_outside_aim",
+            "pph_referral_in_aim",
+            "pph_total",
+            "qbl_0_500",
+            "qbl_501_999",
+            "qbl_1000_1499",
+            "qbl_1500_1999",
+            "qbl_2000_2499",
+            "qbl_2500_plus",
+            "qbl_unknown",
+            "qbl_total",
+            "transfers_out_pph",
+            "maternal_death_pph_transfer",
+            "maternal_death_other_transfer",
+            "maternal_death_total_transfer",
+            "cause_uterine_atony",
+            "cause_severe_lacerations",
+            "cause_retained_products",
+            "cause_dic",
+            "cause_ruptured_uterus",
+            "cause_abruption",
+            "cause_placenta_previa",
+            "cause_placenta_accreta",
+            "cause_other",
+            "cause_unknown",
+            "causes_total",
+            "pph_medication_uterotonic",
+            "ai_uterine_compression",
+            "ai_manual_placenta",
+            "ai_aortic_compression",
+            "ai_ubt",
+            "ai_lac_repair",
+            "ai_blynch_ual",
+            "ai_nasg",
+            "ai_ruptured_uterus_repair",
+            "ai_pph_hysterectomy",
+            "ai_hysterectomy_other",
+            "ai_total",
+        ]
+
+        totals = self._sum_fields(queryset, indicator_fields)
+
+        # ------------------------------------------------------------
+        # KPI cards
+        # ------------------------------------------------------------
+        kpis = {
+            "records": queryset.count(),
+            "facilities": queryset.values("aimfacilityname_id").distinct().count(),
+            "provinces": queryset.values("aimfacilityname__districtfk__provincefk_id").distinct().count(),
+            "total_births": totals["total_births"],
+            "births_vaginal": totals["births_vaginal"],
+            "births_csection": totals["births_csection"],
+            "oxytocin_immediate": totals["oxytocin_immediate"],
+            "pph_total": totals["pph_total"],
+            "qbl_total": totals["qbl_total"],
+            "transfers_out_pph": totals["transfers_out_pph"],
+            "maternal_death_pph_transfer": totals["maternal_death_pph_transfer"],
+            "ai_total": totals["ai_total"],
+        }
+
+        kpis["csection_rate"] = self._safe_rate(
+            kpis["births_csection"],
+            kpis["total_births"],
+        )
+        kpis["oxytocin_rate"] = self._safe_rate(
+            kpis["oxytocin_immediate"],
+            kpis["total_births"],
+        )
+        kpis["pph_rate"] = self._safe_rate(
+            kpis["pph_total"],
+            kpis["total_births"],
+        )
+        kpis["transfer_rate_among_pph"] = self._safe_rate(
+            kpis["transfers_out_pph"],
+            kpis["pph_total"],
+        )
+        kpis["ai_rate_among_pph"] = self._safe_rate(
+            kpis["ai_total"],
+            kpis["pph_total"],
+        )
+        kpis["pph_death_rate_among_pph"] = self._safe_rate(
+            kpis["maternal_death_pph_transfer"],
+            kpis["pph_total"],
+        )
+
+        # ------------------------------------------------------------
+        # Progress rows: baseline/progress comparison
+        # ------------------------------------------------------------
+        progress_rows = list(
+            queryset.values("bl_progress")
+            .annotate(
+                records=Count("id"),
+                facilities=Count("aimfacilityname", distinct=True),
+                total_births=Sum("total_births"),
+                births_csection=Sum("births_csection"),
+                oxytocin_immediate=Sum("oxytocin_immediate"),
+                pph_total=Sum("pph_total"),
+                transfers_out_pph=Sum("transfers_out_pph"),
+                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
+                ai_total=Sum("ai_total"),
+            )
+            .order_by("bl_progress")
+        )
+
+        for r in progress_rows:
+            r["total_births"] = self._safe_int(r["total_births"])
+            r["births_csection"] = self._safe_int(r["births_csection"])
+            r["oxytocin_immediate"] = self._safe_int(r["oxytocin_immediate"])
+            r["pph_total"] = self._safe_int(r["pph_total"])
+            r["transfers_out_pph"] = self._safe_int(r["transfers_out_pph"])
+            r["maternal_death_pph_transfer"] = self._safe_int(r["maternal_death_pph_transfer"])
+            r["ai_total"] = self._safe_int(r["ai_total"])
+
+            r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
+            r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
+            r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["transfer_rate"] = self._safe_rate(r["transfers_out_pph"], r["pph_total"])
+            r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
+
+        # ------------------------------------------------------------
+        # Province summary
+        # ------------------------------------------------------------
+        province_rows = list(
+            queryset.values(
+                province=F("aimfacilityname__districtfk__provincefk__name"),
+            )
+            .annotate(
+                records=Count("id"),
+                facilities=Count("aimfacilityname", distinct=True),
+                total_births=Sum("total_births"),
+                births_vaginal=Sum("births_vaginal"),
+                births_csection=Sum("births_csection"),
+                oxytocin_immediate=Sum("oxytocin_immediate"),
+                pph_total=Sum("pph_total"),
+                transfers_out_pph=Sum("transfers_out_pph"),
+                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
+                ai_total=Sum("ai_total"),
+            )
+            .order_by("province")
+        )
+
+        for r in province_rows:
+            for field in [
+                "records", "facilities", "total_births", "births_vaginal",
+                "births_csection", "oxytocin_immediate", "pph_total",
+                "transfers_out_pph", "maternal_death_pph_transfer", "ai_total",
+            ]:
+                r[field] = self._safe_int(r.get(field))
+
+            r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
+            r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
+            r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
+
+        # ------------------------------------------------------------
+        # Facility summary
+        # ------------------------------------------------------------
+        facility_rows = list(
+            queryset.values(
+                province=F("aimfacilityname__districtfk__provincefk__name"),
+                district=F("aimfacilityname__districtfk__name"),
+                facility=F("aimfacilityname__name"),
+                hfcode=F("aimfacilityname__hfcode"),
+            )
+            .annotate(
+                records=Count("id"),
+                total_births=Sum("total_births"),
+                births_vaginal=Sum("births_vaginal"),
+                births_csection=Sum("births_csection"),
+                oxytocin_immediate=Sum("oxytocin_immediate"),
+                pph_total=Sum("pph_total"),
+                transfers_out_pph=Sum("transfers_out_pph"),
+                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
+                ai_total=Sum("ai_total"),
+            )
+            .order_by("province", "district", "facility")
+        )
+
+        for r in facility_rows:
+            for field in [
+                "records", "total_births", "births_vaginal",
+                "births_csection", "oxytocin_immediate", "pph_total",
+                "transfers_out_pph", "maternal_death_pph_transfer", "ai_total",
+            ]:
+                r[field] = self._safe_int(r.get(field))
+
+            r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
+            r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
+            r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
+
+            if r["pph_total"] > 0 and r["ai_total"] == 0:
+                r["interpretation"] = "PPH cases reported, but no advanced intervention recorded."
+            elif r["pph_total"] == 0:
+                r["interpretation"] = "No PPH cases reported for selected filters."
+            elif r["ai_total"] > 0:
+                r["interpretation"] = "PPH and advanced intervention activity recorded."
+            else:
+                r["interpretation"] = "Review facility records for completeness."
+
+        facility_rows_top_pph = sorted(
+            facility_rows,
+            key=lambda x: x["pph_total"],
+            reverse=True,
+        )[:25]
+
+        facility_rows_top_pph_rate = sorted(
+            [r for r in facility_rows if r["total_births"] > 0],
+            key=lambda x: x["pph_rate"],
+            reverse=True,
+        )[:25]
+
+        # ------------------------------------------------------------
+        # Monthly trend
+        # ------------------------------------------------------------
+        monthly_rows = list(
+            queryset.values("gre_year", "gre_month", "period")
+            .annotate(
+                records=Count("id"),
+                facilities=Count("aimfacilityname", distinct=True),
+                total_births=Sum("total_births"),
+                births_csection=Sum("births_csection"),
+                oxytocin_immediate=Sum("oxytocin_immediate"),
+                pph_total=Sum("pph_total"),
+                transfers_out_pph=Sum("transfers_out_pph"),
+                maternal_death_pph_transfer=Sum("maternal_death_pph_transfer"),
+                ai_total=Sum("ai_total"),
+            )
+            .order_by("gre_year", "gre_month", "period")
+        )
+
+        for r in monthly_rows:
+            for field in [
+                "records", "facilities", "total_births", "births_csection",
+                "oxytocin_immediate", "pph_total", "transfers_out_pph",
+                "maternal_death_pph_transfer", "ai_total",
+            ]:
+                r[field] = self._safe_int(r.get(field))
+
+            r["month_label"] = f"{r.get('gre_month') or ''} {r.get('gre_year') or ''}".strip() or r.get("period") or "Unknown"
+            r["csection_rate"] = self._safe_rate(r["births_csection"], r["total_births"])
+            r["oxytocin_rate"] = self._safe_rate(r["oxytocin_immediate"], r["total_births"])
+            r["pph_rate"] = self._safe_rate(r["pph_total"], r["total_births"])
+            r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
+
+        # ------------------------------------------------------------
+        # Distribution tables
+        # ------------------------------------------------------------
+        qbl_rows = [
+            {"category": "0–500 ml", "value": totals["qbl_0_500"]},
+            {"category": "501–999 ml", "value": totals["qbl_501_999"]},
+            {"category": "1000–1499 ml", "value": totals["qbl_1000_1499"]},
+            {"category": "1500–1999 ml", "value": totals["qbl_1500_1999"]},
+            {"category": "2000–2499 ml", "value": totals["qbl_2000_2499"]},
+            {"category": ">2500 ml", "value": totals["qbl_2500_plus"]},
+            {"category": "Unknown", "value": totals["qbl_unknown"]},
+        ]
+
+        cause_rows = [
+            {"category": "Uterine atony", "value": totals["cause_uterine_atony"]},
+            {"category": "Severe lacerations", "value": totals["cause_severe_lacerations"]},
+            {"category": "Retained products", "value": totals["cause_retained_products"]},
+            {"category": "DIC", "value": totals["cause_dic"]},
+            {"category": "Ruptured uterus", "value": totals["cause_ruptured_uterus"]},
+            {"category": "Abruption placenta", "value": totals["cause_abruption"]},
+            {"category": "Placenta previa", "value": totals["cause_placenta_previa"]},
+            {"category": "Placenta accreta", "value": totals["cause_placenta_accreta"]},
+            {"category": "Other", "value": totals["cause_other"]},
+            {"category": "Unknown", "value": totals["cause_unknown"]},
+        ]
+
+        ai_rows = [
+            {"category": "Uterine compression", "value": totals["ai_uterine_compression"]},
+            {"category": "Manual placenta removal", "value": totals["ai_manual_placenta"]},
+            {"category": "Aortic compression", "value": totals["ai_aortic_compression"]},
+            {"category": "UBT", "value": totals["ai_ubt"]},
+            {"category": "Laceration repair", "value": totals["ai_lac_repair"]},
+            {"category": "B-Lynch / UAL", "value": totals["ai_blynch_ual"]},
+            {"category": "NASG", "value": totals["ai_nasg"]},
+            {"category": "Ruptured uterus repair", "value": totals["ai_ruptured_uterus_repair"]},
+            {"category": "PPH hysterectomy", "value": totals["ai_pph_hysterectomy"]},
+            {"category": "Hysterectomy other causes", "value": totals["ai_hysterectomy_other"]},
+        ]
+
+        # ------------------------------------------------------------
+        # Data quality checks
+        # ------------------------------------------------------------
+        data_quality_rows = []
+
+        for obj in queryset:
+            facility = obj.aimfacilityname
+            district = facility.districtfk if facility else None
+            province = district.provincefk if district else None
+
+            issues = []
+
+            pph_components = (
+                self._safe_int(obj.pph_vaginal_501_999)
+                + self._safe_int(obj.pph_cs_1000_plus)
+                + self._safe_int(obj.pph_referral_in_outside_aim)
+                + self._safe_int(obj.pph_referral_in_aim)
+            )
+
+            qbl_components = (
+                self._safe_int(obj.qbl_0_500)
+                + self._safe_int(obj.qbl_501_999)
+                + self._safe_int(obj.qbl_1000_1499)
+                + self._safe_int(obj.qbl_1500_1999)
+                + self._safe_int(obj.qbl_2000_2499)
+                + self._safe_int(obj.qbl_2500_plus)
+                + self._safe_int(obj.qbl_unknown)
+            )
+
+            cause_components = (
+                self._safe_int(obj.cause_uterine_atony)
+                + self._safe_int(obj.cause_severe_lacerations)
+                + self._safe_int(obj.cause_retained_products)
+                + self._safe_int(obj.cause_dic)
+                + self._safe_int(obj.cause_ruptured_uterus)
+                + self._safe_int(obj.cause_abruption)
+                + self._safe_int(obj.cause_placenta_previa)
+                + self._safe_int(obj.cause_placenta_accreta)
+                + self._safe_int(obj.cause_other)
+                + self._safe_int(obj.cause_unknown)
+            )
+
+            ai_components = (
+                self._safe_int(obj.ai_uterine_compression)
+                + self._safe_int(obj.ai_manual_placenta)
+                + self._safe_int(obj.ai_aortic_compression)
+                + self._safe_int(obj.ai_ubt)
+                + self._safe_int(obj.ai_lac_repair)
+                + self._safe_int(obj.ai_blynch_ual)
+                + self._safe_int(obj.ai_nasg)
+                + self._safe_int(obj.ai_ruptured_uterus_repair)
+                + self._safe_int(obj.ai_pph_hysterectomy)
+                + self._safe_int(obj.ai_hysterectomy_other)
+            )
+
+            birth_components = (
+                self._safe_int(obj.births_vaginal)
+                + self._safe_int(obj.births_csection)
+            )
+
+            death_components = (
+                self._safe_int(obj.maternal_death_pph_transfer)
+                + self._safe_int(obj.maternal_death_other_transfer)
+            )
+
+            if self._safe_int(obj.total_births) != birth_components:
+                issues.append("Total births does not equal vaginal + C-section births")
+
+            if self._safe_int(obj.pph_total) != pph_components:
+                issues.append("PPH total does not equal indicators 6–9")
+
+            if self._safe_int(obj.qbl_total) != qbl_components:
+                issues.append("QBL total does not equal QBL category sum")
+
+            if self._safe_int(obj.causes_total) != cause_components:
+                issues.append("Causes total does not equal cause category sum")
+
+            if self._safe_int(obj.ai_total) != ai_components:
+                issues.append("AI total does not equal advanced intervention category sum")
+
+            if self._safe_int(obj.maternal_death_total_transfer) != death_components:
+                issues.append("Maternal death total does not equal PPH + other maternal deaths")
+
+            if self._safe_int(obj.pph_total) > self._safe_int(obj.total_births):
+                issues.append("PPH total is higher than total births")
+
+            if issues:
+                data_quality_rows.append({
+                    "id": obj.id,
+                    "province": getattr(province, "name", ""),
+                    "district": getattr(district, "name", ""),
+                    "facility": getattr(facility, "name", ""),
+                    "hfcode": getattr(facility, "hfcode", ""),
+                    "period": obj.period,
+                    "bl_progress": obj.bl_progress,
+                    "issues": "; ".join(issues),
+                })
+
+        # ------------------------------------------------------------
+        # Chart data
+        # ------------------------------------------------------------
+        chart_data = {
+            "progress_rates": [
+                {
+                    "progress": r.get("bl_progress") or "Unknown",
+                    "Oxytocin rate": float(r.get("oxytocin_rate") or 0),
+                    "PPH rate": float(r.get("pph_rate") or 0),
+                    "AI among PPH": float(r.get("ai_rate") or 0),
+                }
+                for r in progress_rows
+            ],
+            "monthly_trend": [
+                {
+                    "month": r.get("month_label") or "Unknown",
+                    "Births": int(r.get("total_births") or 0),
+                    "PPH": int(r.get("pph_total") or 0),
+                    "Oxytocin": int(r.get("oxytocin_immediate") or 0),
+                    "AI": int(r.get("ai_total") or 0),
+                }
+                for r in monthly_rows
+            ],
+            "province_pph": [
+                {
+                    "province": r.get("province") or "Unknown",
+                    "Births": int(r.get("total_births") or 0),
+                    "PPH": int(r.get("pph_total") or 0),
+                    "AI": int(r.get("ai_total") or 0),
+                }
+                for r in province_rows
+            ],
+            "facility_pph_rate": [
+                {
+                    "facility": (r.get("facility") or "Unknown")[:38],
+                    "PPH rate": float(r.get("pph_rate") or 0),
+                }
+                for r in facility_rows_top_pph_rate[:10]
+            ],
+            "qbl_distribution": [
+                {"category": r["category"], "value": int(r["value"] or 0)}
+                for r in qbl_rows
+            ],
+            "cause_distribution": [
+                {"category": r["category"], "value": int(r["value"] or 0)}
+                for r in sorted(cause_rows, key=lambda x: x["value"], reverse=True)[:10]
+            ],
+            "ai_distribution": [
+                {"category": r["category"], "value": int(r["value"] or 0)}
+                for r in sorted(ai_rows, key=lambda x: x["value"], reverse=True)[:10]
+            ],
+        }
+
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+
+        return {
+            "filters": filters,
+            "export_query": export_query.urlencode(),
+            "province_options": province_options,
+            "facility_options": facility_options,
+            "gre_year_options": gre_year_options,
+            "gre_month_options": gre_month_options,
+            "shamsiyear_options": shamsiyear_options,
+            "shamsimonth_options": shamsimonth_options,
+            "bl_progress_options": bl_progress_options,
+            "status_options": status_options,
+            "kpis": kpis,
+            "progress_rows": progress_rows,
+            "province_rows": province_rows,
+            "facility_rows": facility_rows,
+            "facility_rows_top_pph": facility_rows_top_pph,
+            "facility_rows_top_pph_rate": facility_rows_top_pph_rate,
+            "monthly_rows": monthly_rows,
+            "qbl_rows": qbl_rows,
+            "cause_rows": sorted(cause_rows, key=lambda x: x["value"], reverse=True),
+            "ai_rows": sorted(ai_rows, key=lambda x: x["value"], reverse=True),
+            "data_quality_rows": data_quality_rows,
+            "chart_data": chart_data,
+            "methodology_note": (
+                "AIM-PPH dashboard indicators are aggregated from submitted facility-month records. "
+                "Rates are calculated using summed numerators and denominators for the selected filters. "
+                "PPH rate uses PPH total divided by total births; oxytocin rate uses oxytocin immediately after birth divided by total births; "
+                "advanced intervention rate uses total advanced interventions divided by total PPH cases."
+            ),
+        }
+
+    def _export_dashboard_excel(self, data):
+        wb = Workbook()
+
+        def style_sheet(ws):
+            header_fill = PatternFill("solid", fgColor="1F4E78")
+            header_font = Font(color="FFFFFF", bold=True)
+            border = Border(
+                left=Side(style="thin", color="D9E2F3"),
+                right=Side(style="thin", color="D9E2F3"),
+                top=Side(style="thin", color="D9E2F3"),
+                bottom=Side(style="thin", color="D9E2F3"),
+            )
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = border
+
+            for row in ws.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            for col in ws.columns:
+                max_length = 0
+                col_letter = get_column_letter(col[0].column)
+
+                for cell in col:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 50)
+
+        ws = wb.active
+        ws.title = "Progress_Summary"
+        ws.append([
+            "Baseline / Progress", "Records", "Facilities", "Total Births",
+            "C-section Births", "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
+            "PPH Total", "PPH Rate %", "Transfers Out PPH",
+            "Maternal Death PPH Transfer", "Advanced Interventions", "AI among PPH %",
+        ])
+
+        for r in data["progress_rows"]:
+            ws.append([
+                r.get("bl_progress"),
+                r.get("records"),
+                r.get("facilities"),
+                r.get("total_births"),
+                r.get("births_csection"),
+                r.get("csection_rate"),
+                r.get("oxytocin_immediate"),
+                r.get("oxytocin_rate"),
+                r.get("pph_total"),
+                r.get("pph_rate"),
+                r.get("transfers_out_pph"),
+                r.get("maternal_death_pph_transfer"),
+                r.get("ai_total"),
+                r.get("ai_rate"),
+            ])
+
+        ws2 = wb.create_sheet("Province_Summary")
+        ws2.append([
+            "Province", "Records", "Facilities", "Total Births",
+            "Vaginal Births", "C-section Births", "C-section Rate %",
+            "Oxytocin", "Oxytocin Rate %", "PPH Total", "PPH Rate %",
+            "Transfers Out PPH", "Maternal Death PPH Transfer",
+            "Advanced Interventions", "AI among PPH %",
+        ])
+
+        for r in data["province_rows"]:
+            ws2.append([
+                r.get("province"),
+                r.get("records"),
+                r.get("facilities"),
+                r.get("total_births"),
+                r.get("births_vaginal"),
+                r.get("births_csection"),
+                r.get("csection_rate"),
+                r.get("oxytocin_immediate"),
+                r.get("oxytocin_rate"),
+                r.get("pph_total"),
+                r.get("pph_rate"),
+                r.get("transfers_out_pph"),
+                r.get("maternal_death_pph_transfer"),
+                r.get("ai_total"),
+                r.get("ai_rate"),
+            ])
+
+        ws3 = wb.create_sheet("Facility_Summary")
+        ws3.append([
+            "Province", "District", "Facility", "HF Code", "Records",
+            "Total Births", "Vaginal Births", "C-section Births",
+            "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
+            "PPH Total", "PPH Rate %", "Transfers Out PPH",
+            "Maternal Death PPH Transfer", "Advanced Interventions",
+            "AI among PPH %", "Interpretation",
+        ])
+
+        for r in data["facility_rows"]:
+            ws3.append([
+                r.get("province"),
+                r.get("district"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("records"),
+                r.get("total_births"),
+                r.get("births_vaginal"),
+                r.get("births_csection"),
+                r.get("csection_rate"),
+                r.get("oxytocin_immediate"),
+                r.get("oxytocin_rate"),
+                r.get("pph_total"),
+                r.get("pph_rate"),
+                r.get("transfers_out_pph"),
+                r.get("maternal_death_pph_transfer"),
+                r.get("ai_total"),
+                r.get("ai_rate"),
+                r.get("interpretation"),
+            ])
+
+        ws4 = wb.create_sheet("Monthly_Trend")
+        ws4.append([
+            "Gregorian Year", "Gregorian Month", "Period", "Records",
+            "Facilities", "Total Births", "C-section Births",
+            "C-section Rate %", "Oxytocin", "Oxytocin Rate %",
+            "PPH Total", "PPH Rate %", "Transfers Out PPH",
+            "Maternal Death PPH Transfer", "Advanced Interventions",
+            "AI among PPH %",
+        ])
+
+        for r in data["monthly_rows"]:
+            ws4.append([
+                r.get("gre_year"),
+                r.get("gre_month"),
+                r.get("period"),
+                r.get("records"),
+                r.get("facilities"),
+                r.get("total_births"),
+                r.get("births_csection"),
+                r.get("csection_rate"),
+                r.get("oxytocin_immediate"),
+                r.get("oxytocin_rate"),
+                r.get("pph_total"),
+                r.get("pph_rate"),
+                r.get("transfers_out_pph"),
+                r.get("maternal_death_pph_transfer"),
+                r.get("ai_total"),
+                r.get("ai_rate"),
+            ])
+
+        ws5 = wb.create_sheet("QBL_Distribution")
+        ws5.append(["QBL Category", "Count"])
+        for r in data["qbl_rows"]:
+            ws5.append([r.get("category"), r.get("value")])
+
+        ws6 = wb.create_sheet("Cause_Distribution")
+        ws6.append(["Cause of PPH", "Count"])
+        for r in data["cause_rows"]:
+            ws6.append([r.get("category"), r.get("value")])
+
+        ws7 = wb.create_sheet("Advanced_Interventions")
+        ws7.append(["Advanced Intervention", "Count"])
+        for r in data["ai_rows"]:
+            ws7.append([r.get("category"), r.get("value")])
+
+        ws8 = wb.create_sheet("Data_Quality")
+        ws8.append([
+            "Record ID", "Province", "District", "Facility", "HF Code",
+            "Period", "Baseline / Progress", "Issue",
+        ])
+
+        for r in data["data_quality_rows"]:
+            ws8.append([
+                r.get("id"),
+                r.get("province"),
+                r.get("district"),
+                r.get("facility"),
+                r.get("hfcode"),
+                r.get("period"),
+                r.get("bl_progress"),
+                r.get("issues"),
+            ])
+
+        ws9 = wb.create_sheet("Methodology_Notes")
+        ws9.append(["Topic", "Explanation"])
+        ws9.append(["Dashboard methodology", data["methodology_note"]])
+        ws9.append(["Data quality checks", "The dashboard checks whether calculated totals match their component indicators."])
+
+        for sheet in wb.worksheets:
+            style_sheet(sheet)
+
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        filename = f"AIM_PPH_Dashboard_{timestamp}.xlsx"
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response
+    
 # ============================================================
 # WHO Childbirth Checklist Monthly
 # ============================================================

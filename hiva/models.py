@@ -1542,6 +1542,12 @@ class aimpph(models.Model):
 
     def __str__(self):
         return f"AIM-PPH #{self.id}"
+
+class AimPPHDashboard(aimpph):
+    class Meta:
+        proxy = True
+        verbose_name = "AIM-PPH DASHBOARD"
+        verbose_name_plural = "AIM-PPH DASHBOARD"
     
 class WhoChildbirthChecklistMonthly(models.Model):
 
