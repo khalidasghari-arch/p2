@@ -272,9 +272,35 @@
         background: #eef6ff;
     }
 
+    .pph-comparison-table th {
+        background: #1f4e78;
+        color: #ffffff;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .pph-comparison-table td:nth-child(3) {
+        min-width: 380px;
+    }
+
+    .pph-comparison-table td:nth-child(10),
+    .pph-comparison-table td:nth-child(11) {
+        min-width: 260px;
+    }
+
+    .pph-comparison-table tr:nth-child(even) {
+        background: #c7ecf7;
+    }
+
+    .pph-comparison-table tr:nth-child(odd) {
+        background: #ffffff;
+    }
+
     .table-scroll {
         overflow-x: auto;
         max-width: 100%;
+        max-height: 620px;
     }
 
     .badge {
@@ -585,7 +611,9 @@
         <h2>Visual analytics</h2>
 
         <div class="pph-info-note">
-            The dashboard temporarily uses corrected total births and calculated PPH total. Corrected Total Births = Vaginal Births + C-section Births. Total PPH cases = indicators 6–9.
+            The dashboard temporarily uses corrected total births and calculated PPH total.
+            Corrected Total Births = Vaginal Births + C-section Births.
+            Total PPH cases = indicators 6–9.
         </div>
 
         <div class="chart-grid">
@@ -655,13 +683,92 @@
 
             <div class="chart-card">
                 <h3>PRE-I vs PRE-P selected indicators</h3>
-                <p>Shows PRE-I and PRE-P comparison for the first key indicators.</p>
+                <p>Shows PRE-I and PRE-P comparison for selected key indicators.</p>
                 <div class="chart-box chart-box-large">
                     <canvas id="indicatorComparisonChart"></canvas>
                     <div class="chart-empty" id="indicatorComparisonChartEmpty">No indicator comparison data available.</div>
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <div class="pph-section">
+        <div class="pph-toolbar">
+            <h2 style="margin-bottom:0;">Facility-level PRE-I vs PRE-P indicator comparison</h2>
+            <input type="text" class="pph-search" id="indicatorComparisonSearch" placeholder="Search province, facility, indicator, status...">
+        </div>
+
+        <div class="pph-info-note">
+            This table compares each AIM-PPH indicator by facility between PRE-I and PRE-P.
+            Corrected Total Births is calculated as Vaginal Births + C-section Births.
+            Total PPH cases is calculated as indicators 6–9.
+        </div>
+
+        <div class="table-scroll">
+            <table class="pph-table pph-comparison-table" id="indicatorComparisonTable">
+                <thead>
+                    <tr>
+                        <th>Province</th>
+                        <th>Facility Name</th>
+                        <th>Indicator</th>
+                        <th>PRE_I</th>
+                        <th>PRE_P</th>
+                        <th>Absolute Change</th>
+                        <th>Percent Change</th>
+                        <th>Direction</th>
+                        <th>Improvement Status</th>
+                        <th>Story Use</th>
+                        <th>Notes for Field Verification</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for r in indicator_comparison_rows %}
+                        <tr>
+                            <td>{{ r.province }}</td>
+                            <td>{{ r.facility }}</td>
+                            <td><strong>{{ r.indicator }}</strong></td>
+                            <td>{{ r.pre_i|default:0 }}</td>
+                            <td>{{ r.pre_p|default:0 }}</td>
+                            <td>
+                                {% if r.absolute_change > 0 %}
+                                    <span class="badge badge-green">+{{ r.absolute_change }}</span>
+                                {% elif r.absolute_change < 0 %}
+                                    <span class="badge badge-red">{{ r.absolute_change }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if r.percent_change_display == "New" %}
+                                    <span class="badge badge-blue">New</span>
+                                {% else %}
+                                    {{ r.percent_change_display }}%
+                                {% endif %}
+                            </td>
+                            <td>{{ r.direction }}</td>
+                            <td>
+                                {% if r.improvement_status == "Improved" %}
+                                    <span class="badge badge-green">{{ r.improvement_status }}</span>
+                                {% elif r.improvement_status == "Declined" %}
+                                    <span class="badge badge-red">{{ r.improvement_status }}</span>
+                                {% elif r.improvement_status == "Review" %}
+                                    <span class="badge badge-orange">{{ r.improvement_status }}</span>
+                                {% else %}
+                                    <span class="badge badge-gray">{{ r.improvement_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ r.story_use }}</td>
+                            <td>{{ r.notes }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="11">No PRE-I or PRE-P facility comparison records found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -714,70 +821,6 @@
                     {% empty %}
                         <tr>
                             <td colspan="15">No progress records found for the selected filters.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="pph-section">
-        <div class="pph-toolbar">
-            <h2 style="margin-bottom:0;">PRE-I vs PRE-P indicator comparison</h2>
-            <input type="text" class="pph-search" id="indicatorComparisonSearch" placeholder="Search indicator...">
-        </div>
-
-        <div class="pph-info-note">
-            This table compares all AIM-PPH indicators between PRE-I and PRE-P. Total Births is calculated as Vaginal Births + C-section Births, and Total PPH cases is calculated as indicators 6–9.
-        </div>
-
-        <div class="table-scroll">
-            <table class="pph-table" id="indicatorComparisonTable">
-                <thead>
-                    <tr>
-                        <th>Indicator</th>
-                        <th>PRE-I</th>
-                        <th>PRE-P</th>
-                        <th>Change</th>
-                        <th>% Change</th>
-                        <th>Direction</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in indicator_comparison_rows %}
-                        <tr>
-                            <td><strong>{{ r.indicator }}</strong></td>
-                            <td>{{ r.pre_i|default:0 }}</td>
-                            <td>{{ r.pre_p|default:0 }}</td>
-                            <td>
-                                {% if r.change > 0 %}
-                                    <span class="badge badge-green">+{{ r.change }}</span>
-                                {% elif r.change < 0 %}
-                                    <span class="badge badge-red">{{ r.change }}</span>
-                                {% else %}
-                                    <span class="badge badge-gray">0</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if r.percent_change == "" %}
-                                    -
-                                {% else %}
-                                    {{ r.percent_change }}%
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if r.direction == "Increased" %}
-                                    <span class="badge badge-green">{{ r.direction }}</span>
-                                {% elif r.direction == "Decreased" %}
-                                    <span class="badge badge-orange">{{ r.direction }}</span>
-                                {% else %}
-                                    <span class="badge badge-gray">{{ r.direction }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="6">No PRE-I or PRE-P comparison records found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -1551,8 +1594,8 @@
         );
     }
 
-    enableTableSearch("progressSearch", "progressTable");
     enableTableSearch("indicatorComparisonSearch", "indicatorComparisonTable");
+    enableTableSearch("progressSearch", "progressTable");
     enableTableSearch("provinceSearch", "provinceTable");
     enableTableSearch("monthlySearch", "monthlyTable");
     enableTableSearch("facilitySearch", "facilityTable");

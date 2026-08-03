@@ -1492,15 +1492,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             + self._safe_int(row_or_totals.get("pph_referral_in_aim"))
         )
 
-    def _percent_change(self, pre_i, pre_p):
-        pre_i = self._safe_int(pre_i)
-        pre_p = self._safe_int(pre_p)
-
-        if pre_i == 0:
-            return ""
-
-        return round(((pre_p - pre_i) / pre_i) * 100, 1)
-
     def _progress_filter(self, queryset, progress_type):
         """
         Supports common PRE-I / PRE-P spelling variations.
@@ -1510,6 +1501,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 Q(bl_progress__iexact="PRE-I")
                 | Q(bl_progress__iexact="PRE I")
                 | Q(bl_progress__iexact="PREI")
+                | Q(bl_progress__iexact="PRE_I")
             )
 
         if progress_type == "PRE-P":
@@ -1517,12 +1509,53 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 Q(bl_progress__iexact="PRE-P")
                 | Q(bl_progress__iexact="PRE P")
                 | Q(bl_progress__iexact="PREP")
+                | Q(bl_progress__iexact="PRE_P")
             )
 
         return queryset.none()
 
+    def _percent_change_display(self, pre_i, pre_p):
+        pre_i = self._safe_int(pre_i)
+        pre_p = self._safe_int(pre_p)
+
+        if pre_i == 0 and pre_p == 0:
+            return "0.00"
+
+        if pre_i == 0 and pre_p > 0:
+            return "New"
+
+        percent_change = ((pre_p - pre_i) / pre_i) * 100
+        return f"{percent_change:.2f}"
+
+    def _improvement_status(self, absolute_change, direction):
+        """
+        Direction rules:
+        - Higher is better: positive change = improved.
+        - Lower is better: negative change = improved.
+        - Context review: any change requires interpretation.
+        """
+
+        if direction == "Higher is better":
+            if absolute_change > 0:
+                return "Improved", "Potential positive change to verify"
+            if absolute_change < 0:
+                return "Declined", "Requires review before story use"
+            return "No change", ""
+
+        if direction == "Lower is better":
+            if absolute_change < 0:
+                return "Improved", "Potential positive change to verify"
+            if absolute_change > 0:
+                return "Declined", "Requires review before story use"
+            return "No change", ""
+
+        if absolute_change == 0:
+            return "No change", ""
+
+        return "Review", "Requires technical interpretation"
+
     # ============================================================
-    # Main View
+    # Main view
     # ============================================================
     def changelist_view(self, request, extra_context=None):
         data = self._build_dashboard_data(request)
@@ -1602,93 +1635,336 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
         return queryset, filters
 
+    # ============================================================
+    # Facility-level PRE-I vs PRE-P indicator comparison
+    # ============================================================
     def _build_indicator_comparison_rows(self, queryset, indicator_fields):
-        pre_i_qs = self._progress_filter(queryset, "PRE-I")
-        pre_p_qs = self._progress_filter(queryset, "PRE-P")
-
-        pre_i_totals = self._sum_fields(pre_i_qs, indicator_fields)
-        pre_p_totals = self._sum_fields(pre_p_qs, indicator_fields)
-
-        pre_i_totals["total_births"] = self._calculated_births(pre_i_totals)
-        pre_p_totals["total_births"] = self._calculated_births(pre_p_totals)
-
-        pre_i_totals["pph_total"] = self._calculated_pph_total(pre_i_totals)
-        pre_p_totals["pph_total"] = self._calculated_pph_total(pre_p_totals)
-
-        comparison_indicators = [
-            ("1. Total births - calculated as vaginal + C-section", "total_births"),
-            ("2. Number of births - vaginal delivery", "births_vaginal"),
-            ("3. Number of births - C-section", "births_csection"),
-            ("4. Oxytocin immediately after birth", "oxytocin_immediate"),
-            ("5. Antepartum hemorrhage", "antepartum_hemorrhage"),
-            ("6. PPH after vaginal delivery 501–999 cc", "pph_vaginal_501_999"),
-            ("7. PPH after C-section ≥1000 cc", "pph_cs_1000_plus"),
-            ("8. PPH referrals in from outside AIM facilities", "pph_referral_in_outside_aim"),
-            ("9. PPH referrals in from AIM facilities", "pph_referral_in_aim"),
-            ("10. Total number of PPH cases - calculated indicators 6–9", "pph_total"),
-            ("QBL 0–500 ml", "qbl_0_500"),
-            ("QBL 501–999 ml", "qbl_501_999"),
-            ("QBL 1000–1499 ml", "qbl_1000_1499"),
-            ("QBL 1500–1999 ml", "qbl_1500_1999"),
-            ("QBL 2000–2499 ml", "qbl_2000_2499"),
-            ("QBL >2500 ml", "qbl_2500_plus"),
-            ("QBL unknown", "qbl_unknown"),
-            ("QBL total", "qbl_total"),
-            ("Transfers out for PPH", "transfers_out_pph"),
-            ("Maternal deaths due to PPH transfer", "maternal_death_pph_transfer"),
-            ("Maternal deaths due to other transfer causes", "maternal_death_other_transfer"),
-            ("Total maternal deaths transfer", "maternal_death_total_transfer"),
-            ("Cause: uterine atony", "cause_uterine_atony"),
-            ("Cause: severe lacerations", "cause_severe_lacerations"),
-            ("Cause: retained products", "cause_retained_products"),
-            ("Cause: DIC", "cause_dic"),
-            ("Cause: ruptured uterus", "cause_ruptured_uterus"),
-            ("Cause: abruption placenta", "cause_abruption"),
-            ("Cause: placenta previa", "cause_placenta_previa"),
-            ("Cause: placenta accreta", "cause_placenta_accreta"),
-            ("Cause: other", "cause_other"),
-            ("Cause: unknown", "cause_unknown"),
-            ("Total causes of PPH", "causes_total"),
-            ("PPH management by medication - uterotonic", "pph_medication_uterotonic"),
-            ("AI: uterine compression", "ai_uterine_compression"),
-            ("AI: manual removal of placenta", "ai_manual_placenta"),
-            ("AI: aortic compression", "ai_aortic_compression"),
-            ("AI: UBT", "ai_ubt"),
-            ("AI: laceration repair", "ai_lac_repair"),
-            ("AI: B-Lynch / UAL", "ai_blynch_ual"),
-            ("AI: NASG", "ai_nasg"),
-            ("AI: ruptured uterus repair", "ai_ruptured_uterus_repair"),
-            ("AI: PPH hysterectomy", "ai_pph_hysterectomy"),
-            ("AI: hysterectomy other causes", "ai_hysterectomy_other"),
-            ("Total advanced interventions", "ai_total"),
+        indicator_definitions = [
+            {
+                "label": "1. Corrected Total Births = Vaginal Births + C-section Births",
+                "field": "total_births",
+                "direction": "Higher is better",
+            },
+            {
+                "label": "2. Number of births - vaginal delivery",
+                "field": "births_vaginal",
+                "direction": "Higher is better",
+            },
+            {
+                "label": "3. Number of births - C-section",
+                "field": "births_csection",
+                "direction": "Context review",
+            },
+            {
+                "label": "4. Number of patients receiving oxytocin immediately after birth",
+                "field": "oxytocin_immediate",
+                "direction": "Higher is better",
+            },
+            {
+                "label": "5. Number of Antepartum Hemorrhage",
+                "field": "antepartum_hemorrhage",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "6. PPH after vaginal delivery 501–999 cc",
+                "field": "pph_vaginal_501_999",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "7. PPH after C-section ≥1000 cc",
+                "field": "pph_cs_1000_plus",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "8. PPH referrals in from outside AIM facilities",
+                "field": "pph_referral_in_outside_aim",
+                "direction": "Context review",
+            },
+            {
+                "label": "9. PPH referrals in from AIM facilities",
+                "field": "pph_referral_in_aim",
+                "direction": "Context review",
+            },
+            {
+                "label": "10. Total number of PPH cases - calculated indicators 6–9",
+                "field": "pph_total",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL 0–500 ml",
+                "field": "qbl_0_500",
+                "direction": "Context review",
+            },
+            {
+                "label": "QBL 501–999 ml",
+                "field": "qbl_501_999",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL 1000–1499 ml",
+                "field": "qbl_1000_1499",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL 1500–1999 ml",
+                "field": "qbl_1500_1999",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL 2000–2499 ml",
+                "field": "qbl_2000_2499",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL >2500 ml",
+                "field": "qbl_2500_plus",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL unknown",
+                "field": "qbl_unknown",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "QBL total",
+                "field": "qbl_total",
+                "direction": "Context review",
+            },
+            {
+                "label": "Transfers out for PPH",
+                "field": "transfers_out_pph",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Maternal deaths due to PPH transfer",
+                "field": "maternal_death_pph_transfer",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Maternal deaths due to other transfer causes",
+                "field": "maternal_death_other_transfer",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Total maternal deaths transfer",
+                "field": "maternal_death_total_transfer",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: uterine atony",
+                "field": "cause_uterine_atony",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: severe lacerations",
+                "field": "cause_severe_lacerations",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: retained products",
+                "field": "cause_retained_products",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: DIC",
+                "field": "cause_dic",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: ruptured uterus",
+                "field": "cause_ruptured_uterus",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: abruption placenta",
+                "field": "cause_abruption",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: placenta previa",
+                "field": "cause_placenta_previa",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: placenta accreta",
+                "field": "cause_placenta_accreta",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: other",
+                "field": "cause_other",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Cause: unknown",
+                "field": "cause_unknown",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Total causes of PPH",
+                "field": "causes_total",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "PPH management by medication - uterotonic",
+                "field": "pph_medication_uterotonic",
+                "direction": "Higher is better",
+            },
+            {
+                "label": "AI: uterine compression",
+                "field": "ai_uterine_compression",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: manual removal of placenta",
+                "field": "ai_manual_placenta",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: aortic compression",
+                "field": "ai_aortic_compression",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: UBT",
+                "field": "ai_ubt",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: laceration repair",
+                "field": "ai_lac_repair",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: B-Lynch / UAL",
+                "field": "ai_blynch_ual",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: NASG",
+                "field": "ai_nasg",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: ruptured uterus repair",
+                "field": "ai_ruptured_uterus_repair",
+                "direction": "Context review",
+            },
+            {
+                "label": "AI: PPH hysterectomy",
+                "field": "ai_pph_hysterectomy",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "AI: hysterectomy other causes",
+                "field": "ai_hysterectomy_other",
+                "direction": "Lower is better",
+            },
+            {
+                "label": "Total advanced interventions",
+                "field": "ai_total",
+                "direction": "Context review",
+            },
         ]
+
+        sum_annotations = {
+            f"sum_{field}": Sum(field)
+            for field in indicator_fields
+        }
+
+        def build_grouped_totals(progress_type):
+            progress_qs = self._progress_filter(queryset, progress_type)
+
+            grouped_rows = list(
+                progress_qs.values(
+                    province=F("aimfacilityname__districtfk__provincefk__name"),
+                    facility_id=F("aimfacilityname_id"),
+                    facility=F("aimfacilityname__name"),
+                )
+                .annotate(**sum_annotations)
+                .order_by("province", "facility")
+            )
+
+            output = {}
+
+            for row in grouped_rows:
+                self._normalize_sum_fields(row, indicator_fields)
+
+                row["total_births"] = self._calculated_births(row)
+                row["pph_total"] = self._calculated_pph_total(row)
+
+                facility_id = row.get("facility_id")
+
+                output[facility_id] = {
+                    "province": row.get("province") or "",
+                    "facility_id": facility_id,
+                    "facility": row.get("facility") or "",
+                    "values": row,
+                }
+
+            return output
+
+        pre_i_map = build_grouped_totals("PRE-I")
+        pre_p_map = build_grouped_totals("PRE-P")
+
+        facility_ids = sorted(
+            set(pre_i_map.keys()) | set(pre_p_map.keys()),
+            key=lambda facility_id: (
+                pre_i_map.get(facility_id, pre_p_map.get(facility_id, {})).get("province", ""),
+                pre_i_map.get(facility_id, pre_p_map.get(facility_id, {})).get("facility", ""),
+            ),
+        )
 
         rows = []
 
-        for label, field in comparison_indicators:
-            pre_i = self._safe_int(pre_i_totals.get(field))
-            pre_p = self._safe_int(pre_p_totals.get(field))
-            change = pre_p - pre_i
-            percent_change = self._percent_change(pre_i, pre_p)
+        for facility_id in facility_ids:
+            pre_i_info = pre_i_map.get(facility_id)
+            pre_p_info = pre_p_map.get(facility_id)
 
-            if change > 0:
-                direction = "Increased"
-            elif change < 0:
-                direction = "Decreased"
-            else:
-                direction = "No change"
+            info = pre_i_info or pre_p_info or {}
 
-            rows.append({
-                "indicator": label,
-                "pre_i": pre_i,
-                "pre_p": pre_p,
-                "change": change,
-                "percent_change": percent_change,
-                "direction": direction,
-            })
+            province = info.get("province", "")
+            facility = info.get("facility", "")
+
+            pre_i_values = pre_i_info.get("values", {}) if pre_i_info else {}
+            pre_p_values = pre_p_info.get("values", {}) if pre_p_info else {}
+
+            for indicator in indicator_definitions:
+                field = indicator["field"]
+                direction = indicator["direction"]
+
+                pre_i = self._safe_int(pre_i_values.get(field))
+                pre_p = self._safe_int(pre_p_values.get(field))
+                absolute_change = pre_p - pre_i
+                percent_change_display = self._percent_change_display(pre_i, pre_p)
+
+                improvement_status, story_use = self._improvement_status(
+                    absolute_change,
+                    direction,
+                )
+
+                rows.append({
+                    "province": province,
+                    "facility": facility,
+                    "indicator": indicator["label"],
+                    "pre_i": pre_i,
+                    "pre_p": pre_p,
+                    "absolute_change": absolute_change,
+                    "percent_change_display": percent_change_display,
+                    "direction": direction,
+                    "improvement_status": improvement_status,
+                    "story_use": story_use,
+                    "notes": (
+                        "Verify with facility team, source documents, and field narrative "
+                        "before using as success story."
+                    ),
+                })
 
         return rows
 
+    # ============================================================
+    # Build dashboard data
+    # ============================================================
     def _build_dashboard_data(self, request):
         base_qs = self._base_queryset(request)
         queryset, filters = self._apply_filters(request, base_qs)
@@ -1768,8 +2044,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         )
 
         # ============================================================
-        # Fields used for aggregation
-        # Do not rely on stored total_births and pph_total.
+        # Aggregation fields
+        # Stored total_births and pph_total are intentionally not used.
+        # They are recalculated for dashboard accuracy.
         # ============================================================
         indicator_fields = [
             "births_vaginal",
@@ -1855,7 +2132,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         )
 
         # ============================================================
-        # Baseline / Progress summary
+        # Baseline / progress summary
         # ============================================================
         progress_rows = list(
             queryset.values("bl_progress")
@@ -1879,7 +2156,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
         # ============================================================
-        # PRE-I vs PRE-P comparison
+        # Facility-level PRE-I vs PRE-P comparison
         # ============================================================
         indicator_comparison_rows = self._build_indicator_comparison_rows(
             queryset,
@@ -1949,12 +2226,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             else:
                 r["interpretation"] = "Review facility records for completeness."
 
-        facility_rows_top_pph = sorted(
-            facility_rows,
-            key=lambda x: x["pph_total"],
-            reverse=True,
-        )[:25]
-
         facility_rows_top_pph_rate = sorted(
             [r for r in facility_rows if r["total_births"] > 0],
             key=lambda x: x["pph_rate"],
@@ -1992,7 +2263,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             r["ai_rate"] = self._safe_rate(r["ai_total"], r["pph_total"])
 
         # ============================================================
-        # Distribution rows
+        # Distributions
         # ============================================================
         qbl_rows = [
             {"category": "0–500 ml", "value": totals["qbl_0_500"]},
@@ -2216,7 +2487,6 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "indicator_comparison_rows": indicator_comparison_rows,
             "province_rows": province_rows,
             "facility_rows": facility_rows,
-            "facility_rows_top_pph": facility_rows_top_pph,
             "facility_rows_top_pph_rate": facility_rows_top_pph_rate,
             "monthly_rows": monthly_rows,
             "qbl_rows": qbl_rows,
@@ -2232,6 +2502,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             ),
         }
 
+    # ============================================================
+    # Excel export
+    # ============================================================
     def _export_dashboard_excel(self, data):
         wb = Workbook()
 
@@ -2267,7 +2540,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     if cell.value is not None:
                         max_length = max(max_length, len(str(cell.value)))
 
-                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 55)
+                ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 65)
 
         ws = wb.active
         ws.title = "Progress_Summary"
@@ -2308,24 +2581,34 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("ai_rate"),
             ])
 
-        ws2 = wb.create_sheet("PREI_PREP_Comparison")
+        ws2 = wb.create_sheet("Facility_Indicator_Comparison")
         ws2.append([
+            "Province",
+            "Facility Name",
             "Indicator",
-            "PRE-I",
-            "PRE-P",
-            "Change",
-            "% Change",
+            "PRE_I",
+            "PRE_P",
+            "Absolute Change",
+            "Percent Change",
             "Direction",
+            "Improvement Status",
+            "Story Use",
+            "Notes for Field Verification",
         ])
 
         for r in data["indicator_comparison_rows"]:
             ws2.append([
+                r.get("province"),
+                r.get("facility"),
                 r.get("indicator"),
                 r.get("pre_i"),
                 r.get("pre_p"),
-                r.get("change"),
-                r.get("percent_change"),
+                r.get("absolute_change"),
+                r.get("percent_change_display"),
                 r.get("direction"),
+                r.get("improvement_status"),
+                r.get("story_use"),
+                r.get("notes"),
             ])
 
         ws3 = wb.create_sheet("Province_Summary")
@@ -2497,6 +2780,10 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ws10.append([
             "Temporary correction",
             "Total Births is calculated as Vaginal Births + C-section Births. Total PPH cases is calculated as indicators 6–9.",
+        ])
+        ws10.append([
+            "PRE-I vs PRE-P comparison",
+            "The Facility_Indicator_Comparison sheet compares summed facility-level values for each indicator between PRE-I and PRE-P.",
         ])
 
         for sheet in wb.worksheets:
