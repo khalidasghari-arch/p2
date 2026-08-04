@@ -60,7 +60,7 @@ from .models import (
     Position,
     WhoChildbirthChecklistMonthly,
     QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, 
-    AimPPHDashboard,HQIPAssessmentDashboard,
+    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -6593,7 +6593,1071 @@ class HQIPAssessmentDashboardAdmin(
                 worksheet.column_dimensions[column_letter].width = min(
                     max(max_length + 2, 12), 45
                 )
+@admin.register(HQIPContentDashboard)
+class HQIPContentDashboardAdmin(
+    ProvinceRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    """Read-only criterion-level comparison of Baseline and 2nd Round."""
 
+    content_template = "admin/hiva/hqip_content_dashboard.html"
+
+    # These IDs match the user's HQIP Score master table.
+    SCORE_YES_ID = 1
+    SCORE_NO_ID = 2
+    SCORE_NA_ID = 3
+
+    def province_filter_kwargs(self, request):
+        return {
+            "facilityfk__districtfk__provincefk": user_province(request)
+        }
+
+    def changelist_view(self, request, extra_context=None):
+        return self.hqip_content_dashboard(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        opts = HQIPAssessmentHeader._meta
+        return (
+            request.user.is_superuser
+            or request.user.has_perm(
+                f"{opts.app_label}.view_{opts.model_name}"
+            )
+            or request.user.has_perm(
+                f"{opts.app_label}.change_{opts.model_name}"
+            )
+        )
+
+    def has_module_permission(self, request):
+        return self.has_view_permission(request)
+
+    # ------------------------------------------------------------------
+    # Calculation helpers
+    # ------------------------------------------------------------------
+    def _round2(self, value):
+        if value is None:
+            return None
+        return float(
+            Decimal(str(value)).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+
+    def _pct(self, yes_count, no_count):
+        applicable = yes_count + no_count
+        if not applicable:
+            return None
+        return self._round2(
+            Decimal(yes_count)
+            / Decimal(applicable)
+            * Decimal("100")
+        )
+
+    def _change_meta(self, newer, older):
+        if newer is None or older is None:
+            return {
+                "change": None,
+                "direction": "Not comparable",
+                "status": "No comparison",
+                "status_css": "neutral",
+            }
+
+        change = self._round2(
+            Decimal(str(newer)) - Decimal(str(older))
+        )
+        if change > 0:
+            return {
+                "change": change,
+                "direction": "Increased",
+                "status": "Improved",
+                "status_css": "improved",
+            }
+        if change < 0:
+            return {
+                "change": change,
+                "direction": "Decreased",
+                "status": "Declined",
+                "status_css": "declined",
+            }
+        return {
+            "change": change,
+            "direction": "Unchanged",
+            "status": "No change",
+            "status_css": "unchanged",
+        }
+
+    def _finish_comparison_row(self, row):
+        row["baseline_applicable"] = (
+            row["baseline_yes"] + row["baseline_no"]
+        )
+        row["second_applicable"] = (
+            row["second_yes"] + row["second_no"]
+        )
+        row["baseline_score"] = self._pct(
+            row["baseline_yes"],
+            row["baseline_no"],
+        )
+        row["second_score"] = self._pct(
+            row["second_yes"],
+            row["second_no"],
+        )
+        row.update(
+            self._change_meta(
+                row["second_score"],
+                row["baseline_score"],
+            )
+        )
+        return row
+
+    def _aggregate_classification(self, criterion_rows, fields):
+        """Roll up raw criterion responses by classification fields.
+
+        This intentionally sums YES/NO/N/A criterion responses. It does not
+        average child percentages: criteria are the source of every result.
+        """
+
+        groups = {}
+        for criterion_row in criterion_rows:
+            key = tuple(criterion_row[field] for field in fields)
+            if key not in groups:
+                groups[key] = {
+                    field: criterion_row[field]
+                    for field in fields
+                }
+                groups[key].update(
+                    baseline_yes=0,
+                    baseline_no=0,
+                    baseline_na=0,
+                    baseline_missing=0,
+                    second_yes=0,
+                    second_no=0,
+                    second_na=0,
+                    second_missing=0,
+                    criterion_count=0,
+                    improved_facilities=0,
+                    declined_facilities=0,
+                    unchanged_facilities=0,
+                    matched_facilities=0,
+                )
+
+            target = groups[key]
+            for count_field in (
+                "baseline_yes",
+                "baseline_no",
+                "baseline_na",
+                "baseline_missing",
+                "second_yes",
+                "second_no",
+                "second_na",
+                "second_missing",
+                "improved_facilities",
+                "declined_facilities",
+                "unchanged_facilities",
+                "matched_facilities",
+            ):
+                target[count_field] += criterion_row[count_field]
+            target["criterion_count"] += 1
+
+        rows = [
+            self._finish_comparison_row(item)
+            for item in groups.values()
+        ]
+        rows.sort(
+            key=lambda item: tuple(
+                str(item.get(field) or "")
+                for field in fields
+                if not field.endswith("_id")
+            )
+        )
+        return rows
+
+    # ------------------------------------------------------------------
+    # Round detection
+    # ------------------------------------------------------------------
+    def _detect_round_pair(self, headers_qs):
+        round_rows = list(
+            headers_qs
+            .values("assessmenttype_id", "assessmenttype__name")
+            .annotate(
+                first_date=Min("assessmentdate"),
+                last_date=Max("assessmentend_date"),
+            )
+            .order_by("first_date", "assessmenttype_id")
+        )
+
+        def normalized(item):
+            return (item.get("assessmenttype__name") or "").strip().lower()
+
+        baseline = next(
+            (
+                item for item in round_rows
+                if any(
+                    token in normalized(item)
+                    for token in ("baseline", "pre-i", "pre i")
+                )
+            ),
+            None,
+        )
+        second = next(
+            (
+                item for item in round_rows
+                if any(
+                    token in normalized(item)
+                    for token in (
+                        "2nd",
+                        "second",
+                        "round 2",
+                        "round-2",
+                        "pre-p",
+                        "pre p",
+                    )
+                )
+            ),
+            None,
+        )
+
+        # Safe fallback when names differ from the usual labels.
+        if baseline is None and round_rows:
+            baseline = round_rows[0]
+        if second is None and baseline is not None:
+            second = next(
+                (
+                    item for item in round_rows
+                    if item["assessmenttype_id"]
+                    != baseline["assessmenttype_id"]
+                ),
+                None,
+            )
+
+        if (
+            baseline is not None
+            and second is not None
+            and baseline["assessmenttype_id"]
+            == second["assessmenttype_id"]
+        ):
+            second = None
+
+        return baseline, second, round_rows
+
+    # ------------------------------------------------------------------
+    # Option and hierarchy helpers
+    # ------------------------------------------------------------------
+    def _location_options(self, headers_qs, filters):
+        province_options = list(
+            headers_qs
+            .values(
+                "facilityfk__districtfk__provincefk_id",
+                "facilityfk__districtfk__provincefk__name",
+            )
+            .distinct()
+            .order_by("facilityfk__districtfk__provincefk__name")
+        )
+
+        district_source = headers_qs
+        if filters["province"]:
+            district_source = district_source.filter(
+                facilityfk__districtfk__provincefk_id=filters["province"]
+            )
+        district_options = list(
+            district_source
+            .values(
+                "facilityfk__districtfk_id",
+                "facilityfk__districtfk__name",
+            )
+            .distinct()
+            .order_by("facilityfk__districtfk__name")
+        )
+
+        facility_source = district_source
+        if filters["district"]:
+            facility_source = facility_source.filter(
+                facilityfk__districtfk_id=filters["district"]
+            )
+        facility_options = list(
+            facility_source
+            .values(
+                "facilityfk_id",
+                "facilityfk__name",
+                "facilityfk__hfcode",
+            )
+            .distinct()
+            .order_by("facilityfk__name")
+        )
+        return province_options, district_options, facility_options
+
+    def _hierarchy_options(self, location_headers, filters):
+        area_options = list(
+            location_headers
+            .values("areafk_id", "areafk__name")
+            .distinct()
+            .order_by("areafk__name")
+        )
+        allowed_area_ids = [
+            row["areafk_id"] for row in area_options
+            if row["areafk_id"] is not None
+        ]
+
+        section_source = Section.objects.filter(
+            areafk_id__in=allowed_area_ids
+        )
+        if filters["area"]:
+            section_source = section_source.filter(
+                areafk_id=filters["area"]
+            )
+        section_options = list(
+            section_source
+            .values("id", "name", "areafk_id")
+            .order_by("name")
+        )
+
+        standard_source = Standards.objects.filter(
+            sectionfk__areafk_id__in=allowed_area_ids
+        )
+        if filters["section"]:
+            standard_source = standard_source.filter(
+                sectionfk_id=filters["section"]
+            )
+        elif filters["area"]:
+            standard_source = standard_source.filter(
+                sectionfk__areafk_id=filters["area"]
+            )
+        standard_options = list(
+            standard_source
+            .values("id", "name", "sectionfk_id")
+            .order_by("name")
+        )
+
+        criterion_source = Criteria.objects.filter(
+            standardfk__sectionfk__areafk_id__in=allowed_area_ids
+        )
+        if filters["standard"]:
+            criterion_source = criterion_source.filter(
+                standardfk_id=filters["standard"]
+            )
+        elif filters["section"]:
+            criterion_source = criterion_source.filter(
+                standardfk__sectionfk_id=filters["section"]
+            )
+        elif filters["area"]:
+            criterion_source = criterion_source.filter(
+                standardfk__sectionfk__areafk_id=filters["area"]
+            )
+        criterion_options = list(
+            criterion_source
+            .values("id", "name", "standardfk_id")
+            .order_by("id")
+        )
+
+        # Complete hierarchy supports instant cascading in the browser.
+        hierarchy_data = list(
+            Criteria.objects
+            .filter(
+                standardfk__sectionfk__areafk_id__in=allowed_area_ids
+            )
+            .values(
+                "id",
+                "name",
+                "standardfk_id",
+                "standardfk__name",
+                "standardfk__sectionfk_id",
+                "standardfk__sectionfk__name",
+                "standardfk__sectionfk__areafk_id",
+                "standardfk__sectionfk__areafk__name",
+            )
+            .order_by(
+                "standardfk__sectionfk__areafk__name",
+                "standardfk__sectionfk__name",
+                "standardfk__name",
+                "id",
+            )
+        )
+
+        return (
+            area_options,
+            section_options,
+            standard_options,
+            criterion_options,
+            hierarchy_data,
+        )
+
+    # ------------------------------------------------------------------
+    # Main dashboard
+    # ------------------------------------------------------------------
+    def hqip_content_dashboard(self, request):
+        filters = {
+            "province": request.GET.get("province", "").strip(),
+            "district": request.GET.get("district", "").strip(),
+            "facility": request.GET.get("facility", "").strip(),
+            "area": request.GET.get("area", "").strip(),
+            "section": request.GET.get("section", "").strip(),
+            "standard": request.GET.get("standard", "").strip(),
+            "criteria": request.GET.get("criteria", "").strip(),
+        }
+
+        # Permission-safe queryset. Province restrictions remain active.
+        allowed_headers = self.get_queryset(request).select_related(
+            "facilityfk__districtfk__provincefk",
+            "assessmenttype",
+            "areafk",
+        )
+
+        (
+            province_options,
+            district_options,
+            facility_options,
+        ) = self._location_options(allowed_headers, filters)
+
+        location_headers = allowed_headers
+        if filters["province"]:
+            location_headers = location_headers.filter(
+                facilityfk__districtfk__provincefk_id=filters["province"]
+            )
+        if filters["district"]:
+            location_headers = location_headers.filter(
+                facilityfk__districtfk_id=filters["district"]
+            )
+        if filters["facility"]:
+            location_headers = location_headers.filter(
+                facilityfk_id=filters["facility"]
+            )
+
+        (
+            area_options,
+            section_options,
+            standard_options,
+            criterion_options,
+            hierarchy_data,
+        ) = self._hierarchy_options(location_headers, filters)
+
+        baseline_round, second_round, available_rounds = (
+            self._detect_round_pair(location_headers)
+        )
+        baseline_id = (
+            baseline_round["assessmenttype_id"]
+            if baseline_round else None
+        )
+        second_id = (
+            second_round["assessmenttype_id"]
+            if second_round else None
+        )
+
+        headers = location_headers
+        if filters["area"]:
+            headers = headers.filter(areafk_id=filters["area"])
+
+        details = HQIPAssessment.objects.filter(
+            header__in=headers,
+            criteriafk__standardfk__sectionfk__areafk_id=F(
+                "header__areafk_id"
+            ),
+        )
+        if filters["section"]:
+            details = details.filter(
+                criteriafk__standardfk__sectionfk_id=filters["section"]
+            )
+        if filters["standard"]:
+            details = details.filter(
+                criteriafk__standardfk_id=filters["standard"]
+            )
+        if filters["criteria"]:
+            details = details.filter(criteriafk_id=filters["criteria"])
+
+        if baseline_id is not None and second_id is not None:
+            details = details.filter(
+                header__assessmenttype_id__in=[baseline_id, second_id]
+            )
+        else:
+            details = details.none()
+
+        grouped = list(
+            details
+            .values(
+                "criteriafk__standardfk__sectionfk__areafk_id",
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk_id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk_id",
+                "criteriafk__standardfk__name",
+                "criteriafk_id",
+                "criteriafk__name",
+            )
+            .annotate(
+                baseline_yes=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=baseline_id,
+                        scorefk_id=self.SCORE_YES_ID,
+                    ),
+                ),
+                baseline_no=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=baseline_id,
+                        scorefk_id=self.SCORE_NO_ID,
+                    ),
+                ),
+                baseline_na=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=baseline_id,
+                        scorefk_id=self.SCORE_NA_ID,
+                    ),
+                ),
+                baseline_missing=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=baseline_id,
+                        scorefk__isnull=True,
+                    ),
+                ),
+                second_yes=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=second_id,
+                        scorefk_id=self.SCORE_YES_ID,
+                    ),
+                ),
+                second_no=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=second_id,
+                        scorefk_id=self.SCORE_NO_ID,
+                    ),
+                ),
+                second_na=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=second_id,
+                        scorefk_id=self.SCORE_NA_ID,
+                    ),
+                ),
+                second_missing=Count(
+                    "id",
+                    filter=Q(
+                        header__assessmenttype_id=second_id,
+                        scorefk__isnull=True,
+                    ),
+                ),
+            )
+            .order_by(
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk__name",
+                "criteriafk_id",
+            )
+        )
+
+        # Facility-level response transitions for each criterion.
+        response_map = defaultdict(dict)
+        response_values = (
+            details
+            .values(
+                "header__facilityfk_id",
+                "header__assessmenttype_id",
+                "header__assessmentdate",
+                "criteriafk_id",
+                "scorefk_id",
+            )
+            .order_by(
+                "header__facilityfk_id",
+                "criteriafk_id",
+                "header__assessmenttype_id",
+                "header__assessmentdate",
+                "id",
+            )
+        )
+        for item in response_values:
+            key = (
+                item["header__facilityfk_id"],
+                item["criteriafk_id"],
+            )
+            # Ordered iteration means a later assessment date wins if a
+            # facility has more than one record for the same round.
+            response_map[key][item["header__assessmenttype_id"]] = (
+                item["scorefk_id"]
+            )
+
+        transition_counts = defaultdict(
+            lambda: {
+                "improved_facilities": 0,
+                "declined_facilities": 0,
+                "unchanged_facilities": 0,
+                "matched_facilities": 0,
+            }
+        )
+        for (_facility_id, criterion_id), pair in response_map.items():
+            baseline_score_id = pair.get(baseline_id)
+            second_score_id = pair.get(second_id)
+            if (
+                baseline_score_id not in (
+                    self.SCORE_YES_ID,
+                    self.SCORE_NO_ID,
+                )
+                or second_score_id not in (
+                    self.SCORE_YES_ID,
+                    self.SCORE_NO_ID,
+                )
+            ):
+                continue
+
+            transition_counts[criterion_id]["matched_facilities"] += 1
+            if (
+                baseline_score_id == self.SCORE_NO_ID
+                and second_score_id == self.SCORE_YES_ID
+            ):
+                transition_counts[criterion_id]["improved_facilities"] += 1
+            elif (
+                baseline_score_id == self.SCORE_YES_ID
+                and second_score_id == self.SCORE_NO_ID
+            ):
+                transition_counts[criterion_id]["declined_facilities"] += 1
+            else:
+                transition_counts[criterion_id]["unchanged_facilities"] += 1
+
+        criterion_rows = []
+        for row in grouped:
+            criterion_id = row["criteriafk_id"]
+            output = {
+                "area_id": row[
+                    "criteriafk__standardfk__sectionfk__areafk_id"
+                ],
+                "area": row[
+                    "criteriafk__standardfk__sectionfk__areafk__name"
+                ] or "Unknown",
+                "section_id": row[
+                    "criteriafk__standardfk__sectionfk_id"
+                ],
+                "section": row[
+                    "criteriafk__standardfk__sectionfk__name"
+                ] or "Unknown",
+                "standard_id": row["criteriafk__standardfk_id"],
+                "standard": row[
+                    "criteriafk__standardfk__name"
+                ] or "Unknown",
+                "criteria_id": criterion_id,
+                "criteria": row["criteriafk__name"] or "Unknown",
+                "baseline_yes": row["baseline_yes"],
+                "baseline_no": row["baseline_no"],
+                "baseline_na": row["baseline_na"],
+                "baseline_missing": row["baseline_missing"],
+                "second_yes": row["second_yes"],
+                "second_no": row["second_no"],
+                "second_na": row["second_na"],
+                "second_missing": row["second_missing"],
+                **transition_counts[criterion_id],
+            }
+            criterion_rows.append(self._finish_comparison_row(output))
+
+        area_rows = self._aggregate_classification(
+            criterion_rows,
+            ["area_id", "area"],
+        )
+        section_rows = self._aggregate_classification(
+            criterion_rows,
+            ["area_id", "area", "section_id", "section"],
+        )
+        standard_rows = self._aggregate_classification(
+            criterion_rows,
+            [
+                "area_id",
+                "area",
+                "section_id",
+                "section",
+                "standard_id",
+                "standard",
+            ],
+        )
+
+        overall = {
+            "baseline_yes": sum(
+                row["baseline_yes"] for row in criterion_rows
+            ),
+            "baseline_no": sum(
+                row["baseline_no"] for row in criterion_rows
+            ),
+            "baseline_na": sum(
+                row["baseline_na"] for row in criterion_rows
+            ),
+            "baseline_missing": sum(
+                row["baseline_missing"] for row in criterion_rows
+            ),
+            "second_yes": sum(
+                row["second_yes"] for row in criterion_rows
+            ),
+            "second_no": sum(
+                row["second_no"] for row in criterion_rows
+            ),
+            "second_na": sum(
+                row["second_na"] for row in criterion_rows
+            ),
+            "second_missing": sum(
+                row["second_missing"] for row in criterion_rows
+            ),
+        }
+        overall = self._finish_comparison_row(overall)
+
+        facilities_by_round = defaultdict(set)
+        for item in headers.filter(
+            assessmenttype_id__in=[baseline_id, second_id]
+        ).values("assessmenttype_id", "facilityfk_id"):
+            facilities_by_round[item["assessmenttype_id"]].add(
+                item["facilityfk_id"]
+            )
+
+        kpis = {
+            "criteria_analyzed": len(criterion_rows),
+            "facilities_compared": len(
+                facilities_by_round.get(baseline_id, set())
+                & facilities_by_round.get(second_id, set())
+            ),
+            "baseline_score": overall["baseline_score"],
+            "second_score": overall["second_score"],
+            "change": overall["change"],
+            "improved_criteria": sum(
+                1 for row in criterion_rows
+                if row["change"] is not None and row["change"] > 0
+            ),
+            "unchanged_criteria": sum(
+                1 for row in criterion_rows
+                if row["change"] == 0
+            ),
+            "declined_criteria": sum(
+                1 for row in criterion_rows
+                if row["change"] is not None and row["change"] < 0
+            ),
+        }
+
+        comparable_criteria = [
+            row for row in criterion_rows
+            if row["change"] is not None
+        ]
+        top_improvements = sorted(
+            [row for row in comparable_criteria if row["change"] > 0],
+            key=lambda row: row["change"],
+            reverse=True,
+        )[:15]
+        top_declines = sorted(
+            [row for row in comparable_criteria if row["change"] < 0],
+            key=lambda row: row["change"],
+        )[:15]
+
+        chart_data = {
+            "overall": {
+                "labels": [
+                    baseline_round["assessmenttype__name"]
+                    if baseline_round else "Baseline",
+                    second_round["assessmenttype__name"]
+                    if second_round else "2nd Round",
+                ],
+                "values": [
+                    overall["baseline_score"],
+                    overall["second_score"],
+                ],
+            },
+            "response_mix": {
+                "labels": ["YES", "NO", "N/A", "Missing"],
+                "baseline": [
+                    overall["baseline_yes"],
+                    overall["baseline_no"],
+                    overall["baseline_na"],
+                    overall["baseline_missing"],
+                ],
+                "second": [
+                    overall["second_yes"],
+                    overall["second_no"],
+                    overall["second_na"],
+                    overall["second_missing"],
+                ],
+            },
+            "areas": {
+                "labels": [row["area"] for row in area_rows],
+                "baseline": [
+                    row["baseline_score"] for row in area_rows
+                ],
+                "second": [row["second_score"] for row in area_rows],
+            },
+            "criterion_changes": {
+                "labels": [
+                    (
+                        row["criteria"][:75] + "â€¦"
+                        if len(row["criteria"]) > 75
+                        else row["criteria"]
+                    )
+                    for row in top_improvements
+                ],
+                "values": [row["change"] for row in top_improvements],
+            },
+        }
+
+        methodology_note = (
+            "All results originate from criterion responses. Achievement % "
+            "= YES / (YES + NO) Ã— 100. N/A and blank responses are shown "
+            "but excluded from the achievement denominator. Area, Section "
+            "and Standard results sum their underlying criterion responses. "
+            "Change is 2nd Round % minus Baseline % in percentage points."
+        )
+
+        export_params = request.GET.copy()
+        export_params["export"] = "1"
+        export_query = export_params.urlencode()
+
+        if request.GET.get("export") == "1":
+            return self._export_content_dashboard(
+                filters=filters,
+                baseline_round=baseline_round,
+                second_round=second_round,
+                methodology_note=methodology_note,
+                kpis=kpis,
+                overall=overall,
+                area_rows=area_rows,
+                section_rows=section_rows,
+                standard_rows=standard_rows,
+                criterion_rows=criterion_rows,
+            )
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="HQIP Content Analysis: Baseline vs 2nd Round",
+            filters=filters,
+            province_options=province_options,
+            district_options=district_options,
+            facility_options=facility_options,
+            area_options=area_options,
+            section_options=section_options,
+            standard_options=standard_options,
+            criterion_options=criterion_options,
+            hierarchy_data=hierarchy_data,
+            baseline_round=baseline_round,
+            second_round=second_round,
+            available_rounds=available_rounds,
+            round_pair_ready=bool(baseline_round and second_round),
+            methodology_note=methodology_note,
+            kpis=kpis,
+            overall=overall,
+            area_rows=area_rows,
+            section_rows=section_rows,
+            standard_rows=standard_rows,
+            criterion_rows=criterion_rows,
+            top_improvements=top_improvements,
+            top_declines=top_declines,
+            chart_data=chart_data,
+            export_query=export_query,
+            records_found=bool(criterion_rows),
+        )
+        return TemplateResponse(request, self.content_template, context)
+
+    # ------------------------------------------------------------------
+    # Excel export
+    # ------------------------------------------------------------------
+    def _export_content_dashboard(
+        self,
+        *,
+        filters,
+        baseline_round,
+        second_round,
+        methodology_note,
+        kpis,
+        overall,
+        area_rows,
+        section_rows,
+        standard_rows,
+        criterion_rows,
+    ):
+        workbook = openpyxl.Workbook()
+        summary = workbook.active
+        summary.title = "Dashboard Summary"
+
+        baseline_name = (
+            baseline_round["assessmenttype__name"]
+            if baseline_round else "Baseline"
+        )
+        second_name = (
+            second_round["assessmenttype__name"]
+            if second_round else "2nd Round"
+        )
+
+        summary.append(["HQIP Content Analysis Dashboard"])
+        summary.append(
+            [
+                "Generated",
+                timezone.localtime(timezone.now()).replace(tzinfo=None),
+            ]
+        )
+        summary.append(["Comparison", f"{baseline_name} vs {second_name}"])
+        summary.append(["Methodology", methodology_note])
+        summary.append([])
+        summary.append(["Selected Filter", "Value"])
+        for key, value in filters.items():
+            summary.append([key.replace("_", " ").title(), value or "All"])
+        summary.append([])
+        summary.append(["KPI", "Value"])
+        for key, value in kpis.items():
+            summary.append(
+                [
+                    key.replace("_", " ").title(),
+                    value if value is not None else "N/A",
+                ]
+            )
+
+        def add_comparison_sheet(title, rows, identity_columns):
+            worksheet = workbook.create_sheet(title)
+            headers = [label for _key, label in identity_columns] + [
+                f"{baseline_name} YES",
+                f"{baseline_name} NO",
+                f"{baseline_name} N/A",
+                f"{baseline_name} Missing",
+                f"{baseline_name} Achievement %",
+                f"{second_name} YES",
+                f"{second_name} NO",
+                f"{second_name} N/A",
+                f"{second_name} Missing",
+                f"{second_name} Achievement %",
+                "Change (percentage points)",
+                "Direction",
+                "Improved Facilities (NO to YES)",
+                "Declined Facilities (YES to NO)",
+                "Unchanged Facilities",
+                "Matched Applicable Responses",
+            ]
+            worksheet.append(headers)
+
+            for row in rows:
+                worksheet.append(
+                    [row[key] for key, _label in identity_columns]
+                    + [
+                        row["baseline_yes"],
+                        row["baseline_no"],
+                        row["baseline_na"],
+                        row["baseline_missing"],
+                        (
+                            row["baseline_score"]
+                            if row["baseline_score"] is not None
+                            else "N/A"
+                        ),
+                        row["second_yes"],
+                        row["second_no"],
+                        row["second_na"],
+                        row["second_missing"],
+                        (
+                            row["second_score"]
+                            if row["second_score"] is not None
+                            else "N/A"
+                        ),
+                        row["change"] if row["change"] is not None else "N/A",
+                        row["direction"],
+                        row["improved_facilities"],
+                        row["declined_facilities"],
+                        row["unchanged_facilities"],
+                        row["matched_facilities"],
+                    ]
+                )
+            return worksheet
+
+        add_comparison_sheet(
+            "Area Comparison",
+            area_rows,
+            [("area", "Thematic Area")],
+        )
+        add_comparison_sheet(
+            "Section Comparison",
+            section_rows,
+            [("area", "Thematic Area"), ("section", "Section")],
+        )
+        add_comparison_sheet(
+            "Standard Comparison",
+            standard_rows,
+            [
+                ("area", "Thematic Area"),
+                ("section", "Section"),
+                ("standard", "Standard"),
+            ],
+        )
+        add_comparison_sheet(
+            "Criterion Comparison",
+            criterion_rows,
+            [
+                ("area", "Thematic Area"),
+                ("section", "Section"),
+                ("standard", "Standard"),
+                ("criteria_id", "Criterion ID"),
+                ("criteria", "Verification Criterion"),
+            ],
+        )
+
+        # Consistent professional workbook styling.
+        dark_fill = PatternFill("solid", fgColor="17324D")
+        accent_fill = PatternFill("solid", fgColor="DDEBF7")
+        white_font = Font(color="FFFFFF", bold=True)
+        thin = Side(style="thin", color="D7DEE8")
+
+        for worksheet in workbook.worksheets:
+            worksheet.freeze_panes = "A2"
+            worksheet.auto_filter.ref = worksheet.dimensions
+            for cell in worksheet[1]:
+                cell.fill = dark_fill
+                cell.font = white_font
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                cell.border = Border(
+                    left=thin,
+                    right=thin,
+                    top=thin,
+                    bottom=thin,
+                )
+            worksheet.row_dimensions[1].height = 36
+
+            for row_index in range(2, worksheet.max_row + 1):
+                if row_index % 2 == 0:
+                    for cell in worksheet[row_index]:
+                        cell.fill = accent_fill
+                for cell in worksheet[row_index]:
+                    cell.alignment = Alignment(
+                        vertical="top",
+                        wrap_text=True,
+                    )
+                    cell.border = Border(
+                        left=thin,
+                        right=thin,
+                        top=thin,
+                        bottom=thin,
+                    )
+
+            for column_index in range(1, worksheet.max_column + 1):
+                column_letter = get_column_letter(column_index)
+                max_length = 0
+                for cell in worksheet[column_letter]:
+                    value_length = len(str(cell.value or ""))
+                    max_length = max(max_length, value_length)
+                worksheet.column_dimensions[column_letter].width = min(
+                    max(max_length + 2, 12),
+                    55,
+                )
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="HQIP_Content_Analysis_'
+            f'{timezone.localdate().isoformat()}.xlsx"'
+        )
+        workbook.save(response)
+        return response
+    
 # ============================================================
 # Other Admins (keep simple / safe)
 # ============================================================

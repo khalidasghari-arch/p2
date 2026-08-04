@@ -1,0 +1,852 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    :root {
+        --hqip-navy: #17324d;
+        --hqip-blue: #2f75b5;
+        --hqip-cyan: #43a6c6;
+        --hqip-green: #17845b;
+        --hqip-red: #c0392b;
+        --hqip-amber: #d98b13;
+        --hqip-bg: #f4f7fb;
+        --hqip-line: #dce4ee;
+        --hqip-muted: #617184;
+    }
+
+    #content { padding: 18px 22px 36px; }
+    .hqip-content-dashboard { color: #243447; }
+    .hqip-hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 22px 24px;
+        border-radius: 14px;
+        color: #fff;
+        background: linear-gradient(120deg, #17324d 0%, #245b83 62%, #2f75b5 100%);
+        box-shadow: 0 8px 24px rgba(23, 50, 77, .18);
+    }
+    .hqip-hero h1 { margin: 0 0 7px; color: #fff; font-size: 25px; }
+    .hqip-hero p { margin: 0; max-width: 860px; color: #e9f2f9; font-size: 14px; }
+    .round-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        padding: 9px 13px;
+        border: 1px solid rgba(255,255,255,.35);
+        border-radius: 999px;
+        background: rgba(255,255,255,.12);
+        font-weight: 700;
+    }
+    .dashboard-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+    .dashboard-actions a,
+    .dashboard-actions button {
+        border: 1px solid #c8d5e3;
+        border-radius: 7px;
+        padding: 8px 13px;
+        color: var(--hqip-navy);
+        background: #fff;
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 700;
+    }
+
+    .filter-card,
+    .dashboard-card,
+    .table-card,
+    .method-card {
+        margin-top: 16px;
+        border: 1px solid var(--hqip-line);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 3px 14px rgba(40, 61, 82, .06);
+    }
+    .filter-card { padding: 17px; }
+    .filter-title { margin: 0 0 12px; color: var(--hqip-navy); font-size: 16px; }
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+        gap: 12px;
+    }
+    .filter-field label {
+        display: block;
+        margin-bottom: 5px;
+        color: #42566a;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .filter-field select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid #c7d2de;
+        border-radius: 6px;
+        background: #fff;
+        color: #25384a;
+    }
+    .filter-actions { display: flex; align-items: center; gap: 9px; margin-top: 13px; }
+    .filter-actions button,
+    .filter-actions a {
+        padding: 9px 16px;
+        border-radius: 6px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .filter-actions button { border: 0; color: #fff; background: var(--hqip-blue); cursor: pointer; }
+    .filter-actions a { border: 1px solid #c9d3df; color: #465a6e; background: #fff; }
+    .filter-help { margin: 10px 0 0; color: var(--hqip-muted); font-size: 12px; }
+
+    .alert {
+        margin-top: 16px;
+        padding: 13px 15px;
+        border-radius: 8px;
+        border: 1px solid #f0cf8a;
+        color: #6e4b00;
+        background: #fff7df;
+    }
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(170px, 1fr));
+        gap: 13px;
+        margin-top: 16px;
+    }
+    .kpi-card {
+        position: relative;
+        overflow: hidden;
+        padding: 16px 17px;
+        border: 1px solid var(--hqip-line);
+        border-radius: 11px;
+        background: #fff;
+        box-shadow: 0 3px 13px rgba(40, 61, 82, .06);
+    }
+    .kpi-card::before {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        content: "";
+        background: var(--accent, var(--hqip-blue));
+    }
+    .kpi-label { color: var(--hqip-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .kpi-value { margin-top: 6px; color: var(--hqip-navy); font-size: 27px; line-height: 1.1; font-weight: 800; }
+    .kpi-note { margin-top: 5px; color: #718196; font-size: 11px; }
+
+    .method-card { padding: 13px 16px; border-left: 4px solid var(--hqip-cyan); }
+    .method-card strong { color: var(--hqip-navy); }
+    .method-card p { margin: 4px 0 0; color: #53667a; }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(320px, 1fr));
+        gap: 15px;
+        margin-top: 16px;
+    }
+    .dashboard-card { margin-top: 0; padding: 16px; min-height: 320px; }
+    .dashboard-card h2 { margin: 0 0 4px; color: var(--hqip-navy); font-size: 16px; }
+    .dashboard-card .subtitle { margin: 0 0 12px; color: var(--hqip-muted); font-size: 12px; }
+    .chart-wrap { position: relative; height: 260px; }
+
+    .tab-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 18px;
+        padding: 7px;
+        border: 1px solid var(--hqip-line);
+        border-radius: 9px;
+        background: #eef3f8;
+    }
+    .tab-button {
+        padding: 9px 14px;
+        border: 0;
+        border-radius: 6px;
+        color: #42566a;
+        background: transparent;
+        cursor: pointer;
+        font-weight: 700;
+    }
+    .tab-button.active { color: #fff; background: var(--hqip-navy); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .table-card { overflow: hidden; }
+    .table-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--hqip-line);
+    }
+    .table-card-header h2 { margin: 0; color: var(--hqip-navy); font-size: 17px; }
+    .table-card-header p { margin: 3px 0 0; color: var(--hqip-muted); font-size: 12px; }
+    .table-tools { display: flex; gap: 8px; align-items: center; }
+    .table-tools input,
+    .table-tools select {
+        min-height: 34px;
+        border: 1px solid #c9d4df;
+        border-radius: 6px;
+        background: #fff;
+    }
+    .table-tools input { min-width: 250px; padding: 0 9px; }
+    .table-scroll { overflow: auto; max-height: 680px; }
+    .hqip-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    .hqip-table th,
+    .hqip-table td { padding: 9px 10px; border-right: 1px solid #e2e8ef; border-bottom: 1px solid #e2e8ef; vertical-align: top; }
+    .hqip-table th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        color: #fff;
+        background: var(--hqip-navy);
+        text-align: center;
+        white-space: nowrap;
+    }
+    .hqip-table thead tr:nth-child(2) th { top: 35px; background: #245b83; }
+    .hqip-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .hqip-table tbody tr:hover { background: #edf5fb; }
+    .hqip-table .text-left { text-align: left; min-width: 180px; }
+    .hqip-table .criterion-cell { min-width: 360px; line-height: 1.45; }
+    .hqip-table .number { text-align: center; white-space: nowrap; }
+    .baseline-head { background: #6f7f90 !important; }
+    .second-head { background: #24796a !important; }
+    .change-head { background: #85548f !important; }
+    .score-value { font-weight: 800; color: var(--hqip-navy); }
+    .muted-small { display: block; margin-top: 3px; color: #7a8998; font-size: 10px; }
+    .status-pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .status-pill.improved { color: #0e6948; background: #dff5eb; }
+    .status-pill.declined { color: #a12c22; background: #fde7e5; }
+    .status-pill.unchanged { color: #6b5500; background: #fff3c8; }
+    .status-pill.neutral { color: #5b6877; background: #e9eef3; }
+    .positive { color: var(--hqip-green); font-weight: 800; }
+    .negative { color: var(--hqip-red); font-weight: 800; }
+    .pagination-bar {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 15px;
+        border-top: 1px solid var(--hqip-line);
+    }
+    .pagination-bar button {
+        padding: 6px 10px;
+        border: 1px solid #c8d4df;
+        border-radius: 5px;
+        background: #fff;
+        cursor: pointer;
+    }
+    .pagination-bar button:disabled { opacity: .45; cursor: default; }
+    .empty-state { padding: 40px 20px; color: var(--hqip-muted); text-align: center; }
+
+    @media (max-width: 1200px) {
+        .filter-grid, .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 760px) {
+        #content { padding: 10px; }
+        .hqip-hero { flex-direction: column; }
+        .filter-grid, .kpi-grid, .chart-grid { grid-template-columns: 1fr; }
+        .table-card-header { align-items: flex-start; flex-direction: column; }
+        .table-tools { width: 100%; }
+        .table-tools input { min-width: 0; width: 100%; }
+    }
+    @media print {
+        #header, .breadcrumbs, .dashboard-actions, .filter-card, .tab-bar,
+        .table-tools, .pagination-bar { display: none !important; }
+        #content { padding: 0; }
+        .hqip-hero { color: #000; background: #fff; box-shadow: none; border: 1px solid #999; }
+        .hqip-hero h1, .hqip-hero p { color: #000; }
+        .tab-panel { display: block !important; page-break-before: always; }
+        .table-scroll { overflow: visible; max-height: none; }
+        .hqip-table th { position: static; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hqip-content-dashboard">
+    <section class="hqip-hero">
+        <div>
+            <h1>HQIP Content Analysis Dashboard</h1>
+            <p>Detailed criterion-level analysis with Thematic Area, Section and Standard classifications.</p>
+        </div>
+        <div class="round-badge">
+            {% if round_pair_ready %}
+                {{ baseline_round.assessmenttype__name }} &rarr; {{ second_round.assessmenttype__name }}
+            {% else %}
+                Baseline &rarr; 2nd Round
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="dashboard-actions">
+        <a href="?{{ export_query }}">Export Excel</a>
+        <button type="button" onclick="window.print()">Print / PDF</button>
+    </div>
+
+    <section class="filter-card">
+        <h2 class="filter-title">Analysis Filters</h2>
+        <form method="get" id="content-filter-form">
+            <div class="filter-grid">
+                <div class="filter-field">
+                    <label for="id_province">Province</label>
+                    <select name="province" id="id_province">
+                        <option value="">All Provinces</option>
+                        {% for item in province_options %}
+                            <option value="{{ item.facilityfk__districtfk__provincefk_id }}" {% if filters.province|stringformat:"s" == item.facilityfk__districtfk__provincefk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.facilityfk__districtfk__provincefk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_district">District</label>
+                    <select name="district" id="id_district">
+                        <option value="">All Districts</option>
+                        {% for item in district_options %}
+                            <option value="{{ item.facilityfk__districtfk_id }}" {% if filters.district|stringformat:"s" == item.facilityfk__districtfk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.facilityfk__districtfk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_facility">Health Facility</label>
+                    <select name="facility" id="id_facility">
+                        <option value="">All Health Facilities</option>
+                        {% for item in facility_options %}
+                            <option value="{{ item.facilityfk_id }}" {% if filters.facility|stringformat:"s" == item.facilityfk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.facilityfk__name }}{% if item.facilityfk__hfcode %} ({{ item.facilityfk__hfcode }}){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_area">Thematic Area</label>
+                    <select name="area" id="id_area">
+                        <option value="">All Thematic Areas</option>
+                        {% for item in area_options %}
+                            <option value="{{ item.areafk_id }}" {% if filters.area|stringformat:"s" == item.areafk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.areafk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_section">Section</label>
+                    <select name="section" id="id_section">
+                        <option value="">All Sections</option>
+                        {% for item in section_options %}
+                            <option value="{{ item.id }}" {% if filters.section|stringformat:"s" == item.id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_standard">Standard</label>
+                    <select name="standard" id="id_standard">
+                        <option value="">All Standards</option>
+                        {% for item in standard_options %}
+                            <option value="{{ item.id }}" {% if filters.standard|stringformat:"s" == item.id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="id_criteria">Verification Criterion</label>
+                    <select name="criteria" id="id_criteria">
+                        <option value="">All Criteria</option>
+                        {% for item in criterion_options %}
+                            <option value="{{ item.id }}" {% if filters.criteria|stringformat:"s" == item.id|stringformat:"s" %}selected{% endif %}>
+                                {{ item.id }} — {{ item.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-actions">
+                <button type="submit">Apply Filters</button>
+                <a href=".">Reset</a>
+            </div>
+            <p class="filter-help">The hierarchy is linked automatically: Thematic Area &rarr; Section &rarr; Standard &rarr; Criterion.</p>
+        </form>
+    </section>
+
+    {% if not round_pair_ready %}
+        <div class="alert">
+            The dashboard could not find both Baseline and 2nd Round records in the selected location. Available assessment types:
+            {% for item in available_rounds %}{{ item.assessmenttype__name }}{% if not forloop.last %}, {% endif %}{% empty %}None{% endfor %}.
+        </div>
+    {% endif %}
+
+    <section class="kpi-grid">
+        <article class="kpi-card" style="--accent:#2f75b5">
+            <div class="kpi-label">Criteria Analyzed</div>
+            <div class="kpi-value">{{ kpis.criteria_analyzed }}</div>
+            <div class="kpi-note">Verification criteria after filters</div>
+        </article>
+        <article class="kpi-card" style="--accent:#43a6c6">
+            <div class="kpi-label">Facilities Compared</div>
+            <div class="kpi-value">{{ kpis.facilities_compared }}</div>
+            <div class="kpi-note">Facilities present in both rounds</div>
+        </article>
+        <article class="kpi-card" style="--accent:#6f7f90">
+            <div class="kpi-label">Baseline Achievement</div>
+            <div class="kpi-value">{% if kpis.baseline_score is not None %}{{ kpis.baseline_score|floatformat:2 }}%{% else %}N/A{% endif %}</div>
+            <div class="kpi-note">YES / (YES + NO)</div>
+        </article>
+        <article class="kpi-card" style="--accent:#17845b">
+            <div class="kpi-label">2nd Round Achievement</div>
+            <div class="kpi-value">{% if kpis.second_score is not None %}{{ kpis.second_score|floatformat:2 }}%{% else %}N/A{% endif %}</div>
+            <div class="kpi-note">YES / (YES + NO)</div>
+        </article>
+        <article class="kpi-card" style="--accent:#85548f">
+            <div class="kpi-label">Overall Change</div>
+            <div class="kpi-value {% if overall.status_css == 'improved' %}positive{% elif overall.status_css == 'declined' %}negative{% endif %}">
+                {% if kpis.change is not None %}{% if kpis.change > 0 %}+{% endif %}{{ kpis.change|floatformat:2 }} pp{% else %}N/A{% endif %}
+            </div>
+            <div class="kpi-note">2nd Round minus Baseline</div>
+        </article>
+        <article class="kpi-card" style="--accent:#17845b">
+            <div class="kpi-label">Improved Criteria</div>
+            <div class="kpi-value">{{ kpis.improved_criteria }}</div>
+            <div class="kpi-note">Positive percentage-point change</div>
+        </article>
+        <article class="kpi-card" style="--accent:#d98b13">
+            <div class="kpi-label">No-change Criteria</div>
+            <div class="kpi-value">{{ kpis.unchanged_criteria }}</div>
+            <div class="kpi-note">Same achievement in both rounds</div>
+        </article>
+        <article class="kpi-card" style="--accent:#c0392b">
+            <div class="kpi-label">Declined Criteria</div>
+            <div class="kpi-value">{{ kpis.declined_criteria }}</div>
+            <div class="kpi-note">Negative percentage-point change</div>
+        </article>
+    </section>
+
+    <section class="method-card">
+        <strong>Calculation method</strong>
+        <p>{{ methodology_note }}</p>
+    </section>
+
+    {% if records_found %}
+        <section class="chart-grid">
+            <article class="dashboard-card">
+                <h2>Overall Achievement</h2>
+                <p class="subtitle">Baseline and 2nd Round comparison</p>
+                <div class="chart-wrap"><canvas id="overallChart"></canvas></div>
+            </article>
+            <article class="dashboard-card">
+                <h2>Response Mix</h2>
+                <p class="subtitle">YES, NO, N/A and blank criterion responses</p>
+                <div class="chart-wrap"><canvas id="responseMixChart"></canvas></div>
+            </article>
+            <article class="dashboard-card">
+                <h2>Thematic Area Comparison</h2>
+                <p class="subtitle">Results calculated from underlying criteria</p>
+                <div class="chart-wrap"><canvas id="areaChart"></canvas></div>
+            </article>
+            <article class="dashboard-card">
+                <h2>Largest Criterion Improvements</h2>
+                <p class="subtitle">Top positive percentage-point changes</p>
+                <div class="chart-wrap"><canvas id="criterionChangeChart"></canvas></div>
+            </article>
+        </section>
+
+        <nav class="tab-bar" aria-label="Analysis level">
+            <button class="tab-button active" type="button" data-tab="criteria-panel">Criteria</button>
+            <button class="tab-button" type="button" data-tab="standard-panel">Standards</button>
+            <button class="tab-button" type="button" data-tab="section-panel">Sections</button>
+            <button class="tab-button" type="button" data-tab="area-panel">Thematic Areas</button>
+        </nav>
+
+        <section id="criteria-panel" class="tab-panel active">
+            <div class="table-card">
+                <div class="table-card-header">
+                    <div>
+                        <h2>Criterion-level Change Analysis</h2>
+                        <p>Every percentage is calculated directly from YES and NO criterion responses.</p>
+                    </div>
+                    <div class="table-tools">
+                        <input type="search" id="criterion-search" placeholder="Search area, section, standard or criterion">
+                        <select id="criterion-page-size" aria-label="Rows per page">
+                            <option value="25">25 rows</option>
+                            <option value="50" selected>50 rows</option>
+                            <option value="100">100 rows</option>
+                            <option value="all">All rows</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-scroll">
+                    <table class="hqip-table" id="criterion-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Area</th>
+                                <th rowspan="2">Section</th>
+                                <th rowspan="2">Standard</th>
+                                <th rowspan="2">ID</th>
+                                <th rowspan="2">Verification Criterion</th>
+                                <th colspan="5" class="baseline-head">{{ baseline_round.assessmenttype__name|default:"Baseline" }}</th>
+                                <th colspan="5" class="second-head">{{ second_round.assessmenttype__name|default:"2nd Round" }}</th>
+                                <th colspan="5" class="change-head">Change Analysis</th>
+                            </tr>
+                            <tr>
+                                <th class="baseline-head">YES</th>
+                                <th class="baseline-head">NO</th>
+                                <th class="baseline-head">N/A</th>
+                                <th class="baseline-head">Blank</th>
+                                <th class="baseline-head">%</th>
+                                <th class="second-head">YES</th>
+                                <th class="second-head">NO</th>
+                                <th class="second-head">N/A</th>
+                                <th class="second-head">Blank</th>
+                                <th class="second-head">%</th>
+                                <th class="change-head">Change</th>
+                                <th class="change-head">Status</th>
+                                <th class="change-head">NO→YES</th>
+                                <th class="change-head">YES→NO</th>
+                                <th class="change-head">Same</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in criterion_rows %}
+                                <tr data-criterion-row>
+                                    <td class="text-left">{{ row.area }}</td>
+                                    <td class="text-left">{{ row.section }}</td>
+                                    <td class="text-left">{{ row.standard }}</td>
+                                    <td class="number">{{ row.criteria_id }}</td>
+                                    <td class="criterion-cell">{{ row.criteria }}</td>
+                                    <td class="number">{{ row.baseline_yes }}</td>
+                                    <td class="number">{{ row.baseline_no }}</td>
+                                    <td class="number">{{ row.baseline_na }}</td>
+                                    <td class="number">{{ row.baseline_missing }}</td>
+                                    <td class="number score-value">{% if row.baseline_score is not None %}{{ row.baseline_score|floatformat:2 }}%{% else %}N/A{% endif %}</td>
+                                    <td class="number">{{ row.second_yes }}</td>
+                                    <td class="number">{{ row.second_no }}</td>
+                                    <td class="number">{{ row.second_na }}</td>
+                                    <td class="number">{{ row.second_missing }}</td>
+                                    <td class="number score-value">{% if row.second_score is not None %}{{ row.second_score|floatformat:2 }}%{% else %}N/A{% endif %}</td>
+                                    <td class="number {% if row.status_css == 'improved' %}positive{% elif row.status_css == 'declined' %}negative{% endif %}">
+                                        {% if row.change is not None %}{% if row.change > 0 %}+{% endif %}{{ row.change|floatformat:2 }} pp{% else %}N/A{% endif %}
+                                    </td>
+                                    <td class="number"><span class="status-pill {{ row.status_css }}">{{ row.status }}</span></td>
+                                    <td class="number positive">{{ row.improved_facilities }}</td>
+                                    <td class="number negative">{{ row.declined_facilities }}</td>
+                                    <td class="number">{{ row.unchanged_facilities }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar">
+                    <span id="criterion-page-info"></span>
+                    <button type="button" id="criterion-prev">Previous</button>
+                    <button type="button" id="criterion-next">Next</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="standard-panel" class="tab-panel">
+            <div class="table-card">
+                <div class="table-card-header"><div><h2>Standard Comparison</h2><p>Each result sums the criterion responses classified under that Standard.</p></div></div>
+                <div class="table-scroll">
+                    <table class="hqip-table">
+                        <thead>
+                            <tr><th>Area</th><th>Section</th><th>Standard</th><th>Criteria</th><th>Baseline YES</th><th>Baseline NO</th><th>Baseline N/A</th><th>Baseline %</th><th>2nd YES</th><th>2nd NO</th><th>2nd N/A</th><th>2nd %</th><th>Change</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for row in standard_rows %}
+                                <tr><td class="text-left">{{ row.area }}</td><td class="text-left">{{ row.section }}</td><td class="text-left">{{ row.standard }}</td><td class="number">{{ row.criterion_count }}</td><td class="number">{{ row.baseline_yes }}</td><td class="number">{{ row.baseline_no }}</td><td class="number">{{ row.baseline_na }}</td><td class="number score-value">{% if row.baseline_score is not None %}{{ row.baseline_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number">{{ row.second_yes }}</td><td class="number">{{ row.second_no }}</td><td class="number">{{ row.second_na }}</td><td class="number score-value">{% if row.second_score is not None %}{{ row.second_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number {% if row.status_css == 'improved' %}positive{% elif row.status_css == 'declined' %}negative{% endif %}">{% if row.change is not None %}{% if row.change > 0 %}+{% endif %}{{ row.change|floatformat:2 }} pp{% else %}N/A{% endif %}</td><td class="number"><span class="status-pill {{ row.status_css }}">{{ row.status }}</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-panel" class="tab-panel">
+            <div class="table-card">
+                <div class="table-card-header"><div><h2>Section Comparison</h2><p>Each result sums the criterion responses classified under that Section.</p></div></div>
+                <div class="table-scroll">
+                    <table class="hqip-table">
+                        <thead>
+                            <tr><th>Area</th><th>Section</th><th>Criteria</th><th>Baseline YES</th><th>Baseline NO</th><th>Baseline N/A</th><th>Baseline %</th><th>2nd YES</th><th>2nd NO</th><th>2nd N/A</th><th>2nd %</th><th>Change</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for row in section_rows %}
+                                <tr><td class="text-left">{{ row.area }}</td><td class="text-left">{{ row.section }}</td><td class="number">{{ row.criterion_count }}</td><td class="number">{{ row.baseline_yes }}</td><td class="number">{{ row.baseline_no }}</td><td class="number">{{ row.baseline_na }}</td><td class="number score-value">{% if row.baseline_score is not None %}{{ row.baseline_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number">{{ row.second_yes }}</td><td class="number">{{ row.second_no }}</td><td class="number">{{ row.second_na }}</td><td class="number score-value">{% if row.second_score is not None %}{{ row.second_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number {% if row.status_css == 'improved' %}positive{% elif row.status_css == 'declined' %}negative{% endif %}">{% if row.change is not None %}{% if row.change > 0 %}+{% endif %}{{ row.change|floatformat:2 }} pp{% else %}N/A{% endif %}</td><td class="number"><span class="status-pill {{ row.status_css }}">{{ row.status }}</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="area-panel" class="tab-panel">
+            <div class="table-card">
+                <div class="table-card-header"><div><h2>Thematic Area Comparison</h2><p>Each result sums the criterion responses classified under that Thematic Area.</p></div></div>
+                <div class="table-scroll">
+                    <table class="hqip-table">
+                        <thead>
+                            <tr><th>Thematic Area</th><th>Criteria</th><th>Baseline YES</th><th>Baseline NO</th><th>Baseline N/A</th><th>Baseline %</th><th>2nd YES</th><th>2nd NO</th><th>2nd N/A</th><th>2nd %</th><th>Change</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for row in area_rows %}
+                                <tr><td class="text-left">{{ row.area }}</td><td class="number">{{ row.criterion_count }}</td><td class="number">{{ row.baseline_yes }}</td><td class="number">{{ row.baseline_no }}</td><td class="number">{{ row.baseline_na }}</td><td class="number score-value">{% if row.baseline_score is not None %}{{ row.baseline_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number">{{ row.second_yes }}</td><td class="number">{{ row.second_no }}</td><td class="number">{{ row.second_na }}</td><td class="number score-value">{% if row.second_score is not None %}{{ row.second_score|floatformat:2 }}%{% else %}N/A{% endif %}</td><td class="number {% if row.status_css == 'improved' %}positive{% elif row.status_css == 'declined' %}negative{% endif %}">{% if row.change is not None %}{% if row.change > 0 %}+{% endif %}{{ row.change|floatformat:2 }} pp{% else %}N/A{% endif %}</td><td class="number"><span class="status-pill {{ row.status_css }}">{{ row.status }}</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    {% else %}
+        <div class="table-card"><div class="empty-state">No comparable criterion responses were found for the selected filters.</div></div>
+    {% endif %}
+</div>
+
+{{ hierarchy_data|json_script:"hqip-hierarchy-data" }}
+{{ chart_data|json_script:"hqip-content-chart-data" }}
+
+<script>
+(function () {
+    "use strict";
+
+    const hierarchyNode = document.getElementById("hqip-hierarchy-data");
+    const hierarchy = hierarchyNode ? JSON.parse(hierarchyNode.textContent) : [];
+    const areaSelect = document.getElementById("id_area");
+    const sectionSelect = document.getElementById("id_section");
+    const standardSelect = document.getElementById("id_standard");
+    const criterionSelect = document.getElementById("id_criteria");
+
+    function uniqueOptions(records, idKey, nameKey) {
+        const found = new Map();
+        records.forEach(function (record) {
+            const id = record[idKey];
+            if (id !== null && id !== undefined && !found.has(String(id))) {
+                found.set(String(id), record[nameKey] || "Unknown");
+            }
+        });
+        return Array.from(found.entries()).sort(function (a, b) {
+            return a[1].localeCompare(b[1]);
+        });
+    }
+
+    function fillSelect(select, placeholder, options, selectedValue, includeId) {
+        if (!select) return;
+        select.innerHTML = "";
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = placeholder;
+        select.appendChild(blank);
+        options.forEach(function (item) {
+            const option = document.createElement("option");
+            option.value = item[0];
+            option.textContent = includeId ? item[0] + " — " + item[1] : item[1];
+            option.selected = String(item[0]) === String(selectedValue || "");
+            select.appendChild(option);
+        });
+    }
+
+    function recordsFor(areaId, sectionId, standardId) {
+        return hierarchy.filter(function (record) {
+            if (areaId && String(record["standardfk__sectionfk__areafk_id"]) !== String(areaId)) return false;
+            if (sectionId && String(record["standardfk__sectionfk_id"]) !== String(sectionId)) return false;
+            if (standardId && String(record["standardfk_id"]) !== String(standardId)) return false;
+            return true;
+        });
+    }
+
+    function rebuildCriteria(areaId, sectionId, standardId, selectedValue) {
+        const records = recordsFor(areaId, sectionId, standardId);
+        fillSelect(
+            criterionSelect,
+            "All Criteria",
+            uniqueOptions(records, "id", "name"),
+            selectedValue,
+            true
+        );
+    }
+
+    if (areaSelect && sectionSelect && standardSelect && criterionSelect) {
+        areaSelect.addEventListener("change", function () {
+            const areaId = areaSelect.value;
+            const records = recordsFor(areaId, "", "");
+            fillSelect(
+                sectionSelect,
+                "All Sections",
+                uniqueOptions(records, "standardfk__sectionfk_id", "standardfk__sectionfk__name"),
+                "",
+                false
+            );
+            fillSelect(
+                standardSelect,
+                "All Standards",
+                uniqueOptions(records, "standardfk_id", "standardfk__name"),
+                "",
+                false
+            );
+            rebuildCriteria(areaId, "", "", "");
+        });
+
+        sectionSelect.addEventListener("change", function () {
+            const areaId = areaSelect.value;
+            const sectionId = sectionSelect.value;
+            const records = recordsFor(areaId, sectionId, "");
+            fillSelect(
+                standardSelect,
+                "All Standards",
+                uniqueOptions(records, "standardfk_id", "standardfk__name"),
+                "",
+                false
+            );
+            rebuildCriteria(areaId, sectionId, "", "");
+        });
+
+        standardSelect.addEventListener("change", function () {
+            rebuildCriteria(
+                areaSelect.value,
+                sectionSelect.value,
+                standardSelect.value,
+                ""
+            );
+        });
+    }
+
+    document.querySelectorAll(".tab-button").forEach(function (button) {
+        button.addEventListener("click", function () {
+            document.querySelectorAll(".tab-button").forEach(function (item) {
+                item.classList.remove("active");
+            });
+            document.querySelectorAll(".tab-panel").forEach(function (panel) {
+                panel.classList.remove("active");
+            });
+            button.classList.add("active");
+            const panel = document.getElementById(button.dataset.tab);
+            if (panel) panel.classList.add("active");
+        });
+    });
+
+    const searchInput = document.getElementById("criterion-search");
+    const sizeSelect = document.getElementById("criterion-page-size");
+    const previousButton = document.getElementById("criterion-prev");
+    const nextButton = document.getElementById("criterion-next");
+    const pageInfo = document.getElementById("criterion-page-info");
+    const criterionRows = Array.from(document.querySelectorAll("[data-criterion-row]"));
+    let currentPage = 1;
+
+    function renderCriterionPage() {
+        if (!criterionRows.length || !sizeSelect) return;
+        const query = (searchInput ? searchInput.value : "").trim().toLowerCase();
+        const filtered = criterionRows.filter(function (row) {
+            return !query || row.textContent.toLowerCase().includes(query);
+        });
+        const requestedSize = sizeSelect.value;
+        const pageSize = requestedSize === "all" ? Math.max(filtered.length, 1) : Number(requestedSize);
+        const pages = Math.max(Math.ceil(filtered.length / pageSize), 1);
+        currentPage = Math.min(currentPage, pages);
+        const start = (currentPage - 1) * pageSize;
+        const visible = new Set(filtered.slice(start, start + pageSize));
+        criterionRows.forEach(function (row) {
+            row.style.display = visible.has(row) ? "" : "none";
+        });
+        if (pageInfo) pageInfo.textContent = filtered.length + " criteria · Page " + currentPage + " of " + pages;
+        if (previousButton) previousButton.disabled = currentPage <= 1;
+        if (nextButton) nextButton.disabled = currentPage >= pages;
+    }
+
+    if (searchInput) searchInput.addEventListener("input", function () { currentPage = 1; renderCriterionPage(); });
+    if (sizeSelect) sizeSelect.addEventListener("change", function () { currentPage = 1; renderCriterionPage(); });
+    if (previousButton) previousButton.addEventListener("click", function () { if (currentPage > 1) currentPage -= 1; renderCriterionPage(); });
+    if (nextButton) nextButton.addEventListener("click", function () { currentPage += 1; renderCriterionPage(); });
+    renderCriterionPage();
+
+    const chartNode = document.getElementById("hqip-content-chart-data");
+    if (!chartNode || typeof Chart === "undefined") return;
+    const charts = JSON.parse(chartNode.textContent);
+    const baselineLabel = charts.overall.labels[0];
+    const secondLabel = charts.overall.labels[1];
+
+    function baseOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "bottom" } },
+            scales: { y: { beginAtZero: true } }
+        };
+    }
+
+    const overallCanvas = document.getElementById("overallChart");
+    if (overallCanvas) new Chart(overallCanvas, {
+        type: "bar",
+        data: {
+            labels: charts.overall.labels,
+            datasets: [{ label: "Achievement %", data: charts.overall.values, backgroundColor: ["#6f7f90", "#17845b"], borderRadius: 6 }]
+        },
+        options: Object.assign(baseOptions(), { scales: { y: { beginAtZero: true, max: 100 } } })
+    });
+
+    const mixCanvas = document.getElementById("responseMixChart");
+    if (mixCanvas) new Chart(mixCanvas, {
+        type: "bar",
+        data: {
+            labels: charts.response_mix.labels,
+            datasets: [
+                { label: baselineLabel, data: charts.response_mix.baseline, backgroundColor: "#6f7f90" },
+                { label: secondLabel, data: charts.response_mix.second, backgroundColor: "#17845b" }
+            ]
+        },
+        options: baseOptions()
+    });
+
+    const areaCanvas = document.getElementById("areaChart");
+    if (areaCanvas) new Chart(areaCanvas, {
+        type: "bar",
+        data: {
+            labels: charts.areas.labels,
+            datasets: [
+                { label: baselineLabel, data: charts.areas.baseline, backgroundColor: "#6f7f90" },
+                { label: secondLabel, data: charts.areas.second, backgroundColor: "#17845b" }
+            ]
+        },
+        options: Object.assign(baseOptions(), { scales: { y: { beginAtZero: true, max: 100 } } })
+    });
+
+    const criterionCanvas = document.getElementById("criterionChangeChart");
+    if (criterionCanvas) new Chart(criterionCanvas, {
+        type: "bar",
+        data: {
+            labels: charts.criterion_changes.labels,
+            datasets: [{ label: "Change (percentage points)", data: charts.criterion_changes.values, backgroundColor: "#43a6c6" }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: "y",
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+        }
+    });
+}());
+</script>
+{% endblock %}

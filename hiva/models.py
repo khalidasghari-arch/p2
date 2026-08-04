@@ -306,6 +306,14 @@ class HQIPAssessmentDashboard(HQIPAssessmentHeader):
         verbose_name = "HQIP DASHBOARD"
         verbose_name_plural = "HQIP DASHBOARD"
 
+class HQIPContentDashboard(HQIPAssessmentHeader):
+    """Read-only proxy used for the detailed HQIP content dashboard."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "HQIP ANALYSIS DASHBOARD"
+        verbose_name_plural = "HQIP ANALYSIS DASHBOARD"
+
 class HQIPAssessment(models.Model):
     header = models.ForeignKey(HQIPAssessmentHeader, on_delete=models.CASCADE, related_name="lines", null=True, blank=True)
     criteriafk = models.ForeignKey(Criteria, on_delete=models.CASCADE)
