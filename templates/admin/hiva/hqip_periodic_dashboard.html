@@ -525,23 +525,13 @@
         <div class="hq-actions no-print">
             <a class="hq-btn hq-btn-green" href="?{{ export_query }}">Export Excel</a>
             <button type="button" class="hq-btn" onclick="window.print()">Print / PDF</button>
-            <a class="hq-btn hq-btn-secondary" href="../">Back to Assessments</a>
+            <a class="hq-btn hq-btn-secondary" href="{% url 'admin:hiva_hqipassessmentheader_changelist' %}">Back to Assessments</a>
         </div>
     </div>
 
     <div class="hq-card no-print">
         <form method="get">
             <div class="hq-filter-grid">
-                <div>
-                    <label>Date from</label>
-                    <input type="date" name="date_from" value="{{ filters.date_from }}">
-                </div>
-
-                <div>
-                    <label>Date to</label>
-                    <input type="date" name="date_to" value="{{ filters.date_to }}">
-                </div>
-
                 <div>
                     <label>Province</label>
                     <select name="province">
@@ -602,19 +592,6 @@
                             <option value="{{ a.areafk_id }}"
                                 {% if filters.area|stringformat:"s" == a.areafk_id|stringformat:"s" %}selected{% endif %}>
                                 {{ a.areafk__name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label>Implementor</label>
-                    <select name="implementor">
-                        <option value="">All implementors</option>
-                        {% for i in implementor_options %}
-                            <option value="{{ i.implementorfk_id }}"
-                                {% if filters.implementor|stringformat:"s" == i.implementorfk_id|stringformat:"s" %}selected{% endif %}>
-                                {{ i.implementorfk__name }}
                             </option>
                         {% endfor %}
                     </select>

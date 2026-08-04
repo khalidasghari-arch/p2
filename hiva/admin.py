@@ -5544,12 +5544,35 @@ class HQIPAssessmentDashboardAdmin(
             "completeness": self._pct(scored_lines, total_lines),
         }
 
+    def _compute_hqip_rollups(self, headers_qs):
+        """Backward-compatible wrapper for older dashboard copies.
+
+        The standalone proxy dashboard now calculates its result through
+        ``_hqip_rollup_from_standard_rows``.  Keeping this small wrapper means
+        that an older leftover call in a large existing ``admin.py`` cannot
+        raise ``AttributeError``.  Both paths use exactly the same hierarchy
+        and N/A/missing-score rules.
+        """
+
+        rows = self._hqip_standard_rows(headers_qs)
+        rollup = self._hqip_rollup_from_standard_rows(rows)
+        return (
+            rollup["standard_results"],
+            rollup["section_results"],
+            rollup["area_results"],
+        )
+
     def _hqip_standard_rows(self, headers_qs):
         """Return one compact aggregate row per facility/round/standard."""
 
         queryset = (
             HQIPAssessment.objects
-            .filter(header__in=headers_qs)
+            .filter(
+                header__in=headers_qs,
+                criteriafk__standardfk__sectionfk__areafk_id=F(
+                    "header__areafk_id"
+                ),
+            )
             .values(
                 "header__facilityfk_id",
                 "header__facilityfk__name",
@@ -5634,14 +5657,11 @@ class HQIPAssessmentDashboardAdmin(
     # ------------------------------------------------------------------
     def hqip_periodic_dashboard(self, request):
         filters = {
-            "date_from": request.GET.get("date_from", "").strip(),
-            "date_to": request.GET.get("date_to", "").strip(),
             "province": request.GET.get("province", "").strip(),
             "district": request.GET.get("district", "").strip(),
             "facility": request.GET.get("facility", "").strip(),
             "assessmenttype": request.GET.get("assessmenttype", "").strip(),
             "area": request.GET.get("area", "").strip(),
-            "implementor": request.GET.get("implementor", "").strip(),
         }
 
         # Permission-safe base queryset. Do not replace with .objects.all().
@@ -5649,7 +5669,6 @@ class HQIPAssessmentDashboardAdmin(
             "facilityfk__districtfk__provincefk",
             "assessmenttype",
             "areafk",
-            "implementorfk",
         )
 
         # Filter choices are generated only from records this user may access.
@@ -5701,18 +5720,8 @@ class HQIPAssessmentDashboardAdmin(
             .distinct()
             .order_by("areafk__name")
         )
-        implementor_options = list(
-            option_headers
-            .values("implementorfk_id", "implementorfk__name")
-            .distinct()
-            .order_by("implementorfk__name")
-        )
 
         headers = allowed_headers
-        if filters["date_from"]:
-            headers = headers.filter(assessmentdate__gte=filters["date_from"])
-        if filters["date_to"]:
-            headers = headers.filter(assessmentdate__lte=filters["date_to"])
         if filters["province"]:
             headers = headers.filter(
                 facilityfk__districtfk__provincefk_id=filters["province"]
@@ -5729,8 +5738,6 @@ class HQIPAssessmentDashboardAdmin(
             )
         if filters["area"]:
             headers = headers.filter(areafk_id=filters["area"])
-        if filters["implementor"]:
-            headers = headers.filter(implementorfk_id=filters["implementor"])
 
         # Evaluate compact header metadata once. A header represents one
         # facility/round/thematic-area assessment record.
@@ -5795,8 +5802,7 @@ class HQIPAssessmentDashboardAdmin(
             by_area_round[(row["area_id"], row["round_id"])].append(row)
             by_facility_round[(row["facility_id"], row["round_id"])].append(row)
 
-        # Calculate the overall HQIP result using the standalone
-        # dashboard's hierarchical rollup helper.
+        # Use the standalone proxy dashboard's own hierarchical rollup helper.
         overall_counts = self._hqip_rollup_from_standard_rows(raw_rows)
         overall_score = overall_counts["overall_percent"]
 
@@ -6260,7 +6266,6 @@ class HQIPAssessmentDashboardAdmin(
             facility_options=facility_options,
             assessmenttype_options=assessmenttype_options,
             area_options=area_options,
-            implementor_options=implementor_options,
             kpis=kpis,
             methodology_note=methodology_note,
             round_rows=round_rows,
@@ -6588,15 +6593,6 @@ class HQIPAssessmentDashboardAdmin(
                 worksheet.column_dimensions[column_letter].width = min(
                     max(max_length + 2, 12), 45
                 )
-
-# ===========================================================
-# Hide HQIPAssessment from admin menu (inline only)
-# ============================================================
-class HQIPAssessmentAdmin(admin.ModelAdmin):
-    list_display = ("id", "header", "criteriafk", "scorefk")
-
-    def has_module_permission(self, request):
-        return False  # hide from sidebar
 
 # ============================================================
 # Other Admins (keep simple / safe)
