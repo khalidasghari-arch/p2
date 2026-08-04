@@ -299,6 +299,12 @@ class HQIPAssessmentHeader(models.Model):
 
     def __str__(self):
         return f"{self.facilityfk} | {self.assessmenttype} | {self.assessmentdate} | {self.areafk}"
+    
+class HQIPAssessmentDashboard(HQIPAssessmentHeader):
+    class Meta:
+        proxy = True
+        verbose_name = "HQIP DASHBOARD"
+        verbose_name_plural = "HQIP DASHBOARD"
 
 class HQIPAssessment(models.Model):
     header = models.ForeignKey(HQIPAssessmentHeader, on_delete=models.CASCADE, related_name="lines", null=True, blank=True)

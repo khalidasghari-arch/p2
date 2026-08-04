@@ -1,0 +1,1345 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --hq-blue: #1f4e78;
+        --hq-blue-2: #1565c0;
+        --hq-green: #2e7d32;
+        --hq-light-green: #e8f5e9;
+        --hq-orange: #ef6c00;
+        --hq-red: #c62828;
+        --hq-purple: #6a1b9a;
+        --hq-gray: #607d8b;
+        --hq-light-blue: #f4f8fb;
+        --hq-border: #d9e2f3;
+        --hq-text: #263238;
+        --hq-muted: #607d8b;
+    }
+
+    .hq-dashboard {
+        color: var(--hq-text);
+        font-family: Arial, sans-serif;
+    }
+
+    .hq-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .hq-title {
+        margin: 0;
+        color: var(--hq-blue);
+        font-size: 29px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+
+    .hq-subtitle {
+        max-width: 920px;
+        margin-top: 7px;
+        color: #555;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+
+    .hq-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .hq-card,
+    .hq-section {
+        margin-bottom: 18px;
+        padding: 16px;
+        border: 1px solid var(--hq-border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
+    }
+
+    .hq-section h2 {
+        margin: 0 0 12px;
+        color: var(--hq-blue);
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .hq-section h3,
+    .hq-chart-card h3 {
+        margin: 0 0 6px;
+        color: var(--hq-blue);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .hq-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        border: 0;
+        border-radius: 7px;
+        background: var(--hq-blue);
+        color: #fff !important;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .hq-btn:hover {
+        background: #173b5b;
+        color: #fff !important;
+    }
+
+    .hq-btn-secondary {
+        background: var(--hq-gray);
+    }
+
+    .hq-btn-secondary:hover {
+        background: #455a64;
+    }
+
+    .hq-btn-green {
+        background: var(--hq-green);
+    }
+
+    .hq-btn-green:hover {
+        background: #1b5e20;
+    }
+
+    .hq-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(155px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .hq-filter-grid label {
+        display: block;
+        margin-bottom: 5px;
+        color: #333;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .hq-filter-grid input,
+    .hq-filter-grid select,
+    .hq-search {
+        width: 100%;
+        min-height: 37px;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+        box-sizing: border-box;
+        background: #fff;
+    }
+
+    .hq-filter-grid input:focus,
+    .hq-filter-grid select:focus,
+    .hq-search:focus {
+        outline: none;
+        border-color: var(--hq-blue);
+        box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
+    }
+
+    .hq-filter-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+
+    .hq-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(120px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .hq-kpi {
+        display: flex;
+        min-height: 92px;
+        padding: 14px 10px;
+        flex-direction: column;
+        justify-content: center;
+        border: 1px solid var(--hq-border);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #fff, var(--hq-light-blue));
+        text-align: center;
+    }
+
+    .hq-kpi-primary {
+        background: linear-gradient(150deg, #1f4e78, #2f75b5);
+        color: #fff;
+    }
+
+    .hq-kpi-primary .hq-kpi-value,
+    .hq-kpi-primary .hq-kpi-label {
+        color: #fff;
+    }
+
+    .hq-kpi-good {
+        background: linear-gradient(180deg, #fff, #edf8ee);
+        border-color: #b9dfbc;
+    }
+
+    .hq-kpi-alert {
+        background: linear-gradient(180deg, #fff, #fff3f2);
+        border-color: #f2c3bf;
+    }
+
+    .hq-kpi-value {
+        color: var(--hq-blue);
+        font-size: 26px;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+
+    .hq-kpi-label {
+        margin-top: 6px;
+        color: #555;
+        font-size: 12px;
+        line-height: 1.3;
+    }
+
+    .hq-note,
+    .hq-info-note,
+    .hq-success-note,
+    .hq-warning-note {
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+
+    .hq-note {
+        border-left: 5px solid #f9a825;
+        background: #fff8e1;
+    }
+
+    .hq-info-note {
+        border-left: 5px solid var(--hq-blue-2);
+        background: #e3f2fd;
+    }
+
+    .hq-success-note {
+        border-left: 5px solid var(--hq-green);
+        background: var(--hq-light-green);
+    }
+
+    .hq-warning-note {
+        border-left: 5px solid var(--hq-red);
+        background: #ffebee;
+    }
+
+    .hq-chart-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    .hq-chart-card {
+        padding: 14px;
+        border: 1px solid var(--hq-border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
+    }
+
+    .hq-chart-card p {
+        margin: 0 0 10px;
+        color: #666;
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .hq-chart-box {
+        position: relative;
+        width: 100%;
+        height: 350px;
+    }
+
+    .hq-chart-box-large {
+        height: 420px;
+    }
+
+    .hq-chart-empty {
+        display: none;
+        height: 160px;
+        padding: 12px;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed #ccd6e0;
+        border-radius: 10px;
+        color: var(--hq-gray);
+        font-size: 13px;
+        text-align: center;
+    }
+
+    .hq-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .hq-toolbar h2 {
+        margin-bottom: 0;
+    }
+
+    .hq-search {
+        width: auto;
+        min-width: 290px;
+    }
+
+    .hq-table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--hq-border);
+        border-radius: 8px;
+    }
+
+    table.hq-table {
+        width: 100%;
+        min-width: 980px;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .hq-table-wide {
+        min-width: 1900px !important;
+    }
+
+    .hq-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 8px;
+        border: 1px solid var(--hq-border);
+        background: var(--hq-blue);
+        color: #fff;
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .hq-table td {
+        padding: 7px;
+        border: 1px solid var(--hq-border);
+        line-height: 1.4;
+        vertical-align: top;
+    }
+
+    .hq-table tbody tr:nth-child(even) {
+        background: #f7fbff;
+    }
+
+    .hq-table tbody tr:hover {
+        background: #eef6ff;
+    }
+
+    .hq-number {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .hq-wrap-cell {
+        min-width: 220px;
+        white-space: normal;
+    }
+
+    .hq-note-cell {
+        min-width: 340px;
+        color: #475569;
+        white-space: normal;
+    }
+
+    .hq-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .hq-badge--strong,
+    .hq-badge--improved {
+        background: var(--hq-green);
+    }
+
+    .hq-badge--slight {
+        background: var(--hq-blue-2);
+    }
+
+    .hq-badge--neutral {
+        background: var(--hq-gray);
+    }
+
+    .hq-badge--warning {
+        background: var(--hq-orange);
+    }
+
+    .hq-badge--declined {
+        background: var(--hq-red);
+    }
+
+    .hq-priority {
+        color: var(--hq-red);
+        font-weight: 800;
+    }
+
+    .hq-two-col {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 18px;
+    }
+
+    .hq-small-muted {
+        color: var(--hq-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .hq-footer-note {
+        margin-top: 12px;
+        color: var(--hq-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 1350px) {
+        .hq-filter-grid,
+        .hq-kpi-grid {
+            grid-template-columns: repeat(2, minmax(150px, 1fr));
+        }
+
+        .hq-chart-grid,
+        .hq-two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .hq-header {
+            flex-direction: column;
+        }
+
+        .hq-actions {
+            justify-content: flex-start;
+        }
+
+        .hq-filter-grid,
+        .hq-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .hq-title {
+            font-size: 23px;
+        }
+
+        .hq-search {
+            width: 100%;
+            min-width: 100%;
+        }
+
+        .hq-chart-box {
+            height: 310px;
+        }
+    }
+
+    @media print {
+        .no-print,
+        #header,
+        .breadcrumbs,
+        nav,
+        footer {
+            display: none !important;
+        }
+
+        body,
+        #container,
+        #content,
+        .hq-dashboard {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+        }
+
+        .hq-card,
+        .hq-section,
+        .hq-chart-card,
+        .hq-kpi {
+            box-shadow: none !important;
+            break-inside: avoid;
+        }
+
+        .hq-chart-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .hq-table-scroll {
+            overflow: visible;
+        }
+
+        table.hq-table,
+        .hq-table-wide {
+            min-width: 0 !important;
+            font-size: 9px;
+        }
+
+        .hq-note-cell,
+        .hq-wrap-cell {
+            min-width: 0;
+        }
+    }
+</style>
+
+<div class="hq-dashboard">
+    <div class="hq-header">
+        <div>
+            <h1 class="hq-title">HQIP Periodic Assessment Dashboard</h1>
+            <div class="hq-subtitle">
+                Executive view of periodic HQIP performance across provinces, facilities,
+                assessment rounds, and maternal and newborn health thematic areas. Use the
+                filters to prepare a focused presentation for national, provincial, partner,
+                donor, or facility audiences.
+            </div>
+        </div>
+
+        <div class="hq-actions no-print">
+            <a class="hq-btn hq-btn-green" href="?{{ export_query }}">Export Excel</a>
+            <button type="button" class="hq-btn" onclick="window.print()">Print / PDF</button>
+            <a class="hq-btn hq-btn-secondary" href="../">Back to Assessments</a>
+        </div>
+    </div>
+
+    <div class="hq-card no-print">
+        <form method="get">
+            <div class="hq-filter-grid">
+                <div>
+                    <label>Date from</label>
+                    <input type="date" name="date_from" value="{{ filters.date_from }}">
+                </div>
+
+                <div>
+                    <label>Date to</label>
+                    <input type="date" name="date_to" value="{{ filters.date_to }}">
+                </div>
+
+                <div>
+                    <label>Province</label>
+                    <select name="province">
+                        <option value="">All accessible provinces</option>
+                        {% for p in province_options %}
+                            <option value="{{ p.facilityfk__districtfk__provincefk_id }}"
+                                {% if filters.province|stringformat:"s" == p.facilityfk__districtfk__provincefk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ p.facilityfk__districtfk__provincefk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>District</label>
+                    <select name="district">
+                        <option value="">All districts</option>
+                        {% for d in district_options %}
+                            <option value="{{ d.facilityfk__districtfk_id }}"
+                                {% if filters.district|stringformat:"s" == d.facilityfk__districtfk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ d.facilityfk__districtfk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Health Facility</label>
+                    <select name="facility">
+                        <option value="">All facilities</option>
+                        {% for f in facility_options %}
+                            <option value="{{ f.facilityfk_id }}"
+                                {% if filters.facility|stringformat:"s" == f.facilityfk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ f.facilityfk__name }}{% if f.facilityfk__hfcode %} ({{ f.facilityfk__hfcode }}){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Assessment Round</label>
+                    <select name="assessmenttype">
+                        <option value="">All rounds</option>
+                        {% for r in assessmenttype_options %}
+                            <option value="{{ r.assessmenttype_id }}"
+                                {% if filters.assessmenttype|stringformat:"s" == r.assessmenttype_id|stringformat:"s" %}selected{% endif %}>
+                                {{ r.assessmenttype__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Thematic Area</label>
+                    <select name="area">
+                        <option value="">All thematic areas</option>
+                        {% for a in area_options %}
+                            <option value="{{ a.areafk_id }}"
+                                {% if filters.area|stringformat:"s" == a.areafk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ a.areafk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Implementor</label>
+                    <select name="implementor">
+                        <option value="">All implementors</option>
+                        {% for i in implementor_options %}
+                            <option value="{{ i.implementorfk_id }}"
+                                {% if filters.implementor|stringformat:"s" == i.implementorfk_id|stringformat:"s" %}selected{% endif %}>
+                                {{ i.implementorfk__name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="hq-filter-actions">
+                <button type="submit" class="hq-btn">Apply Filters</button>
+                <a href="?" class="hq-btn hq-btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    {% if records_found %}
+        <div class="hq-kpi-grid">
+            <div class="hq-kpi hq-kpi-primary">
+                <div class="hq-kpi-value">
+                    {% if kpis.overall_score != None %}{{ kpis.overall_score }}%{% else %}N/A{% endif %}
+                </div>
+                <div class="hq-kpi-label">Overall HQIP Score</div>
+            </div>
+
+            <div class="hq-kpi hq-kpi-good">
+                <div class="hq-kpi-value">
+                    {% if kpis.overall_change != None %}
+                        {% if kpis.overall_change > 0 %}+{% endif %}{{ kpis.overall_change }} pp
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </div>
+                <div class="hq-kpi-label">First-to-Latest Change</div>
+            </div>
+
+            <div class="hq-kpi">
+                <div class="hq-kpi-value">{{ kpis.facilities|default:0 }}</div>
+                <div class="hq-kpi-label">Facilities Assessed</div>
+            </div>
+
+            <div class="hq-kpi">
+                <div class="hq-kpi-value">{{ kpis.assessment_events|default:0 }}</div>
+                <div class="hq-kpi-label">Assessment Events</div>
+            </div>
+
+            <div class="hq-kpi">
+                <div class="hq-kpi-value">{{ kpis.provinces|default:0 }}</div>
+                <div class="hq-kpi-label">Provinces</div>
+            </div>
+
+            <div class="hq-kpi">
+                <div class="hq-kpi-value">{{ kpis.rounds|default:0 }}</div>
+                <div class="hq-kpi-label">Assessment Rounds</div>
+            </div>
+
+            <div class="hq-kpi hq-kpi-alert">
+                <div class="hq-kpi-value">{{ kpis.failed_criteria|default:0 }}</div>
+                <div class="hq-kpi-label">NO / Failed Criteria</div>
+            </div>
+
+            <div class="hq-kpi hq-kpi-alert">
+                <div class="hq-kpi-value">{{ kpis.missing_scores|default:0 }}</div>
+                <div class="hq-kpi-label">Missing Scores</div>
+            </div>
+        </div>
+
+        <div class="hq-note">
+            <strong>Methodology:</strong> {{ methodology_note }}
+            Scoring completeness for the selected data is
+            <strong>{% if kpis.scoring_completeness != None %}{{ kpis.scoring_completeness }}%{% else %}N/A{% endif %}</strong>.
+        </div>
+
+        {% if first_round_row and latest_round_row %}
+            <div class="hq-success-note">
+                <strong>Executive reading:</strong>
+                The selected data begin with <strong>{{ first_round_row.round }}</strong>
+                ({{ first_round_row.score }}%) and extend to
+                <strong>{{ latest_round_row.round }}</strong>
+                ({{ latest_round_row.score }}%).
+                {% if kpis.overall_change != None %}
+                    The net movement is
+                    <strong>{% if kpis.overall_change > 0 %}+{% endif %}{{ kpis.overall_change }} percentage points</strong>.
+                {% else %}
+                    Select at least two comparable rounds to calculate change.
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {{ chart_data|json_script:"hqip-periodic-chart-data" }}
+
+        <div class="hq-section">
+            <h2>Visual Analytics</h2>
+            <div class="hq-info-note">
+                Charts summarize periodic change, provincial performance, thematic-area
+                performance, facility improvement, current thematic gaps, and response
+                completeness. Facility changes are comparative signals and should be verified
+                against source checklists and implementation evidence before external story use.
+            </div>
+
+            <div class="hq-chart-grid">
+                <div class="hq-chart-card">
+                    <h3>HQIP score by assessment round</h3>
+                    <p>Shows the overall hierarchical HQIP percentage over successive rounds.</p>
+                    <div class="hq-chart-box">
+                        <canvas id="roundTrendChart"></canvas>
+                        <div class="hq-chart-empty" id="roundTrendChartEmpty">No round trend data available.</div>
+                    </div>
+                </div>
+
+                <div class="hq-chart-card">
+                    <h3>Province comparison by round</h3>
+                    <p>Compares provincial HQIP performance across the selected assessment rounds.</p>
+                    <div class="hq-chart-box">
+                        <canvas id="provinceRoundChart"></canvas>
+                        <div class="hq-chart-empty" id="provinceRoundChartEmpty">No province comparison data available.</div>
+                    </div>
+                </div>
+
+                <div class="hq-chart-card">
+                    <h3>Thematic-area comparison by round</h3>
+                    <p>Shows which quality domains improved and which remain below expectations.</p>
+                    <div class="hq-chart-box hq-chart-box-large">
+                        <canvas id="areaRoundChart"></canvas>
+                        <div class="hq-chart-empty" id="areaRoundChartEmpty">No thematic-area comparison data available.</div>
+                    </div>
+                </div>
+
+                <div class="hq-chart-card">
+                    <h3>Facility first-to-latest change</h3>
+                    <p>Ranks the largest positive and negative facility changes in percentage points.</p>
+                    <div class="hq-chart-box hq-chart-box-large">
+                        <canvas id="facilityImprovementChart"></canvas>
+                        <div class="hq-chart-empty" id="facilityImprovementChartEmpty">At least two comparable rounds are required.</div>
+                    </div>
+                </div>
+
+                <div class="hq-chart-card">
+                    <h3>Current thematic gaps</h3>
+                    <p>Lowest thematic scores in the latest selected assessment round.</p>
+                    <div class="hq-chart-box hq-chart-box-large">
+                        <canvas id="currentGapChart"></canvas>
+                        <div class="hq-chart-empty" id="currentGapChartEmpty">No latest-round thematic data available.</div>
+                    </div>
+                </div>
+
+                <div class="hq-chart-card">
+                    <h3>Assessment response distribution</h3>
+                    <p>Distribution of YES, NO, N/A, and missing scores for the selected records.</p>
+                    <div class="hq-chart-box">
+                        <canvas id="responseMixChart"></canvas>
+                        <div class="hq-chart-empty" id="responseMixChartEmpty">No response distribution data available.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="hq-section">
+            <h2>Assessment Round Summary</h2>
+            <div class="hq-table-scroll">
+                <table class="hq-table">
+                    <thead>
+                        <tr>
+                            <th>Assessment Round</th>
+                            <th>Date From</th>
+                            <th>Date To</th>
+                            <th>Facilities</th>
+                            <th>Assessment Events</th>
+                            <th>Thematic Areas</th>
+                            <th>HQIP %</th>
+                            <th>Change vs Previous</th>
+                            <th>Status</th>
+                            <th>YES</th>
+                            <th>NO</th>
+                            <th>N/A</th>
+                            <th>Missing</th>
+                            <th>Scoring Completeness</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in round_rows %}
+                            <tr>
+                                <td><strong>{{ r.round }}</strong></td>
+                                <td>{{ r.date_from|date:"Y-m-d"|default:"-" }}</td>
+                                <td>{{ r.date_to|date:"Y-m-d"|default:"-" }}</td>
+                                <td class="hq-number">{{ r.facility_count }}</td>
+                                <td class="hq-number">{{ r.assessment_events }}</td>
+                                <td class="hq-number">{{ r.thematic_areas }}</td>
+                                <td class="hq-number">{% if r.score != None %}{{ r.score }}%{% else %}N/A{% endif %}</td>
+                                <td class="hq-number">
+                                    {% if r.change_previous != None %}
+                                        {% if r.change_previous > 0 %}+{% endif %}{{ r.change_previous }} pp
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td><span class="hq-badge hq-badge--{{ r.status_class }}">{{ r.status }}</span></td>
+                                <td class="hq-number">{{ r.yes }}</td>
+                                <td class="hq-number">{{ r.no }}</td>
+                                <td class="hq-number">{{ r.na }}</td>
+                                <td class="hq-number">{{ r.missing }}</td>
+                                <td class="hq-number">{% if r.completeness != None %}{{ r.completeness }}%{% else %}N/A{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="14">No assessment-round records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="hq-section">
+            <div class="hq-toolbar">
+                <h2>Province Performance by Assessment Round</h2>
+                <input type="text" class="hq-search no-print" id="provinceSearch" placeholder="Search province or round...">
+            </div>
+            <div class="hq-table-scroll">
+                <table class="hq-table" id="provinceTable">
+                    <thead>
+                        <tr>
+                            <th>Province</th>
+                            <th>Assessment Round</th>
+                            <th>Facilities</th>
+                            <th>HQIP %</th>
+                            <th>Change vs First</th>
+                            <th>Status</th>
+                            <th>YES</th>
+                            <th>NO</th>
+                            <th>N/A</th>
+                            <th>Missing</th>
+                            <th>Scoring Completeness</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in province_rows %}
+                            <tr>
+                                <td><strong>{{ r.province }}</strong></td>
+                                <td>{{ r.round }}</td>
+                                <td class="hq-number">{{ r.facilities }}</td>
+                                <td class="hq-number">{% if r.score != None %}{{ r.score }}%{% else %}N/A{% endif %}</td>
+                                <td class="hq-number">
+                                    {% if r.change_from_first != None %}
+                                        {% if r.change_from_first > 0 %}+{% endif %}{{ r.change_from_first }} pp
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td><span class="hq-badge hq-badge--{{ r.status_class }}">{{ r.status }}</span></td>
+                                <td class="hq-number">{{ r.yes }}</td>
+                                <td class="hq-number">{{ r.no }}</td>
+                                <td class="hq-number">{{ r.na }}</td>
+                                <td class="hq-number">{{ r.missing }}</td>
+                                <td class="hq-number">{% if r.completeness != None %}{{ r.completeness }}%{% else %}N/A{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="11">No province-level records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="hq-section">
+            <div class="hq-toolbar">
+                <h2>Facility First-vs-Latest HQIP Comparison</h2>
+                <input type="text" class="hq-search no-print" id="facilitySearch" placeholder="Search province, district, facility, status...">
+            </div>
+
+            <div class="hq-info-note">
+                A change is calculated only when a facility has at least two scored assessment
+                rounds in the selected data. Latest priority areas are the three lowest scored
+                thematic areas for the facility's latest selected round.
+            </div>
+
+            <div class="hq-table-scroll">
+                <table class="hq-table hq-table-wide" id="facilityTable">
+                    <thead>
+                        <tr>
+                            <th>Province</th>
+                            <th>District</th>
+                            <th>Facility</th>
+                            <th>HF Code</th>
+                            <th>First Round</th>
+                            <th>Latest Round</th>
+                            <th>First HQIP %</th>
+                            <th>Latest HQIP %</th>
+                            <th>Absolute Change</th>
+                            <th>Percent Change</th>
+                            <th>Improvement Status</th>
+                            <th>Improved Areas</th>
+                            <th>Declined Areas</th>
+                            <th>Latest Priority Areas</th>
+                            <th>Story Use</th>
+                            <th>Notes for Field Verification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in facility_comparison_rows %}
+                            <tr>
+                                <td>{{ r.province }}</td>
+                                <td>{{ r.district }}</td>
+                                <td><strong>{{ r.facility }}</strong></td>
+                                <td>{{ r.hfcode|default:"-" }}</td>
+                                <td>{{ r.first_round }}</td>
+                                <td>{{ r.latest_round }}</td>
+                                <td class="hq-number">{{ r.first_score }}%</td>
+                                <td class="hq-number">{{ r.latest_score }}%</td>
+                                <td class="hq-number">
+                                    {% if r.absolute_change != None %}
+                                        {% if r.absolute_change > 0 %}+{% endif %}{{ r.absolute_change }} pp
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                <td class="hq-number">
+                                    {% if r.percent_change != None %}
+                                        {% if r.percent_change > 0 %}+{% endif %}{{ r.percent_change }}%
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                <td><span class="hq-badge hq-badge--{{ r.status_class }}">{{ r.status }}</span></td>
+                                <td class="hq-number">{{ r.improved_areas }}</td>
+                                <td class="hq-number">{{ r.declined_areas }}</td>
+                                <td class="hq-wrap-cell">{{ r.priority_areas }}</td>
+                                <td class="hq-wrap-cell">{{ r.story_use }}</td>
+                                <td class="hq-note-cell">{{ r.notes }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="16">No facility comparison records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="hq-section">
+            <div class="hq-toolbar">
+                <h2>Thematic Area Performance by Assessment Round</h2>
+                <input type="text" class="hq-search no-print" id="areaSearch" placeholder="Search thematic area or round...">
+            </div>
+            <div class="hq-table-scroll">
+                <table class="hq-table" id="areaTable">
+                    <thead>
+                        <tr>
+                            <th>Thematic Area</th>
+                            <th>Assessment Round</th>
+                            <th>HQIP %</th>
+                            <th>Change vs First</th>
+                            <th>Status</th>
+                            <th>YES</th>
+                            <th>NO</th>
+                            <th>N/A</th>
+                            <th>Missing</th>
+                            <th>Scoring Completeness</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in area_rows %}
+                            <tr>
+                                <td><strong>{{ r.area }}</strong></td>
+                                <td>{{ r.round }}</td>
+                                <td class="hq-number">{% if r.score != None %}{{ r.score }}%{% else %}N/A{% endif %}</td>
+                                <td class="hq-number">
+                                    {% if r.change_from_first != None %}
+                                        {% if r.change_from_first > 0 %}+{% endif %}{{ r.change_from_first }} pp
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td><span class="hq-badge hq-badge--{{ r.status_class }}">{{ r.status }}</span></td>
+                                <td class="hq-number">{{ r.yes }}</td>
+                                <td class="hq-number">{{ r.no }}</td>
+                                <td class="hq-number">{{ r.na }}</td>
+                                <td class="hq-number">{{ r.missing }}</td>
+                                <td class="hq-number">{% if r.completeness != None %}{{ r.completeness }}%{% else %}N/A{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="10">No thematic-area records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="hq-two-col">
+            <div class="hq-section">
+                <h2>Success-Story Candidates</h2>
+                <div class="hq-small-muted" style="margin-bottom:10px;">
+                    Ranked by first-to-latest HQIP improvement, latest score, and number of
+                    improved thematic areas. These are candidates only; field verification is required.
+                </div>
+                <div class="hq-table-scroll">
+                    <table class="hq-table">
+                        <thead>
+                            <tr>
+                                <th>Province</th>
+                                <th>Facility</th>
+                                <th>First %</th>
+                                <th>Latest %</th>
+                                <th>Change</th>
+                                <th>Improved Areas</th>
+                                <th>Story Use</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in success_story_candidates %}
+                                <tr>
+                                    <td>{{ r.province }}</td>
+                                    <td><strong>{{ r.facility }}</strong></td>
+                                    <td class="hq-number">{{ r.first_score }}%</td>
+                                    <td class="hq-number">{{ r.latest_score }}%</td>
+                                    <td class="hq-number">+{{ r.absolute_change }} pp</td>
+                                    <td class="hq-number">{{ r.improved_areas }}</td>
+                                    <td class="hq-wrap-cell">{{ r.story_use }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="7">No positive multi-round candidates found.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="hq-section">
+                <h2>Latest-Round Priority Thematic Areas</h2>
+                {% if latest_round_row %}
+                    <div class="hq-small-muted" style="margin-bottom:10px;">
+                        Latest selected round: <strong>{{ latest_round_row.round }}</strong>.
+                        The first three rows are current priority gaps.
+                    </div>
+                {% endif %}
+                <div class="hq-table-scroll">
+                    <table class="hq-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Thematic Area</th>
+                                <th>HQIP %</th>
+                                <th>Priority</th>
+                                <th>NO</th>
+                                <th>Missing</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in current_gap_rows %}
+                                <tr>
+                                    <td class="hq-number">{{ r.priority_rank }}</td>
+                                    <td class="{% if r.is_top_priority %}hq-priority{% endif %}">{{ r.area }}</td>
+                                    <td class="hq-number">{{ r.score }}%</td>
+                                    <td>
+                                        {% if r.is_top_priority %}
+                                            <span class="hq-badge hq-badge--declined">Priority</span>
+                                        {% else %}
+                                            <span class="hq-badge hq-badge--neutral">Monitor</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="hq-number">{{ r.no }}</td>
+                                    <td class="hq-number">{{ r.missing }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6">No latest-round thematic priorities available.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="hq-footer-note">
+            Dashboard values reflect the selected filters and the user's province access.
+            A positive change indicates an increase in HQIP percentage; it does not by itself
+            prove causation or validate a success story.
+        </div>
+    {% else %}
+        <div class="hq-warning-note">
+            <strong>No HQIP score data were found for the selected filters.</strong>
+            Reset the filters or confirm that assessment detail lines have YES, NO, N/A, or blank scores.
+        </div>
+    {% endif %}
+</div>
+
+{% if records_found %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    const dataElement = document.getElementById("hqip-periodic-chart-data");
+    let chartData = {};
+
+    if (dataElement) {
+        try {
+            chartData = JSON.parse(dataElement.textContent || "{}");
+        } catch (error) {
+            console.error("Could not parse HQIP dashboard chart data:", error);
+        }
+    }
+
+    const palette = [
+        "#1f4e78", "#2e7d32", "#ef6c00", "#6a1b9a",
+        "#00838f", "#c62828", "#5d4037", "#455a64"
+    ];
+
+    function showEmpty(canvasId) {
+        const canvas = document.getElementById(canvasId);
+        const empty = document.getElementById(canvasId + "Empty");
+        if (canvas) canvas.style.display = "none";
+        if (empty) empty.style.display = "flex";
+    }
+
+    function hasValues(values) {
+        return Array.isArray(values) && values.some(value => value !== null && value !== undefined);
+    }
+
+    function scoreOptions(horizontal) {
+        return {
+            indexAxis: horizontal ? "y" : "x",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: { boxWidth: 14, padding: 14 }
+                },
+                tooltip: {
+                    mode: "index",
+                    intersect: false,
+                    callbacks: {
+                        label: context => context.dataset.label + ": " +
+                            (context.raw === null ? "N/A" : Number(context.raw).toFixed(2) + "%")
+                    }
+                }
+            },
+            scales: {
+                x: horizontal ? {
+                    beginAtZero: true,
+                    suggestedMax: 100,
+                    ticks: { callback: value => value + "%" }
+                } : {
+                    ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 },
+                    grid: { display: false }
+                },
+                y: horizontal ? {
+                    ticks: { autoSkip: false },
+                    grid: { display: false }
+                } : {
+                    beginAtZero: true,
+                    suggestedMax: 100,
+                    ticks: { callback: value => value + "%" }
+                }
+            }
+        };
+    }
+
+    function buildRoundTrend() {
+        const rows = chartData.round_trend || [];
+        if (!rows.length || !hasValues(rows.map(row => row.score))) {
+            showEmpty("roundTrendChart");
+            return;
+        }
+
+        new Chart(document.getElementById("roundTrendChart"), {
+            type: "line",
+            data: {
+                labels: rows.map(row => row.round),
+                datasets: [{
+                    label: "HQIP %",
+                    data: rows.map(row => row.score),
+                    borderColor: "#1f4e78",
+                    backgroundColor: "rgba(31, 78, 120, 0.16)",
+                    fill: true,
+                    borderWidth: 3,
+                    tension: 0.25,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: scoreOptions(false)
+        });
+    }
+
+    function buildGroupedChart(canvasId, payload, horizontal) {
+        const labels = (payload || {}).labels || [];
+        const datasets = (payload || {}).datasets || [];
+        const hasDatasetValues = datasets.some(item => hasValues(item.data || []));
+        if (!labels.length || !datasets.length || !hasDatasetValues) {
+            showEmpty(canvasId);
+            return;
+        }
+
+        new Chart(document.getElementById(canvasId), {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: datasets.map((item, index) => ({
+                    label: item.label,
+                    data: item.data,
+                    backgroundColor: palette[index % palette.length] + "CC",
+                    borderColor: palette[index % palette.length],
+                    borderWidth: 1,
+                    borderRadius: 5
+                }))
+            },
+            options: scoreOptions(horizontal)
+        });
+    }
+
+    function buildFacilityChange() {
+        const rows = chartData.facility_improvement || [];
+        if (!rows.length || !hasValues(rows.map(row => row.change))) {
+            showEmpty("facilityImprovementChart");
+            return;
+        }
+
+        new Chart(document.getElementById("facilityImprovementChart"), {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row.facility + " (" + row.province + ")"),
+                datasets: [{
+                    label: "Change (percentage points)",
+                    data: rows.map(row => row.change),
+                    backgroundColor: rows.map(row => row.change >= 0 ? "rgba(46,125,50,0.78)" : "rgba(198,40,40,0.78)"),
+                    borderColor: rows.map(row => row.change >= 0 ? "#2e7d32" : "#c62828"),
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                        callbacks: {
+                            label: context => Number(context.raw).toFixed(2) + " pp"
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { callback: value => value + " pp" } },
+                    y: { ticks: { autoSkip: false }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    function buildCurrentGaps() {
+        const rows = chartData.current_gaps || [];
+        if (!rows.length || !hasValues(rows.map(row => row.score))) {
+            showEmpty("currentGapChart");
+            return;
+        }
+
+        new Chart(document.getElementById("currentGapChart"), {
+            type: "bar",
+            data: {
+                labels: rows.map(row => row.area),
+                datasets: [{
+                    label: "Latest HQIP %",
+                    data: rows.map(row => row.score),
+                    backgroundColor: rows.map((row, index) => index < 3 ? "rgba(198,40,40,0.78)" : "rgba(31,78,120,0.76)"),
+                    borderColor: rows.map((row, index) => index < 3 ? "#c62828" : "#1f4e78"),
+                    borderWidth: 1,
+                    borderRadius: 5
+                }]
+            },
+            options: scoreOptions(true)
+        });
+    }
+
+    function buildResponseMix() {
+        const payload = chartData.response_mix || {};
+        const values = payload.values || [];
+        if (!hasValues(values) || values.reduce((sum, value) => sum + Number(value || 0), 0) === 0) {
+            showEmpty("responseMixChart");
+            return;
+        }
+
+        new Chart(document.getElementById("responseMixChart"), {
+            type: "doughnut",
+            data: {
+                labels: payload.labels || [],
+                datasets: [{
+                    data: values,
+                    backgroundColor: ["#2e7d32", "#c62828", "#607d8b", "#ef6c00"],
+                    borderColor: "#ffffff",
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "58%",
+                plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                        callbacks: {
+                            label: context => context.label + ": " + Number(context.raw).toLocaleString()
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function enableTableSearch(inputId, tableId) {
+        const input = document.getElementById(inputId);
+        const table = document.getElementById(tableId);
+        if (!input || !table) return;
+
+        input.addEventListener("input", function () {
+            const query = input.value.toLowerCase().trim();
+            table.querySelectorAll("tbody tr").forEach(function (row) {
+                row.style.display = row.textContent.toLowerCase().includes(query) ? "" : "none";
+            });
+        });
+    }
+
+    if (typeof Chart === "undefined") {
+        [
+            "roundTrendChart", "provinceRoundChart", "areaRoundChart",
+            "facilityImprovementChart", "currentGapChart", "responseMixChart"
+        ].forEach(showEmpty);
+        console.error("Chart.js did not load. Use a local static Chart.js file if the server has no internet access.");
+    } else {
+        buildRoundTrend();
+        buildGroupedChart("provinceRoundChart", chartData.province_comparison, false);
+        buildGroupedChart("areaRoundChart", chartData.area_comparison, true);
+        buildFacilityChange();
+        buildCurrentGaps();
+        buildResponseMix();
+    }
+
+    enableTableSearch("provinceSearch", "provinceTable");
+    enableTableSearch("facilitySearch", "facilityTable");
+    enableTableSearch("areaSearch", "areaTable");
+})();
+</script>
+{% endif %}
+
+{% endblock %}

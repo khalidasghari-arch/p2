@@ -1,5 +1,6 @@
 from urllib.parse import urlencode
 from django.db.models import Sum, Count, F
+from django.db.models import Count, Max, Min, Q
 import openpyxl
 from datetime import datetime
 from django.http import HttpResponse
@@ -58,7 +59,8 @@ from .models import (
     Participationtype,
     Position,
     WhoChildbirthChecklistMonthly,
-    QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, AimPPHDashboard,
+    QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, 
+    AimPPHDashboard,HQIPAssessmentDashboard,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -5307,6 +5309,1285 @@ class AssessmentHeaderAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         )
 
         return TemplateResponse(request, "admin/hiva/hqip_priority_areas.html", context)
+
+@admin.register(HQIPAssessmentDashboard)
+class HQIPAssessmentDashboardAdmin(
+    ProvinceRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    """Read-only, audience-facing HQIP periodic assessment dashboard."""
+
+    hqip_periodic_template = "admin/hiva/hqip_periodic_dashboard.html"
+
+    def province_filter_kwargs(self, request):
+        return {
+            "facilityfk__districtfk__provincefk": user_province(request)
+        }
+
+    def changelist_view(self, request, extra_context=None):
+        return self.hqip_periodic_dashboard(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        opts = HQIPAssessmentHeader._meta
+        return (
+            request.user.is_superuser
+            or request.user.has_perm(
+                f"{opts.app_label}.view_{opts.model_name}"
+            )
+            or request.user.has_perm(
+                f"{opts.app_label}.change_{opts.model_name}"
+            )
+        )
+
+    def has_module_permission(self, request):
+        return self.has_view_permission(request)
+
+    def _round2(self, value):
+        if value is None:
+            return None
+        return float(
+            Decimal(str(value)).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+
+    def _pct(self, yes_count, applicable_count):
+        if not applicable_count:
+            return None
+        return self._round2(
+            Decimal(yes_count)
+            / Decimal(applicable_count)
+            * Decimal("100")
+        )
+
+    # ------------------------------------------------------------------
+    # Small calculation/display helpers
+    # ------------------------------------------------------------------
+    def _hqip_mean(self, values):
+        clean = [Decimal(str(value)) for value in values if value is not None]
+        if not clean:
+            return None
+        return self._round2(sum(clean) / Decimal(len(clean)))
+
+    def _hqip_change(self, newer, older):
+        if newer is None or older is None:
+            return None
+        return self._round2(Decimal(str(newer)) - Decimal(str(older)))
+
+    def _hqip_percent_change(self, newer, older):
+        if newer is None or older in (None, 0, 0.0):
+            return None
+        value = (
+            (Decimal(str(newer)) - Decimal(str(older)))
+            / Decimal(str(older))
+            * Decimal("100")
+        )
+        return self._round2(value)
+
+    def _hqip_change_status(self, change, has_comparison=True):
+        if not has_comparison or change is None:
+            return "Reference round", "neutral"
+        if change >= 10:
+            return "Strong improvement", "strong"
+        if change >= 5:
+            return "Improved", "improved"
+        if change > 0:
+            return "Slight improvement", "slight"
+        if change == 0:
+            return "No change", "neutral"
+        if change > -5:
+            return "Slight decline", "warning"
+        return "Declined", "declined"
+
+    def _hqip_rollup_from_standard_rows(self, rows):
+        """Apply the existing HQIP hierarchy to pre-aggregated standard rows.
+
+        Formula preserved from ``_compute_hqip_rollups``:
+        - Standard % = YES / (YES + NO) * 100
+        - Section % = mean of its scored Standard percentages
+        - Thematic Area % = mean of its scored Section percentages
+        - Overall HQIP % = mean of its scored Thematic Area percentages
+
+        N/A and missing scores do not enter the Standard denominator.
+        """
+
+        standard_totals = defaultdict(
+            lambda: {
+                "yes": 0,
+                "no": 0,
+                "na": 0,
+                "missing": 0,
+                "applicable": 0,
+            }
+        )
+        names = {}
+
+        total_yes = 0
+        total_no = 0
+        total_na = 0
+        total_missing = 0
+
+        for row in rows:
+            area_id = row["area_id"]
+            section_id = row["section_id"]
+            standard_id = row["standard_id"]
+            key = (area_id, section_id, standard_id)
+
+            names[key] = {
+                "area_id": area_id,
+                "area": row["area"],
+                "section_id": section_id,
+                "section": row["section"],
+                "standard_id": standard_id,
+                "standard": row["standard"],
+            }
+
+            standard_totals[key]["yes"] += row["yes"]
+            standard_totals[key]["no"] += row["no"]
+            standard_totals[key]["na"] += row["na"]
+            standard_totals[key]["missing"] += row["missing"]
+            standard_totals[key]["applicable"] += row["applicable"]
+
+            total_yes += row["yes"]
+            total_no += row["no"]
+            total_na += row["na"]
+            total_missing += row["missing"]
+
+        standard_results = []
+        section_percent_lists = defaultdict(list)
+        section_names = {}
+
+        for key, counts in standard_totals.items():
+            meta = names[key]
+            standard_percent = self._pct(counts["yes"], counts["applicable"])
+            standard_results.append(
+                {
+                    **meta,
+                    **counts,
+                    "percent": standard_percent,
+                }
+            )
+
+            section_key = (meta["area_id"], meta["section_id"])
+            section_names[section_key] = {
+                "area_id": meta["area_id"],
+                "area": meta["area"],
+                "section_id": meta["section_id"],
+                "section": meta["section"],
+            }
+            if standard_percent is not None:
+                section_percent_lists[section_key].append(standard_percent)
+
+        section_results = []
+        area_percent_lists = defaultdict(list)
+        area_names = {}
+
+        for section_key, percentages in section_percent_lists.items():
+            meta = section_names[section_key]
+            section_percent = self._hqip_mean(percentages)
+            section_results.append(
+                {
+                    **meta,
+                    "num_standards_used": len(percentages),
+                    "percent": section_percent,
+                }
+            )
+
+            area_names[meta["area_id"]] = meta["area"]
+            if section_percent is not None:
+                area_percent_lists[meta["area_id"]].append(section_percent)
+
+        area_results = []
+        for area_id, percentages in area_percent_lists.items():
+            area_results.append(
+                {
+                    "area_id": area_id,
+                    "area": area_names.get(area_id, "-"),
+                    "num_sections_used": len(percentages),
+                    "percent": self._hqip_mean(percentages),
+                }
+            )
+
+        standard_results.sort(
+            key=lambda item: (item["area"], item["section"], item["standard"])
+        )
+        section_results.sort(key=lambda item: (item["area"], item["section"]))
+        area_results.sort(key=lambda item: item["area"])
+
+        total_lines = total_yes + total_no + total_na + total_missing
+        scored_lines = total_yes + total_no + total_na
+
+        return {
+            "standard_results": standard_results,
+            "section_results": section_results,
+            "area_results": area_results,
+            "overall_percent": self._hqip_mean(
+                [item["percent"] for item in area_results]
+            ),
+            "yes": total_yes,
+            "no": total_no,
+            "na": total_na,
+            "missing": total_missing,
+            "applicable": total_yes + total_no,
+            "scored": scored_lines,
+            "total_lines": total_lines,
+            "completeness": self._pct(scored_lines, total_lines),
+        }
+
+    def _hqip_standard_rows(self, headers_qs):
+        """Return one compact aggregate row per facility/round/standard."""
+
+        queryset = (
+            HQIPAssessment.objects
+            .filter(header__in=headers_qs)
+            .values(
+                "header__facilityfk_id",
+                "header__facilityfk__name",
+                "header__facilityfk__hfcode",
+                "header__facilityfk__districtfk_id",
+                "header__facilityfk__districtfk__name",
+                "header__facilityfk__districtfk__provincefk_id",
+                "header__facilityfk__districtfk__provincefk__name",
+                "header__assessmenttype_id",
+                "header__assessmenttype__name",
+                "criteriafk__standardfk__sectionfk__areafk_id",
+                "criteriafk__standardfk__sectionfk__areafk__name",
+                "criteriafk__standardfk__sectionfk_id",
+                "criteriafk__standardfk__sectionfk__name",
+                "criteriafk__standardfk_id",
+                "criteriafk__standardfk__name",
+            )
+            .annotate(
+                yes=Count("id", filter=Q(scorefk_id=SCORE_YES_ID)),
+                no=Count("id", filter=Q(scorefk_id=SCORE_NO_ID)),
+                na=Count("id", filter=Q(scorefk_id=SCORE_NA_ID)),
+                missing=Count("id", filter=Q(scorefk__isnull=True)),
+                applicable=Count(
+                    "id",
+                    filter=Q(scorefk_id__in=[SCORE_YES_ID, SCORE_NO_ID]),
+                ),
+            )
+            .order_by()
+        )
+
+        rows = []
+        for row in queryset:
+            rows.append(
+                {
+                    "facility_id": row["header__facilityfk_id"],
+                    "facility": row["header__facilityfk__name"] or "Unknown",
+                    "hfcode": row["header__facilityfk__hfcode"] or "",
+                    "district_id": row["header__facilityfk__districtfk_id"],
+                    "district": (
+                        row["header__facilityfk__districtfk__name"] or "Unknown"
+                    ),
+                    "province_id": (
+                        row[
+                            "header__facilityfk__districtfk__provincefk_id"
+                        ]
+                    ),
+                    "province": (
+                        row[
+                            "header__facilityfk__districtfk__provincefk__name"
+                        ]
+                        or "Unknown"
+                    ),
+                    "round_id": row["header__assessmenttype_id"],
+                    "round": row["header__assessmenttype__name"] or "Unknown",
+                    "area_id": (
+                        row["criteriafk__standardfk__sectionfk__areafk_id"]
+                    ),
+                    "area": (
+                        row[
+                            "criteriafk__standardfk__sectionfk__areafk__name"
+                        ]
+                        or "Unknown"
+                    ),
+                    "section_id": row["criteriafk__standardfk__sectionfk_id"],
+                    "section": (
+                        row["criteriafk__standardfk__sectionfk__name"]
+                        or "Unknown"
+                    ),
+                    "standard_id": row["criteriafk__standardfk_id"],
+                    "standard": row["criteriafk__standardfk__name"] or "Unknown",
+                    "yes": row["yes"],
+                    "no": row["no"],
+                    "na": row["na"],
+                    "missing": row["missing"],
+                    "applicable": row["applicable"],
+                }
+            )
+        return rows
+
+    # ------------------------------------------------------------------
+    # Main dashboard view
+    # ------------------------------------------------------------------
+    def hqip_periodic_dashboard(self, request):
+        filters = {
+            "date_from": request.GET.get("date_from", "").strip(),
+            "date_to": request.GET.get("date_to", "").strip(),
+            "province": request.GET.get("province", "").strip(),
+            "district": request.GET.get("district", "").strip(),
+            "facility": request.GET.get("facility", "").strip(),
+            "assessmenttype": request.GET.get("assessmenttype", "").strip(),
+            "area": request.GET.get("area", "").strip(),
+            "implementor": request.GET.get("implementor", "").strip(),
+        }
+
+        # Permission-safe base queryset. Do not replace with .objects.all().
+        allowed_headers = self.get_queryset(request).select_related(
+            "facilityfk__districtfk__provincefk",
+            "assessmenttype",
+            "areafk",
+            "implementorfk",
+        )
+
+        # Filter choices are generated only from records this user may access.
+        option_headers = allowed_headers
+        province_options = list(
+            option_headers
+            .values(
+                "facilityfk__districtfk__provincefk_id",
+                "facilityfk__districtfk__provincefk__name",
+            )
+            .distinct()
+            .order_by("facilityfk__districtfk__provincefk__name")
+        )
+
+        location_options = option_headers
+        if filters["province"]:
+            location_options = location_options.filter(
+                facilityfk__districtfk__provincefk_id=filters["province"]
+            )
+
+        district_options = list(
+            location_options
+            .values("facilityfk__districtfk_id", "facilityfk__districtfk__name")
+            .distinct()
+            .order_by("facilityfk__districtfk__name")
+        )
+
+        facility_options_qs = location_options
+        if filters["district"]:
+            facility_options_qs = facility_options_qs.filter(
+                facilityfk__districtfk_id=filters["district"]
+            )
+        facility_options = list(
+            facility_options_qs
+            .values("facilityfk_id", "facilityfk__name", "facilityfk__hfcode")
+            .distinct()
+            .order_by("facilityfk__name")
+        )
+
+        assessmenttype_options = list(
+            option_headers
+            .values("assessmenttype_id", "assessmenttype__name")
+            .distinct()
+            .order_by("assessmenttype__name")
+        )
+        area_options = list(
+            option_headers
+            .values("areafk_id", "areafk__name")
+            .distinct()
+            .order_by("areafk__name")
+        )
+        implementor_options = list(
+            option_headers
+            .values("implementorfk_id", "implementorfk__name")
+            .distinct()
+            .order_by("implementorfk__name")
+        )
+
+        headers = allowed_headers
+        if filters["date_from"]:
+            headers = headers.filter(assessmentdate__gte=filters["date_from"])
+        if filters["date_to"]:
+            headers = headers.filter(assessmentdate__lte=filters["date_to"])
+        if filters["province"]:
+            headers = headers.filter(
+                facilityfk__districtfk__provincefk_id=filters["province"]
+            )
+        if filters["district"]:
+            headers = headers.filter(
+                facilityfk__districtfk_id=filters["district"]
+            )
+        if filters["facility"]:
+            headers = headers.filter(facilityfk_id=filters["facility"])
+        if filters["assessmenttype"]:
+            headers = headers.filter(
+                assessmenttype_id=filters["assessmenttype"]
+            )
+        if filters["area"]:
+            headers = headers.filter(areafk_id=filters["area"])
+        if filters["implementor"]:
+            headers = headers.filter(implementorfk_id=filters["implementor"])
+
+        # Evaluate compact header metadata once. A header represents one
+        # facility/round/thematic-area assessment record.
+        header_rows = list(
+            headers.values(
+                "id",
+                "facilityfk_id",
+                "facilityfk__name",
+                "facilityfk__districtfk__provincefk_id",
+                "assessmenttype_id",
+                "assessmenttype__name",
+                "assessmentdate",
+                "assessmentend_date",
+                "areafk_id",
+            )
+        )
+
+        round_meta_query = (
+            headers
+            .values("assessmenttype_id", "assessmenttype__name")
+            .annotate(
+                date_from=Min("assessmentdate"),
+                date_to=Max("assessmentend_date"),
+                header_count=Count("id"),
+                facility_count=Count("facilityfk_id", distinct=True),
+            )
+        )
+        round_meta = {
+            item["assessmenttype_id"]: {
+                "round_id": item["assessmenttype_id"],
+                "round": item["assessmenttype__name"] or "Unknown",
+                "date_from": item["date_from"],
+                "date_to": item["date_to"],
+                "header_count": item["header_count"],
+                "facility_count": item["facility_count"],
+            }
+            for item in round_meta_query
+        }
+
+        round_order = sorted(
+            round_meta,
+            key=lambda round_id: (
+                round_meta[round_id]["date_from"] is None,
+                round_meta[round_id]["date_from"] or py_date.max,
+                round_meta[round_id]["round"],
+            ),
+        )
+        round_position = {
+            round_id: index for index, round_id in enumerate(round_order)
+        }
+
+        raw_rows = self._hqip_standard_rows(headers)
+
+        by_round = defaultdict(list)
+        by_province_round = defaultdict(list)
+        by_area_round = defaultdict(list)
+        by_facility_round = defaultdict(list)
+
+        for row in raw_rows:
+            by_round[row["round_id"]].append(row)
+            by_province_round[(row["province_id"], row["round_id"])].append(row)
+            by_area_round[(row["area_id"], row["round_id"])].append(row)
+            by_facility_round[(row["facility_id"], row["round_id"])].append(row)
+
+        # Calculate the overall HQIP result using the standalone
+        # dashboard's hierarchical rollup helper.
+        overall_counts = self._hqip_rollup_from_standard_rows(raw_rows)
+        overall_score = overall_counts["overall_percent"]
+
+        # Header/event counts avoid counting seven thematic headers as seven
+        # separate facility assessment events.
+        assessment_events = {
+            (
+                row["facilityfk_id"],
+                row["assessmenttype_id"],
+                row["assessmentdate"],
+            )
+            for row in header_rows
+        }
+        distinct_facilities = {row["facilityfk_id"] for row in header_rows}
+        distinct_provinces = {
+            row["facilityfk__districtfk__provincefk_id"] for row in header_rows
+        }
+
+        round_event_sets = defaultdict(set)
+        round_area_sets = defaultdict(set)
+        for row in header_rows:
+            round_event_sets[row["assessmenttype_id"]].add(
+                (row["facilityfk_id"], row["assessmentdate"])
+            )
+            round_area_sets[row["assessmenttype_id"]].add(row["areafk_id"])
+
+        # --------------------------------------------------------------
+        # Round trend
+        # --------------------------------------------------------------
+        round_rows = []
+        previous_score = None
+        for index, round_id in enumerate(round_order):
+            rollup = self._hqip_rollup_from_standard_rows(by_round[round_id])
+            score = rollup["overall_percent"]
+            change_previous = self._hqip_change(score, previous_score)
+            status, status_class = self._hqip_change_status(
+                change_previous,
+                has_comparison=index > 0 and previous_score is not None,
+            )
+            meta = round_meta[round_id]
+            round_rows.append(
+                {
+                    **meta,
+                    "assessment_events": len(round_event_sets[round_id]),
+                    "thematic_areas": len(round_area_sets[round_id]),
+                    "score": score,
+                    "change_previous": change_previous,
+                    "status": status,
+                    "status_class": status_class,
+                    "yes": rollup["yes"],
+                    "no": rollup["no"],
+                    "na": rollup["na"],
+                    "missing": rollup["missing"],
+                    "applicable": rollup["applicable"],
+                    "completeness": rollup["completeness"],
+                }
+            )
+            if score is not None:
+                previous_score = score
+
+        scored_round_rows = [row for row in round_rows if row["score"] is not None]
+        first_round_row = scored_round_rows[0] if scored_round_rows else None
+        latest_round_row = scored_round_rows[-1] if scored_round_rows else None
+        overall_change = None
+        if first_round_row and latest_round_row and first_round_row is not latest_round_row:
+            overall_change = self._hqip_change(
+                latest_round_row["score"], first_round_row["score"]
+            )
+
+        # --------------------------------------------------------------
+        # Province by round
+        # --------------------------------------------------------------
+        province_rows = []
+        province_round_scores = {}
+        for (province_id, round_id), grouped_rows in by_province_round.items():
+            rollup = self._hqip_rollup_from_standard_rows(grouped_rows)
+            province = grouped_rows[0]["province"]
+            facility_count = len({row["facility_id"] for row in grouped_rows})
+            province_round_scores[(province_id, round_id)] = rollup["overall_percent"]
+            province_rows.append(
+                {
+                    "province_id": province_id,
+                    "province": province,
+                    "round_id": round_id,
+                    "round": round_meta[round_id]["round"],
+                    "round_order": round_position[round_id],
+                    "facilities": facility_count,
+                    "score": rollup["overall_percent"],
+                    "yes": rollup["yes"],
+                    "no": rollup["no"],
+                    "na": rollup["na"],
+                    "missing": rollup["missing"],
+                    "completeness": rollup["completeness"],
+                }
+            )
+
+        province_baselines = {}
+        for row in sorted(
+            province_rows,
+            key=lambda item: (item["province"], item["round_order"]),
+        ):
+            baseline = province_baselines.get(row["province_id"])
+            if baseline is None and row["score"] is not None:
+                province_baselines[row["province_id"]] = row["score"]
+                baseline = row["score"]
+            row["change_from_first"] = self._hqip_change(row["score"], baseline)
+            row["status"], row["status_class"] = self._hqip_change_status(
+                row["change_from_first"],
+                has_comparison=(
+                    baseline is not None
+                    and row["score"] is not None
+                    and row["round_order"] > 0
+                ),
+            )
+        province_rows.sort(key=lambda item: (item["province"], item["round_order"]))
+
+        # --------------------------------------------------------------
+        # Thematic area by round
+        # --------------------------------------------------------------
+        area_rows = []
+        for (area_id, round_id), grouped_rows in by_area_round.items():
+            rollup = self._hqip_rollup_from_standard_rows(grouped_rows)
+            area_rows.append(
+                {
+                    "area_id": area_id,
+                    "area": grouped_rows[0]["area"],
+                    "round_id": round_id,
+                    "round": round_meta[round_id]["round"],
+                    "round_order": round_position[round_id],
+                    "score": rollup["overall_percent"],
+                    "yes": rollup["yes"],
+                    "no": rollup["no"],
+                    "na": rollup["na"],
+                    "missing": rollup["missing"],
+                    "completeness": rollup["completeness"],
+                }
+            )
+
+        area_baselines = {}
+        for row in sorted(area_rows, key=lambda item: (item["area"], item["round_order"])):
+            baseline = area_baselines.get(row["area_id"])
+            if baseline is None and row["score"] is not None:
+                area_baselines[row["area_id"]] = row["score"]
+                baseline = row["score"]
+            row["change_from_first"] = self._hqip_change(row["score"], baseline)
+            row["status"], row["status_class"] = self._hqip_change_status(
+                row["change_from_first"],
+                has_comparison=(
+                    baseline is not None
+                    and row["score"] is not None
+                    and row["round_order"] > 0
+                ),
+            )
+        area_rows.sort(key=lambda item: (item["area"], item["round_order"]))
+
+        # --------------------------------------------------------------
+        # Facility by round and first-vs-latest comparison
+        # --------------------------------------------------------------
+        facility_round_rows = []
+        facility_round_map = defaultdict(list)
+
+        for (facility_id, round_id), grouped_rows in by_facility_round.items():
+            rollup = self._hqip_rollup_from_standard_rows(grouped_rows)
+            first = grouped_rows[0]
+            item = {
+                "facility_id": facility_id,
+                "province": first["province"],
+                "district": first["district"],
+                "facility": first["facility"],
+                "hfcode": first["hfcode"],
+                "round_id": round_id,
+                "round": round_meta[round_id]["round"],
+                "round_order": round_position[round_id],
+                "score": rollup["overall_percent"],
+                "yes": rollup["yes"],
+                "no": rollup["no"],
+                "na": rollup["na"],
+                "missing": rollup["missing"],
+                "completeness": rollup["completeness"],
+                "area_results": rollup["area_results"],
+            }
+            facility_round_rows.append(item)
+            facility_round_map[facility_id].append(item)
+
+        facility_round_rows.sort(
+            key=lambda item: (
+                item["province"],
+                item["facility"],
+                item["round_order"],
+            )
+        )
+
+        facility_comparison_rows = []
+        for facility_id, records in facility_round_map.items():
+            scored = sorted(
+                [row for row in records if row["score"] is not None],
+                key=lambda item: item["round_order"],
+            )
+            if not scored:
+                continue
+
+            first = scored[0]
+            latest = scored[-1]
+            has_comparison = len(scored) >= 2 and first["round_id"] != latest["round_id"]
+            change = (
+                self._hqip_change(latest["score"], first["score"])
+                if has_comparison
+                else None
+            )
+            percent_change = (
+                self._hqip_percent_change(latest["score"], first["score"])
+                if has_comparison
+                else None
+            )
+            status, status_class = self._hqip_change_status(
+                change, has_comparison=has_comparison
+            )
+
+            first_areas = {
+                area["area_id"]: area for area in first["area_results"]
+            }
+            latest_areas = {
+                area["area_id"]: area for area in latest["area_results"]
+            }
+
+            improved_areas = 0
+            declined_areas = 0
+            unchanged_areas = 0
+            for area_id in set(first_areas).intersection(latest_areas):
+                area_change = self._hqip_change(
+                    latest_areas[area_id]["percent"],
+                    first_areas[area_id]["percent"],
+                )
+                if area_change is None:
+                    continue
+                if area_change > 0:
+                    improved_areas += 1
+                elif area_change < 0:
+                    declined_areas += 1
+                else:
+                    unchanged_areas += 1
+
+            lowest_latest = sorted(
+                [
+                    area for area in latest["area_results"]
+                    if area["percent"] is not None
+                ],
+                key=lambda area: (area["percent"], area["area"]),
+            )[:3]
+            priority_areas = ", ".join(area["area"] for area in lowest_latest) or "-"
+
+            if has_comparison and change is not None and change >= 10 and latest["score"] >= 70:
+                story_use = "Strong success-story candidate"
+            elif has_comparison and change is not None and change >= 5:
+                story_use = "Potential success-story candidate"
+            elif has_comparison and change is not None and change > 0:
+                story_use = "Positive progress; verify before story use"
+            elif has_comparison and change is not None and change < 0:
+                story_use = "Learning and corrective-action case"
+            else:
+                story_use = "Routine monitoring"
+
+            notes = (
+                "Verify source checklists, assessment dates, scorer consistency, "
+                "the improvement actions implemented, and supporting facility evidence."
+                if has_comparison
+                else "A second comparable assessment round is required for change analysis."
+            )
+
+            facility_comparison_rows.append(
+                {
+                    "facility_id": facility_id,
+                    "province": latest["province"],
+                    "district": latest["district"],
+                    "facility": latest["facility"],
+                    "hfcode": latest["hfcode"],
+                    "first_round": first["round"],
+                    "latest_round": latest["round"],
+                    "first_score": first["score"],
+                    "latest_score": latest["score"],
+                    "absolute_change": change,
+                    "percent_change": percent_change,
+                    "status": status,
+                    "status_class": status_class,
+                    "improved_areas": improved_areas,
+                    "declined_areas": declined_areas,
+                    "unchanged_areas": unchanged_areas,
+                    "priority_areas": priority_areas,
+                    "story_use": story_use,
+                    "notes": notes,
+                    "has_comparison": has_comparison,
+                }
+            )
+
+        facility_comparison_rows.sort(
+            key=lambda item: (
+                item["province"],
+                item["facility"],
+            )
+        )
+
+        success_story_candidates = sorted(
+            [
+                row for row in facility_comparison_rows
+                if row["has_comparison"]
+                and row["absolute_change"] is not None
+                and row["absolute_change"] > 0
+            ],
+            key=lambda item: (
+                item["absolute_change"],
+                item["latest_score"],
+                item["improved_areas"],
+            ),
+            reverse=True,
+        )[:10]
+
+        # Latest selected round's lowest thematic scores.
+        current_gap_rows = []
+        if latest_round_row:
+            current_gap_rows = sorted(
+                [
+                    row for row in area_rows
+                    if row["round_id"] == latest_round_row["round_id"]
+                    and row["score"] is not None
+                ],
+                key=lambda item: (item["score"], item["area"]),
+            )
+            for rank, row in enumerate(current_gap_rows, start=1):
+                row["priority_rank"] = rank
+                row["is_top_priority"] = rank <= 3
+
+        # --------------------------------------------------------------
+        # KPI cards and chart payload
+        # --------------------------------------------------------------
+        kpis = {
+            "overall_score": overall_score,
+            "overall_change": overall_change,
+            "facilities": len(distinct_facilities),
+            "assessment_events": len(assessment_events),
+            "provinces": len(distinct_provinces),
+            "rounds": len(round_order),
+            "failed_criteria": overall_counts["no"],
+            "missing_scores": overall_counts["missing"],
+            "scoring_completeness": overall_counts["completeness"],
+        }
+
+        province_names = sorted({row["province"] for row in province_rows})
+        area_names = sorted({row["area"] for row in area_rows})
+
+        chart_data = {
+            "round_trend": [
+                {
+                    "round": row["round"],
+                    "score": row["score"],
+                    "completeness": row["completeness"],
+                }
+                for row in round_rows
+            ],
+            "province_comparison": {
+                "labels": province_names,
+                "datasets": [
+                    {
+                        "label": round_meta[round_id]["round"],
+                        "data": [
+                            next(
+                                (
+                                    row["score"] for row in province_rows
+                                    if row["province"] == province
+                                    and row["round_id"] == round_id
+                                ),
+                                None,
+                            )
+                            for province in province_names
+                        ],
+                    }
+                    for round_id in round_order
+                ],
+            },
+            "area_comparison": {
+                "labels": area_names,
+                "datasets": [
+                    {
+                        "label": round_meta[round_id]["round"],
+                        "data": [
+                            next(
+                                (
+                                    row["score"] for row in area_rows
+                                    if row["area"] == area
+                                    and row["round_id"] == round_id
+                                ),
+                                None,
+                            )
+                            for area in area_names
+                        ],
+                    }
+                    for round_id in round_order
+                ],
+            },
+            "facility_improvement": [
+                {
+                    "facility": row["facility"],
+                    "province": row["province"],
+                    "change": row["absolute_change"],
+                }
+                for row in sorted(
+                    [
+                        item for item in facility_comparison_rows
+                        if item["has_comparison"]
+                        and item["absolute_change"] is not None
+                    ],
+                    key=lambda item: item["absolute_change"],
+                    reverse=True,
+                )[:12]
+            ],
+            "current_gaps": [
+                {"area": row["area"], "score": row["score"]}
+                for row in current_gap_rows
+            ],
+            "response_mix": {
+                "labels": ["YES", "NO", "N/A", "Missing"],
+                "values": [
+                    overall_counts["yes"],
+                    overall_counts["no"],
+                    overall_counts["na"],
+                    overall_counts["missing"],
+                ],
+            },
+        }
+
+        methodology_note = (
+            "Standard % = YES / (YES + NO) × 100. N/A and blank scores are "
+            "excluded from the denominator. Section % is the average of scored "
+            "Standard percentages; Thematic Area % is the average of scored "
+            "Section percentages; Overall HQIP % is the average of scored "
+            "Thematic Area percentages. Change is shown in percentage points."
+        )
+
+        export_params = request.GET.copy()
+        export_params["export"] = "1"
+        export_query = export_params.urlencode()
+
+        if request.GET.get("export") == "1":
+            return self._export_hqip_periodic_dashboard(
+                kpis=kpis,
+                filters=filters,
+                methodology_note=methodology_note,
+                round_rows=round_rows,
+                province_rows=province_rows,
+                area_rows=area_rows,
+                facility_comparison_rows=facility_comparison_rows,
+                facility_round_rows=facility_round_rows,
+                success_story_candidates=success_story_candidates,
+            )
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="HQIP Periodic Assessment Dashboard",
+            filters=filters,
+            province_options=province_options,
+            district_options=district_options,
+            facility_options=facility_options,
+            assessmenttype_options=assessmenttype_options,
+            area_options=area_options,
+            implementor_options=implementor_options,
+            kpis=kpis,
+            methodology_note=methodology_note,
+            round_rows=round_rows,
+            province_rows=province_rows,
+            area_rows=area_rows,
+            facility_comparison_rows=facility_comparison_rows,
+            facility_round_rows=facility_round_rows,
+            success_story_candidates=success_story_candidates,
+            current_gap_rows=current_gap_rows,
+            first_round_row=first_round_row,
+            latest_round_row=latest_round_row,
+            chart_data=chart_data,
+            export_query=export_query,
+            records_found=bool(raw_rows),
+        )
+        return TemplateResponse(request, self.hqip_periodic_template, context)
+
+    # ------------------------------------------------------------------
+    # Excel export
+    # ------------------------------------------------------------------
+    def _export_hqip_periodic_dashboard(
+        self,
+        *,
+        kpis,
+        filters,
+        methodology_note,
+        round_rows,
+        province_rows,
+        area_rows,
+        facility_comparison_rows,
+        facility_round_rows,
+        success_story_candidates,
+    ):
+        wb = openpyxl.Workbook()
+        ws_summary = wb.active
+        ws_summary.title = "Dashboard Summary"
+
+        ws_summary.append(["HQIP Periodic Assessment Dashboard"])
+        ws_summary.append(["Generated", timezone.localtime(timezone.now()).replace(tzinfo=None)])
+        ws_summary.append(["Methodology", methodology_note])
+        ws_summary.append([])
+        ws_summary.append(["Selected Filter", "Value"])
+        for key, value in filters.items():
+            ws_summary.append([key.replace("_", " ").title(), value or "All"])
+        ws_summary.append([])
+        ws_summary.append(["KPI", "Value"])
+        for key, value in kpis.items():
+            ws_summary.append([key.replace("_", " ").title(), value if value is not None else "N/A"])
+
+        ws_round = wb.create_sheet("Round Trend")
+        ws_round.append(
+            [
+                "Assessment Round",
+                "Date From",
+                "Date To",
+                "Facilities",
+                "Assessment Events",
+                "Thematic Areas",
+                "HQIP %",
+                "Change vs Previous (pp)",
+                "Status",
+                "YES",
+                "NO",
+                "N/A",
+                "Missing",
+                "Scoring Completeness %",
+            ]
+        )
+        for row in round_rows:
+            ws_round.append(
+                [
+                    row["round"],
+                    row["date_from"],
+                    row["date_to"],
+                    row["facility_count"],
+                    row["assessment_events"],
+                    row["thematic_areas"],
+                    row["score"],
+                    row["change_previous"],
+                    row["status"],
+                    row["yes"],
+                    row["no"],
+                    row["na"],
+                    row["missing"],
+                    row["completeness"],
+                ]
+            )
+
+        ws_province = wb.create_sheet("Province by Round")
+        ws_province.append(
+            [
+                "Province",
+                "Assessment Round",
+                "Facilities",
+                "HQIP %",
+                "Change vs First (pp)",
+                "Status",
+                "YES",
+                "NO",
+                "N/A",
+                "Missing",
+                "Scoring Completeness %",
+            ]
+        )
+        for row in province_rows:
+            ws_province.append(
+                [
+                    row["province"],
+                    row["round"],
+                    row["facilities"],
+                    row["score"],
+                    row["change_from_first"],
+                    row["status"],
+                    row["yes"],
+                    row["no"],
+                    row["na"],
+                    row["missing"],
+                    row["completeness"],
+                ]
+            )
+
+        ws_area = wb.create_sheet("Thematic by Round")
+        ws_area.append(
+            [
+                "Thematic Area",
+                "Assessment Round",
+                "HQIP %",
+                "Change vs First (pp)",
+                "Status",
+                "YES",
+                "NO",
+                "N/A",
+                "Missing",
+                "Scoring Completeness %",
+            ]
+        )
+        for row in area_rows:
+            ws_area.append(
+                [
+                    row["area"],
+                    row["round"],
+                    row["score"],
+                    row["change_from_first"],
+                    row["status"],
+                    row["yes"],
+                    row["no"],
+                    row["na"],
+                    row["missing"],
+                    row["completeness"],
+                ]
+            )
+
+        ws_facility = wb.create_sheet("Facility Comparison")
+        ws_facility.append(
+            [
+                "Province",
+                "District",
+                "Facility",
+                "HF Code",
+                "First Round",
+                "Latest Round",
+                "First HQIP %",
+                "Latest HQIP %",
+                "Absolute Change (pp)",
+                "Percent Change",
+                "Status",
+                "Improved Areas",
+                "Declined Areas",
+                "Unchanged Areas",
+                "Latest Priority Areas",
+                "Story Use",
+                "Notes for Field Verification",
+            ]
+        )
+        for row in facility_comparison_rows:
+            ws_facility.append(
+                [
+                    row["province"],
+                    row["district"],
+                    row["facility"],
+                    row["hfcode"],
+                    row["first_round"],
+                    row["latest_round"],
+                    row["first_score"],
+                    row["latest_score"],
+                    row["absolute_change"],
+                    row["percent_change"],
+                    row["status"],
+                    row["improved_areas"],
+                    row["declined_areas"],
+                    row["unchanged_areas"],
+                    row["priority_areas"],
+                    row["story_use"],
+                    row["notes"],
+                ]
+            )
+
+        ws_facility_round = wb.create_sheet("Facility Round Scores")
+        ws_facility_round.append(
+            [
+                "Province",
+                "District",
+                "Facility",
+                "HF Code",
+                "Assessment Round",
+                "HQIP %",
+                "YES",
+                "NO",
+                "N/A",
+                "Missing",
+                "Scoring Completeness %",
+            ]
+        )
+        for row in facility_round_rows:
+            ws_facility_round.append(
+                [
+                    row["province"],
+                    row["district"],
+                    row["facility"],
+                    row["hfcode"],
+                    row["round"],
+                    row["score"],
+                    row["yes"],
+                    row["no"],
+                    row["na"],
+                    row["missing"],
+                    row["completeness"],
+                ]
+            )
+
+        ws_story = wb.create_sheet("Story Candidates")
+        ws_story.append(
+            [
+                "Province",
+                "Facility",
+                "First Round",
+                "Latest Round",
+                "First HQIP %",
+                "Latest HQIP %",
+                "Change (pp)",
+                "Improved Areas",
+                "Declined Areas",
+                "Story Use",
+                "Field Verification",
+            ]
+        )
+        for row in success_story_candidates:
+            ws_story.append(
+                [
+                    row["province"],
+                    row["facility"],
+                    row["first_round"],
+                    row["latest_round"],
+                    row["first_score"],
+                    row["latest_score"],
+                    row["absolute_change"],
+                    row["improved_areas"],
+                    row["declined_areas"],
+                    row["story_use"],
+                    row["notes"],
+                ]
+            )
+
+        self._style_hqip_dashboard_workbook(wb)
+
+        timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="HQIP_Periodic_Dashboard_{timestamp}.xlsx"'
+        )
+        wb.save(response)
+        return response
+
+    def _style_hqip_dashboard_workbook(self, workbook):
+        header_fill = PatternFill("solid", fgColor="1F4E78")
+        header_font = Font(color="FFFFFF", bold=True)
+        border = Border(
+            left=Side(style="thin", color="D9E2F3"),
+            right=Side(style="thin", color="D9E2F3"),
+            top=Side(style="thin", color="D9E2F3"),
+            bottom=Side(style="thin", color="D9E2F3"),
+        )
+
+        for worksheet in workbook.worksheets:
+            if worksheet.title != "Dashboard Summary":
+                worksheet.freeze_panes = "A2"
+                worksheet.auto_filter.ref = worksheet.dimensions
+
+            for cell in worksheet[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+                cell.border = border
+
+            if worksheet.title == "Dashboard Summary":
+                worksheet["A1"].font = Font(
+                    color="FFFFFF", bold=True, size=16
+                )
+
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    cell.border = border
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+                    if isinstance(cell.value, py_date):
+                        cell.number_format = "yyyy-mm-dd"
+
+            for column_cells in worksheet.columns:
+                column_letter = get_column_letter(column_cells[0].column)
+                max_length = max(
+                    [
+                        len(str(cell.value))
+                        for cell in column_cells
+                        if cell.value is not None
+                    ]
+                    or [10]
+                )
+                worksheet.column_dimensions[column_letter].width = min(
+                    max(max_length + 2, 12), 45
+                )
 
 # ===========================================================
 # Hide HQIPAssessment from admin menu (inline only)
