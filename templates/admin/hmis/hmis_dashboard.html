@@ -1,0 +1,918 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --hmis-blue: #174f78;
+        --hmis-blue-2: #2d75ad;
+        --hmis-green: #2e7d32;
+        --hmis-purple: #6a3d9a;
+        --hmis-teal: #00796b;
+        --hmis-orange: #ef6c00;
+        --hmis-red: #c62828;
+        --hmis-gray: #607d8b;
+        --hmis-bg: #f5f8fb;
+        --hmis-border: #d8e3ec;
+        --hmis-text: #263238;
+        --hmis-muted: #657786;
+    }
+
+    #content { padding: 18px 22px; }
+    .hmis-dashboard {
+        color: var(--hmis-text);
+        font-family: Arial, sans-serif;
+    }
+    .hmis-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+    .hmis-title {
+        margin: 0;
+        color: var(--hmis-blue);
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1.15;
+    }
+    .hmis-subtitle {
+        max-width: 900px;
+        margin: 7px 0 0;
+        color: var(--hmis-muted);
+        font-size: 13px;
+        line-height: 1.55;
+    }
+    .hmis-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .hmis-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        border: 0;
+        border-radius: 7px;
+        background: var(--hmis-blue);
+        color: #fff !important;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .hmis-btn:hover { background: #113d5e; color: #fff !important; }
+    .hmis-btn-green { background: var(--hmis-green); }
+    .hmis-btn-green:hover { background: #1b5e20; }
+    .hmis-btn-gray { background: var(--hmis-gray); }
+    .hmis-btn-gray:hover { background: #455a64; }
+
+    .hmis-card,
+    .hmis-section {
+        margin-bottom: 18px;
+        padding: 16px;
+        border: 1px solid var(--hmis-border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(23, 79, 120, 0.06);
+    }
+    .hmis-section-title {
+        margin: 0 0 5px;
+        color: var(--hmis-blue);
+        font-size: 19px;
+        font-weight: 800;
+    }
+    .hmis-section-note {
+        margin: 0 0 13px;
+        color: var(--hmis-muted);
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .hmis-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(160px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+    .hmis-field label {
+        display: block;
+        margin-bottom: 5px;
+        color: #37474f;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .hmis-field select,
+    .hmis-search {
+        width: 100%;
+        min-height: 38px;
+        padding: 8px 9px;
+        border: 1px solid #cbd8e2;
+        border-radius: 7px;
+        box-sizing: border-box;
+        background: #fff;
+        color: #263238;
+    }
+    .hmis-field select:focus,
+    .hmis-search:focus {
+        outline: none;
+        border-color: var(--hmis-blue-2);
+        box-shadow: 0 0 0 2px rgba(45, 117, 173, 0.14);
+    }
+    .hmis-filter-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+
+    .hmis-period-banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding: 11px 14px;
+        border-left: 5px solid var(--hmis-blue-2);
+        border-radius: 7px;
+        background: #edf5fb;
+        color: #29485d;
+        font-size: 13px;
+    }
+    .hmis-period-banner strong { color: var(--hmis-blue); }
+
+    .hmis-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(135px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+    .hmis-kpi {
+        display: flex;
+        min-height: 106px;
+        padding: 14px 11px;
+        flex-direction: column;
+        justify-content: center;
+        border: 1px solid var(--hmis-border);
+        border-top: 5px solid var(--hmis-blue-2);
+        border-radius: 11px;
+        background: linear-gradient(180deg, #fff, #f6f9fc);
+        text-align: center;
+    }
+    .hmis-kpi-primary {
+        border-top-color: #fff;
+        background: linear-gradient(145deg, var(--hmis-blue), var(--hmis-blue-2));
+        color: #fff;
+    }
+    .hmis-kpi-blue { border-top-color: var(--hmis-blue-2); }
+    .hmis-kpi-green { border-top-color: var(--hmis-green); }
+    .hmis-kpi-purple { border-top-color: var(--hmis-purple); }
+    .hmis-kpi-teal { border-top-color: var(--hmis-teal); }
+    .hmis-kpi-orange { border-top-color: var(--hmis-orange); }
+    .hmis-kpi-red { border-top-color: var(--hmis-red); }
+    .hmis-kpi-value {
+        color: var(--hmis-blue);
+        font-size: 25px;
+        font-weight: 800;
+        line-height: 1.05;
+    }
+    .hmis-kpi-primary .hmis-kpi-value,
+    .hmis-kpi-primary .hmis-kpi-label,
+    .hmis-kpi-primary .hmis-kpi-help { color: #fff; }
+    .hmis-kpi-label {
+        margin-top: 7px;
+        color: #37474f;
+        font-size: 12px;
+        font-weight: 800;
+    }
+    .hmis-kpi-help {
+        margin-top: 5px;
+        color: var(--hmis-muted);
+        font-size: 10px;
+        line-height: 1.3;
+    }
+
+    .hmis-chart-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+    .hmis-chart-card {
+        min-width: 0;
+        padding: 15px;
+        border: 1px solid var(--hmis-border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(23, 79, 120, 0.05);
+    }
+    .hmis-chart-card h3 {
+        margin: 0 0 4px;
+        color: var(--hmis-blue);
+        font-size: 16px;
+        font-weight: 800;
+    }
+    .hmis-chart-card p {
+        margin: 0 0 10px;
+        color: var(--hmis-muted);
+        font-size: 11px;
+        line-height: 1.4;
+    }
+    .hmis-chart-wrap { position: relative; height: 315px; }
+    .hmis-chart-wrap-small { height: 280px; }
+
+    .hmis-note {
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        border: 1px solid #c7dceb;
+        border-radius: 8px;
+        background: #f1f7fb;
+        color: #37576d;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .hmis-tabs {
+        display: flex;
+        gap: 7px;
+        margin-bottom: 13px;
+        flex-wrap: wrap;
+    }
+    .hmis-tab-button {
+        padding: 8px 13px;
+        border: 1px solid #bbcedd;
+        border-radius: 7px;
+        background: #f3f7fa;
+        color: var(--hmis-blue);
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+    .hmis-tab-button.active {
+        border-color: var(--hmis-blue);
+        background: var(--hmis-blue);
+        color: #fff;
+    }
+    .hmis-tab-panel { display: none; }
+    .hmis-tab-panel.active { display: block; }
+    .hmis-table-tools {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .hmis-search { max-width: 430px; }
+    .hmis-table-count {
+        color: var(--hmis-muted);
+        font-size: 12px;
+    }
+    .hmis-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--hmis-border);
+        border-radius: 8px;
+    }
+    .hmis-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .hmis-table th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 9px 8px;
+        border: 1px solid #d3e0e9;
+        background: var(--hmis-blue);
+        color: #fff;
+        font-weight: 800;
+        text-align: center;
+        vertical-align: middle;
+    }
+    .hmis-table td {
+        padding: 8px;
+        border: 1px solid #dde6ed;
+        text-align: right;
+        vertical-align: middle;
+    }
+    .hmis-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .hmis-table tbody tr:hover { background: #edf5fb; }
+    .hmis-table .text-left { text-align: left; }
+    .hmis-table .text-center { text-align: center; }
+    .hmis-badge {
+        display: inline-block;
+        padding: 3px 7px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 800;
+    }
+    .hmis-badge-hiva { background: #e5f4e7; color: #1b5e20; }
+    .hmis-badge-other { background: #eceff1; color: #455a64; }
+    .hmis-pagination {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        margin-top: 11px;
+    }
+    .hmis-pagination button {
+        padding: 6px 11px;
+        border: 1px solid #bbcedd;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--hmis-blue);
+        cursor: pointer;
+    }
+    .hmis-pagination button:disabled { opacity: .45; cursor: default; }
+    .hmis-pagination span { color: var(--hmis-muted); font-size: 12px; }
+    .hmis-empty {
+        padding: 42px 20px;
+        color: var(--hmis-muted);
+        text-align: center;
+    }
+
+    @media (max-width: 1280px) {
+        .hmis-filter-grid { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+        .hmis-kpi-grid { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
+    }
+    @media (max-width: 900px) {
+        .hmis-header { flex-direction: column; }
+        .hmis-actions { justify-content: flex-start; }
+        .hmis-chart-grid { grid-template-columns: 1fr; }
+        .hmis-filter-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+        .hmis-kpi-grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+    }
+    @media (max-width: 560px) {
+        #content { padding: 10px; }
+        .hmis-filter-grid, .hmis-kpi-grid { grid-template-columns: 1fr; }
+        .hmis-title { font-size: 24px; }
+        .hmis-period-banner, .hmis-table-tools { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media print {
+        #header, .breadcrumbs, #nav-sidebar, .toggle-nav-sidebar,
+        .hmis-filter-card, .hmis-actions, .hmis-tabs, .hmis-table-tools,
+        .hmis-pagination { display: none !important; }
+        #content { padding: 0 !important; }
+        .hmis-dashboard { font-size: 9px; }
+        .hmis-card, .hmis-section, .hmis-chart-card {
+            break-inside: avoid;
+            box-shadow: none;
+        }
+        .hmis-chart-grid { grid-template-columns: 1fr 1fr; }
+        .hmis-tab-panel { display: block !important; margin-bottom: 18px; }
+        .hmis-table-wrap { overflow: visible; }
+        .hmis-table { white-space: normal; font-size: 7px; }
+        .facility-row { display: table-row !important; }
+    }
+</style>
+
+<div class="hmis-dashboard">
+    <div class="hmis-header">
+        <div>
+            <h1 class="hmis-title">HMIS Performance Dashboard</h1>
+            <p class="hmis-subtitle">
+                Audience-ready analysis of maternal and newborn service indicators from
+                facility monthly summaries, including trends, geographic performance,
+                facility ranking, and HIVA versus non-HIVA comparison.
+            </p>
+        </div>
+        <div class="hmis-actions">
+            <a class="hmis-btn hmis-btn-green" href="{{ export_url }}">Export Excel</a>
+            <button class="hmis-btn hmis-btn-gray" type="button" onclick="window.print()">Print / PDF</button>
+        </div>
+    </div>
+
+    <div class="hmis-card hmis-filter-card">
+        <h2 class="hmis-section-title">Dashboard Filters</h2>
+        <p class="hmis-section-note">
+            Province limits the District list, and District limits the Health Facility list.
+            Select an indicator to update the trend, comparison, ranking, and summary tables.
+        </p>
+        <form method="get">
+            <div class="hmis-filter-grid">
+                <div class="hmis-field">
+                    <label for="id_prov">Province</label>
+                    <select id="id_prov" name="prov">
+                        <option value="">All Provinces</option>
+                        {% for value in filter_options.provinces %}
+                            <option value="{{ value }}" {% if filters.prov == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_dist">District</label>
+                    <select id="id_dist" name="dist">
+                        <option value="">All Districts</option>
+                        {% for value in filter_options.districts %}
+                            <option value="{{ value }}" {% if filters.dist == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_hf">Health Facility</label>
+                    <select id="id_hf" name="hf">
+                        <option value="">All Health Facilities</option>
+                        {% for value in filter_options.facilities %}
+                            <option value="{{ value }}" {% if filters.hf == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_year">Year</label>
+                    <select id="id_year" name="year">
+                        <option value="">All Years</option>
+                        {% for value in filter_options.years %}
+                            <option value="{{ value }}" {% if filters.year == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_month">Month</label>
+                    <select id="id_month" name="month">
+                        <option value="">All Months</option>
+                        {% for option in filter_options.months %}
+                            <option value="{{ option.value }}" {% if filters.month == option.value %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_facility_group">Facility Group</label>
+                    <select id="id_facility_group" name="facility_group">
+                        <option value="all" {% if filters.facility_group == "all" %}selected{% endif %}>All Facilities</option>
+                        <option value="hiva" {% if filters.facility_group == "hiva" %}selected{% endif %}>HIVA Health Facilities</option>
+                        <option value="non_hiva" {% if filters.facility_group == "non_hiva" %}selected{% endif %}>Non-HIVA Health Facilities</option>
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_indicator">Selected Indicator</label>
+                    <select id="id_indicator" name="indicator">
+                        {% for value, label in indicator_options %}
+                            <option value="{{ value }}" {% if filters.indicator == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="hmis-filter-actions">
+                <button class="hmis-btn" type="submit">Apply Filters</button>
+                <a class="hmis-btn hmis-btn-gray" href=".">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="hmis-period-banner">
+        <span><strong>Selected reporting period:</strong> {{ period_range }}</span>
+        <span><strong>Analysis indicator:</strong> {{ selected_indicator_label }}</span>
+    </div>
+
+    <div class="hmis-kpi-grid">
+        {% for kpi in kpis %}
+            <div class="hmis-kpi hmis-kpi-{{ kpi.class }}">
+                <div class="hmis-kpi-value">{{ kpi.value }}</div>
+                <div class="hmis-kpi-label">{{ kpi.label }}</div>
+                <div class="hmis-kpi-help">{{ kpi.help }}</div>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% if summary.reporting_records %}
+        <div class="hmis-chart-grid">
+            <div class="hmis-chart-card">
+                <h3>{{ selected_indicator_label }} Monthly Trend</h3>
+                <p>Total reported services for the selected indicator in each reporting month.</p>
+                <div class="hmis-chart-wrap"><canvas id="monthlyTrendChart"></canvas></div>
+            </div>
+            <div class="hmis-chart-card">
+                <h3>Core HMIS Service Volume</h3>
+                <p>Aggregated totals for all 11 maternal and newborn summary indicators.</p>
+                <div class="hmis-chart-wrap"><canvas id="serviceVolumeChart"></canvas></div>
+            </div>
+            <div class="hmis-chart-card">
+                <h3>Province Performance: {{ selected_indicator_label }}</h3>
+                <p>Top 15 provinces by total selected-indicator volume under the active filters.</p>
+                <div class="hmis-chart-wrap"><canvas id="provinceChart"></canvas></div>
+            </div>
+            <div class="hmis-chart-card">
+                <h3>HIVA vs Non-HIVA Comparison</h3>
+                <p>Average {{ selected_indicator_label }} value per facility-month report, reducing distortion from unequal group sizes.</p>
+                <div class="hmis-chart-wrap"><canvas id="facilityGroupChart"></canvas></div>
+            </div>
+            <div class="hmis-chart-card">
+                <h3>ANC and PNC Service Ratios</h3>
+                <p>Later-visit totals divided by first-visit totals. These are service-volume ratios, not individual cohort retention rates.</p>
+                <div class="hmis-chart-wrap hmis-chart-wrap-small"><canvas id="continuumChart"></canvas></div>
+            </div>
+            <div class="hmis-chart-card">
+                <h3>Delivery Composition</h3>
+                <p>Share of normal, assisted, and C-section deliveries among total reported deliveries.</p>
+                <div class="hmis-chart-wrap hmis-chart-wrap-small"><canvas id="deliveryChart"></canvas></div>
+            </div>
+        </div>
+
+        <div class="hmis-note">
+            <strong>Calculation notes:</strong>
+            Total Deliveries = Normal + Assisted + C-section deliveries.
+            C-section Rate = C-sections ÷ Total Deliveries × 100.
+            Stillbirths per 1,000 = Stillbirths ÷ Total Deliveries × 1,000.
+            Data Completeness measures non-blank cells across the 11 fields in
+            <code>HMISMonthlySummary</code>; a genuine reported zero is treated as complete data.
+        </div>
+
+        <div class="hmis-section">
+            <h2 class="hmis-section-title">Detailed Results</h2>
+            <p class="hmis-section-note">
+                Use the tabs to review monthly, province, and facility-level results. Facility ranking follows the selected indicator total.
+            </p>
+            <div class="hmis-tabs">
+                <button class="hmis-tab-button active" type="button" data-tab="monthly-panel">Monthly Results</button>
+                <button class="hmis-tab-button" type="button" data-tab="province-panel">Province Results</button>
+                <button class="hmis-tab-button" type="button" data-tab="facility-panel">Facility Results</button>
+            </div>
+
+            <div id="monthly-panel" class="hmis-tab-panel active">
+                <div class="hmis-table-wrap">
+                    <table class="hmis-table">
+                        <thead>
+                            <tr>
+                                <th>Period</th>
+                                <th>Reports</th>
+                                <th>HFs</th>
+                                <th>ANC1</th>
+                                <th>ANC2</th>
+                                <th>ANC3</th>
+                                <th>ANC4</th>
+                                <th>PNC1</th>
+                                <th>PNC2</th>
+                                <th>Normal Delivery</th>
+                                <th>Assisted Delivery</th>
+                                <th>C-section</th>
+                                <th>Total Delivery</th>
+                                <th>C-section Rate</th>
+                                <th>LBW</th>
+                                <th>Stillbirth</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in monthly_rows %}
+                                <tr>
+                                    <td class="text-left">{{ row.period }}</td>
+                                    <td>{{ row.reporting_records }}</td>
+                                    <td>{{ row.facility_count }}</td>
+                                    <td>{{ row.anc1_display }}</td>
+                                    <td>{{ row.anc2_display }}</td>
+                                    <td>{{ row.anc3_display }}</td>
+                                    <td>{{ row.anc4_display }}</td>
+                                    <td>{{ row.pnc1_display }}</td>
+                                    <td>{{ row.pnc2_display }}</td>
+                                    <td>{{ row.n_delivery_display }}</td>
+                                    <td>{{ row.a_delivery_display }}</td>
+                                    <td>{{ row.c_section_display }}</td>
+                                    <td>{{ row.total_deliveries_display }}</td>
+                                    <td>{{ row.c_section_rate_display }}</td>
+                                    <td>{{ row.lbw_display }}</td>
+                                    <td>{{ row.stillbirth_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="province-panel" class="hmis-tab-panel">
+                <div class="hmis-table-wrap">
+                    <table class="hmis-table">
+                        <thead>
+                            <tr>
+                                <th>Province</th>
+                                <th>HFs</th>
+                                <th>Reports</th>
+                                <th>{{ selected_indicator_label }} Total</th>
+                                <th>Average / Report</th>
+                                <th>ANC4 / ANC1</th>
+                                <th>Total Deliveries</th>
+                                <th>C-section Rate</th>
+                                <th>LBW</th>
+                                <th>Stillbirths</th>
+                                <th>Stillbirths / 1,000 Deliveries</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in province_rows %}
+                                <tr>
+                                    <td class="text-left">{{ row.province }}</td>
+                                    <td>{{ row.facility_count }}</td>
+                                    <td>{{ row.reporting_records }}</td>
+                                    <td>{{ row.selected_total_display }}</td>
+                                    <td>{{ row.selected_average_display }}</td>
+                                    <td>{{ row.anc4_ratio_display }}</td>
+                                    <td>{{ row.total_deliveries_display }}</td>
+                                    <td>{{ row.c_section_rate_display }}</td>
+                                    <td>{{ row.lbw_total_display }}</td>
+                                    <td>{{ row.stillbirth_total_display }}</td>
+                                    <td>{{ row.stillbirth_rate_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="facility-panel" class="hmis-tab-panel">
+                <div class="hmis-table-tools">
+                    <input id="facilitySearch" class="hmis-search" type="search" placeholder="Search province, district, facility, HF ID, or group...">
+                    <span id="facilityCount" class="hmis-table-count"></span>
+                </div>
+                <div class="hmis-table-wrap">
+                    <table class="hmis-table" id="facilityTable">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Province</th>
+                                <th>District</th>
+                                <th>Health Facility</th>
+                                <th>HF ID</th>
+                                <th>Group</th>
+                                <th>Reports</th>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>{{ selected_indicator_label }} Total</th>
+                                <th>Average / Report</th>
+                                <th>ANC4 / ANC1</th>
+                                <th>Total Deliveries</th>
+                                <th>C-section Rate</th>
+                                <th>LBW</th>
+                                <th>Stillbirths</th>
+                                <th>Stillbirths / 1,000</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in facility_rows %}
+                                <tr class="facility-row">
+                                    <td>{{ row.rank }}</td>
+                                    <td class="text-left">{{ row.province }}</td>
+                                    <td class="text-left">{{ row.district }}</td>
+                                    <td class="text-left">{{ row.facility }}</td>
+                                    <td>{{ row.hfid }}</td>
+                                    <td class="text-center">
+                                        {% if row.hiva_hfs %}
+                                            <span class="hmis-badge hmis-badge-hiva">HIVA HF</span>
+                                        {% else %}
+                                            <span class="hmis-badge hmis-badge-other">Non-HIVA HF</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.reporting_records }}</td>
+                                    <td>{{ row.period_min }}</td>
+                                    <td>{{ row.period_max }}</td>
+                                    <td>{{ row.selected_total_display }}</td>
+                                    <td>{{ row.selected_average_display }}</td>
+                                    <td>{{ row.anc4_ratio_display }}</td>
+                                    <td>{{ row.total_deliveries_display }}</td>
+                                    <td>{{ row.c_section_rate_display }}</td>
+                                    <td>{{ row.lbw_total_display }}</td>
+                                    <td>{{ row.stillbirth_total_display }}</td>
+                                    <td>{{ row.stillbirth_rate_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="hmis-pagination">
+                    <button id="facilityPrev" type="button">Previous</button>
+                    <span id="facilityPage"></span>
+                    <button id="facilityNext" type="button">Next</button>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="hmis-card hmis-empty">
+            <h2>No HMIS monthly summary data found</h2>
+            <p>Change the filters or import HMIS data into <code>HMISMonthlySummary</code>.</p>
+        </div>
+    {% endif %}
+</div>
+
+{{ chart_data|json_script:"hmis-chart-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    "use strict";
+
+    const dataElement = document.getElementById("hmis-chart-data");
+    const dashboardData = dataElement ? JSON.parse(dataElement.textContent) : null;
+
+    const formatNumber = (value) => Number(value || 0).toLocaleString(undefined, {
+        maximumFractionDigits: 2
+    });
+
+    const commonPlugins = {
+        legend: {
+            labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } }
+        },
+        tooltip: {
+            callbacks: {
+                label: function (context) {
+                    return " " + context.dataset.label + ": " + formatNumber(context.raw);
+                }
+            }
+        }
+    };
+
+    function createBarChart(id, labels, values, label, colors, horizontal, percentAxis) {
+        const canvas = document.getElementById(id);
+        if (!canvas || typeof Chart === "undefined") return;
+        const scales = horizontal
+            ? {
+                x: {
+                    beginAtZero: true,
+                    ticks: percentAxis ? { callback: value => value + "%" } : {}
+                },
+                y: { beginAtZero: true }
+            }
+            : {
+                x: { beginAtZero: true },
+                y: {
+                    beginAtZero: true,
+                    ticks: percentAxis ? { callback: value => value + "%" } : {}
+                }
+            };
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: colors,
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: horizontal ? "y" : "x",
+                plugins: commonPlugins,
+                scales: scales
+            }
+        });
+    }
+
+    if (dashboardData && dashboardData.has_data && typeof Chart !== "undefined") {
+        const monthlyCanvas = document.getElementById("monthlyTrendChart");
+        if (monthlyCanvas) {
+            new Chart(monthlyCanvas, {
+                type: "line",
+                data: {
+                    labels: dashboardData.monthly.labels,
+                    datasets: [{
+                        label: dashboardData.selected_indicator,
+                        data: dashboardData.monthly.values,
+                        borderColor: "#174f78",
+                        backgroundColor: "rgba(45, 117, 173, 0.16)",
+                        fill: true,
+                        tension: 0.28,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: "index", intersect: false },
+                    plugins: commonPlugins,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        createBarChart(
+            "serviceVolumeChart",
+            dashboardData.service_volume.labels,
+            dashboardData.service_volume.values,
+            "Reported total",
+            "#2d75ad",
+            true,
+            false
+        );
+        createBarChart(
+            "provinceChart",
+            dashboardData.province.labels,
+            dashboardData.province.values,
+            dashboardData.selected_indicator,
+            "#6a3d9a",
+            true,
+            false
+        );
+        createBarChart(
+            "facilityGroupChart",
+            dashboardData.facility_group.labels,
+            dashboardData.facility_group.values,
+            "Average per facility-month report",
+            ["#2e7d32", "#78909c"],
+            false,
+            false
+        );
+        createBarChart(
+            "continuumChart",
+            dashboardData.continuum.labels,
+            dashboardData.continuum.values,
+            "Service ratio (%)",
+            ["#2d75ad", "#5b9bd5", "#6a3d9a", "#00796b"],
+            false,
+            true
+        );
+
+        const deliveryCanvas = document.getElementById("deliveryChart");
+        if (deliveryCanvas) {
+            new Chart(deliveryCanvas, {
+                type: "doughnut",
+                data: {
+                    labels: dashboardData.delivery.labels,
+                    datasets: [{
+                        label: "Deliveries",
+                        data: dashboardData.delivery.values,
+                        backgroundColor: ["#2e7d32", "#ef9a3c", "#6a3d9a"],
+                        borderColor: "#ffffff",
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: "58%",
+                    plugins: commonPlugins
+                }
+            });
+        }
+    }
+
+    document.querySelectorAll(".hmis-tab-button").forEach(button => {
+        button.addEventListener("click", function () {
+            document.querySelectorAll(".hmis-tab-button").forEach(item => item.classList.remove("active"));
+            document.querySelectorAll(".hmis-tab-panel").forEach(item => item.classList.remove("active"));
+            button.classList.add("active");
+            const panel = document.getElementById(button.dataset.tab);
+            if (panel) panel.classList.add("active");
+        });
+    });
+
+    const searchInput = document.getElementById("facilitySearch");
+    const allRows = Array.from(document.querySelectorAll("#facilityTable tbody .facility-row"));
+    const prevButton = document.getElementById("facilityPrev");
+    const nextButton = document.getElementById("facilityNext");
+    const pageLabel = document.getElementById("facilityPage");
+    const countLabel = document.getElementById("facilityCount");
+    const pageSize = 25;
+    let currentPage = 1;
+
+    function filteredFacilityRows() {
+        const term = searchInput ? searchInput.value.trim().toLowerCase() : "";
+        if (!term) return allRows;
+        return allRows.filter(row => row.textContent.toLowerCase().includes(term));
+    }
+
+    function renderFacilityRows() {
+        if (!allRows.length) return;
+        const rows = filteredFacilityRows();
+        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        currentPage = Math.min(Math.max(currentPage, 1), totalPages);
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        allRows.forEach(row => { row.style.display = "none"; });
+        rows.slice(start, end).forEach(row => { row.style.display = "table-row"; });
+        if (pageLabel) pageLabel.textContent = "Page " + currentPage + " of " + totalPages;
+        if (countLabel) countLabel.textContent = rows.length.toLocaleString() + " facilities";
+        if (prevButton) prevButton.disabled = currentPage <= 1;
+        if (nextButton) nextButton.disabled = currentPage >= totalPages;
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener("input", function () {
+            currentPage = 1;
+            renderFacilityRows();
+        });
+    }
+    if (prevButton) {
+        prevButton.addEventListener("click", function () {
+            currentPage -= 1;
+            renderFacilityRows();
+        });
+    }
+    if (nextButton) {
+        nextButton.addEventListener("click", function () {
+            currentPage += 1;
+            renderFacilityRows();
+        });
+    }
+    renderFacilityRows();
+})();
+</script>
+{% endblock %}

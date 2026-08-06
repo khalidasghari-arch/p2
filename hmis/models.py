@@ -139,4 +139,10 @@ class IndicatorMetadata(models.Model):
 
     def __str__(self):
         return f"{self.indicator_name} ({self.indicator_code})"
+    
+class HMISDashboard(HMISMonthlySummary):
+    class Meta:
+        proxy = True
+        verbose_name = "HMIS DASHBOARD"
+        verbose_name_plural = "HMIS DASHBOARD"
 
