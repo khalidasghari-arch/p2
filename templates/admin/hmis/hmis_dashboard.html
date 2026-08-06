@@ -411,13 +411,22 @@
     <div class="hmis-card hmis-filter-card">
         <h2 class="hmis-section-title">Dashboard Filters</h2>
         <p class="hmis-section-note">
-            Province limits the District list, and District limits the Health Facility list.
-            Province, District, Health Facility, Year, Month, and Facility Group apply to
+            Facility Group limits Provinces, Districts, and Health Facilities; Province
+            then limits District, and District limits Health Facility. Facility Group,
+            Province, District, Health Facility, Year, and Month apply to
             every indicator chart. The Selected Summary Indicator applies only to the
             detailed province and facility tables below.
         </p>
-        <form method="get">
+        <form id="hmisFilterForm" method="get">
             <div class="hmis-filter-grid">
+                <div class="hmis-field">
+                    <label for="id_facility_group">Facility Group</label>
+                    <select id="id_facility_group" name="facility_group">
+                        <option value="all" {% if filters.facility_group == "all" %}selected{% endif %}>All Facilities</option>
+                        <option value="hiva" {% if filters.facility_group == "hiva" %}selected{% endif %}>HIVA Health Facilities</option>
+                        <option value="non_hiva" {% if filters.facility_group == "non_hiva" %}selected{% endif %}>Non-HIVA Health Facilities</option>
+                    </select>
+                </div>
                 <div class="hmis-field">
                     <label for="id_prov">Province</label>
                     <select id="id_prov" name="prov">
@@ -461,14 +470,6 @@
                         {% for option in filter_options.months %}
                             <option value="{{ option.value }}" {% if filters.month == option.value %}selected{% endif %}>{{ option.label }}</option>
                         {% endfor %}
-                    </select>
-                </div>
-                <div class="hmis-field">
-                    <label for="id_facility_group">Facility Group</label>
-                    <select id="id_facility_group" name="facility_group">
-                        <option value="all" {% if filters.facility_group == "all" %}selected{% endif %}>All Facilities</option>
-                        <option value="hiva" {% if filters.facility_group == "hiva" %}selected{% endif %}>HIVA Health Facilities</option>
-                        <option value="non_hiva" {% if filters.facility_group == "non_hiva" %}selected{% endif %}>Non-HIVA Health Facilities</option>
                     </select>
                 </div>
                 <div class="hmis-field">
@@ -728,6 +729,7 @@
     {% endif %}
 </div>
 
+{{ filter_options.location_cascade|json_script:"hmis-location-cascade" }}
 {{ chart_data|json_script:"hmis-chart-data" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
@@ -736,6 +738,101 @@
 
     const dataElement = document.getElementById("hmis-chart-data");
     const dashboardData = dataElement ? JSON.parse(dataElement.textContent) : null;
+
+    const cascadeElement = document.getElementById("hmis-location-cascade");
+    const locationCascade = cascadeElement
+        ? JSON.parse(cascadeElement.textContent)
+        : [];
+    const facilityGroupSelect = document.getElementById("id_facility_group");
+    const provinceSelect = document.getElementById("id_prov");
+    const districtSelect = document.getElementById("id_dist");
+    const facilitySelect = document.getElementById("id_hf");
+
+    function uniqueSorted(values) {
+        return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
+            left.localeCompare(right, undefined, { sensitivity: "base" })
+        );
+    }
+
+    function replaceOptions(select, values, allLabel, preferredValue) {
+        if (!select) return;
+        select.replaceChildren();
+        select.add(new Option(allLabel, ""));
+        values.forEach(value => select.add(new Option(value, value)));
+        select.value = values.includes(preferredValue) ? preferredValue : "";
+    }
+
+    function rowsForSelectedGroup() {
+        const selectedGroup = facilityGroupSelect
+            ? facilityGroupSelect.value
+            : "all";
+        return locationCascade.filter(row =>
+            selectedGroup === "all" || row.group === selectedGroup
+        );
+    }
+
+    function refreshFacilityOptions(preferredFacility) {
+        const selectedProvince = provinceSelect ? provinceSelect.value : "";
+        const selectedDistrict = districtSelect ? districtSelect.value : "";
+        const rows = rowsForSelectedGroup().filter(row =>
+            (!selectedProvince || row.province === selectedProvince) &&
+            (!selectedDistrict || row.district === selectedDistrict)
+        );
+        replaceOptions(
+            facilitySelect,
+            uniqueSorted(rows.map(row => row.facility)),
+            "All Health Facilities",
+            preferredFacility
+        );
+    }
+
+    function refreshDistrictOptions(preferredDistrict, preferredFacility) {
+        const selectedProvince = provinceSelect ? provinceSelect.value : "";
+        const rows = rowsForSelectedGroup().filter(row =>
+            !selectedProvince || row.province === selectedProvince
+        );
+        replaceOptions(
+            districtSelect,
+            uniqueSorted(rows.map(row => row.district)),
+            "All Districts",
+            preferredDistrict
+        );
+        refreshFacilityOptions(preferredFacility);
+    }
+
+    function refreshProvinceOptions(preferredProvince, preferredDistrict, preferredFacility) {
+        const rows = rowsForSelectedGroup();
+        replaceOptions(
+            provinceSelect,
+            uniqueSorted(rows.map(row => row.province)),
+            "All Provinces",
+            preferredProvince
+        );
+        refreshDistrictOptions(preferredDistrict, preferredFacility);
+    }
+
+    if (
+        locationCascade.length &&
+        facilityGroupSelect &&
+        provinceSelect &&
+        districtSelect &&
+        facilitySelect
+    ) {
+        const initialProvince = provinceSelect.value;
+        const initialDistrict = districtSelect.value;
+        const initialFacility = facilitySelect.value;
+        refreshProvinceOptions(initialProvince, initialDistrict, initialFacility);
+
+        facilityGroupSelect.addEventListener("change", function () {
+            refreshProvinceOptions("", "", "");
+        });
+        provinceSelect.addEventListener("change", function () {
+            refreshDistrictOptions("", "");
+        });
+        districtSelect.addEventListener("change", function () {
+            refreshFacilityOptions("");
+        });
+    }
 
     const formatNumber = (value) => Number(value || 0).toLocaleString(undefined, {
         maximumFractionDigits: 2

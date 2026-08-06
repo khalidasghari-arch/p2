@@ -275,15 +275,31 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             queryset = queryset.filter(hiva_hfs=False)
         return queryset
 
+    @staticmethod
+    def _apply_facility_group(queryset, facility_group):
+        """Limit either HMIS table to the selected facility group."""
+        if facility_group == "hiva":
+            return queryset.filter(hiva_hfs=True)
+        if facility_group == "non_hiva":
+            return queryset.filter(hiva_hfs=False)
+        return queryset
+
     def _filter_options(self, base_queryset, filters):
+        # Facility Group is the first level of the location cascade:
+        # Facility Group -> Province -> District -> Health Facility.
+        group_queryset = self._apply_facility_group(
+            base_queryset,
+            filters["facility_group"],
+        )
+
         provinces = list(
-            base_queryset.exclude(prov="")
+            group_queryset.exclude(prov="")
             .values_list("prov", flat=True)
             .distinct()
             .order_by("prov")
         )
 
-        district_queryset = base_queryset
+        district_queryset = group_queryset
         if filters["prov"]:
             district_queryset = district_queryset.filter(prov=filters["prov"])
         districts = list(
@@ -306,10 +322,6 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         period_queryset = facility_queryset
         if filters["hf"]:
             period_queryset = period_queryset.filter(hf=filters["hf"])
-        if filters["facility_group"] == "hiva":
-            period_queryset = period_queryset.filter(hiva_hfs=True)
-        elif filters["facility_group"] == "non_hiva":
-            period_queryset = period_queryset.filter(hiva_hfs=False)
 
         years = list(
             period_queryset.values_list("year", flat=True)
@@ -331,12 +343,32 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             if value in range(1, 13)
         ]
 
+        # A compact, distinct hierarchy lets the browser update the dependent
+        # dropdowns immediately without reloading the chart-heavy dashboard.
+        location_cascade = [
+            {
+                "group": "hiva" if row["hiva_hfs"] else "non_hiva",
+                "province": row["prov"],
+                "district": row["dist"],
+                "facility": row["hf"],
+            }
+            for row in (
+                base_queryset.exclude(prov="")
+                .exclude(dist="")
+                .exclude(hf="")
+                .values("hiva_hfs", "prov", "dist", "hf")
+                .distinct()
+                .order_by("hiva_hfs", "prov", "dist", "hf")
+            )
+        ]
+
         return {
             "provinces": provinces,
             "districts": districts,
             "facilities": facilities,
             "years": years,
             "months": months,
+            "location_cascade": location_cascade,
         }
 
     def _filter_fact_queryset(self, queryset, filters):
