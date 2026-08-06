@@ -22,6 +22,7 @@ from hmis.models import (
 from hmis.services.pipeline import run_import
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 
 @admin.register(HMISRawUpload)
 class HMISRawUploadAdmin(admin.ModelAdmin):
@@ -121,14 +122,9 @@ class IndicatorMetadataAdmin(admin.ModelAdmin):
     search_fields = ("indicator_code", "indicator_name", "indicator_short_name")
     ordering = ("sort_order", "indicator_name")
 
-# ===========================================================================
-# NEW HMIS PERFORMANCE DASHBOARD
-# ===========================================================================
-
-
 @admin.register(HMISDashboard)
 class HMISDashboardAdmin(admin.ModelAdmin):
-    """Read-only HMIS dashboard built from HMISMonthlySummary."""
+    """Read-only dashboard built from HMISMonthlySummary and HMISFact."""
 
     change_list_template = "admin/hmis/hmis_dashboard.html"
 
@@ -209,7 +205,7 @@ class HMISDashboardAdmin(admin.ModelAdmin):
     @staticmethod
     def _number_display(value, decimals=0):
         if value is None:
-            return "â€”"
+            return "—"
         number = float(value)
         if decimals == 0:
             return f"{number:,.0f}"
@@ -217,11 +213,11 @@ class HMISDashboardAdmin(admin.ModelAdmin):
 
     @staticmethod
     def _percent_display(value):
-        return "â€”" if value is None else f"{float(value):,.2f}%"
+        return "—" if value is None else f"{float(value):,.2f}%"
 
     @staticmethod
     def _rate_display(value):
-        return "â€”" if value is None else f"{float(value):,.2f}"
+        return "—" if value is None else f"{float(value):,.2f}"
 
     def _read_filters(self, request):
         indicator = (request.GET.get("indicator") or "anc1").strip()
@@ -247,6 +243,10 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         if selected_month not in range(1, 13):
             selected_month = None
 
+        comparison_period = (request.GET.get("comparison_period") or "").strip()
+        if not self._is_valid_periodcode(comparison_period):
+            comparison_period = ""
+
         return {
             "prov": (request.GET.get("prov") or "").strip(),
             "dist": (request.GET.get("dist") or "").strip(),
@@ -255,6 +255,7 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "month": selected_month,
             "facility_group": facility_group,
             "indicator": indicator,
+            "comparison_period": comparison_period,
         }
 
     def _filter_queryset(self, queryset, filters):
@@ -337,6 +338,353 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "years": years,
             "months": months,
         }
+
+    @staticmethod
+    def _is_valid_periodcode(periodcode):
+        period = str(periodcode or "")
+        if len(period) != 6 or not period.isdigit():
+            return False
+        return 1 <= int(period[4:6]) <= 12
+
+    @classmethod
+    def _previous_calendar_period(cls, periodcode):
+        if not cls._is_valid_periodcode(periodcode):
+            return ""
+        year = int(periodcode[:4])
+        month = int(periodcode[4:6])
+        if month == 1:
+            return f"{year - 1:04d}12"
+        return f"{year:04d}{month - 1:02d}"
+
+    def _filter_fact_scope(self, queryset, filters):
+        """Apply non-period dashboard filters to the long-format HMIS facts."""
+        if filters["prov"]:
+            queryset = queryset.filter(prov=filters["prov"])
+        if filters["dist"]:
+            queryset = queryset.filter(dist=filters["dist"])
+        if filters["hf"]:
+            queryset = queryset.filter(hf=filters["hf"])
+        if filters["facility_group"] == "hiva":
+            queryset = queryset.filter(hiva_hfs=True)
+        elif filters["facility_group"] == "non_hiva":
+            queryset = queryset.filter(hiva_hfs=False)
+        return queryset
+
+    def _resolve_comparison_periods(self, fact_queryset, filters):
+        available_codes = [
+            value
+            for value in fact_queryset.exclude(periodcode="")
+            .values_list("periodcode", flat=True)
+            .distinct()
+            .order_by("-periodcode")
+            if self._is_valid_periodcode(value)
+        ]
+        available_set = set(available_codes)
+
+        requested_current = ""
+        current_period = ""
+        current_unavailable = False
+
+        if filters["year"] is not None and filters["month"] is not None:
+            requested_current = f"{filters['year']:04d}{filters['month']:02d}"
+            if requested_current in available_set:
+                current_period = requested_current
+            else:
+                current_unavailable = True
+        elif filters["year"] is not None:
+            current_period = next(
+                (
+                    code
+                    for code in available_codes
+                    if code.startswith(f"{filters['year']:04d}")
+                ),
+                "",
+            )
+            current_unavailable = not bool(current_period)
+        elif filters["month"] is not None:
+            current_period = next(
+                (
+                    code
+                    for code in available_codes
+                    if int(code[4:6]) == filters["month"]
+                ),
+                "",
+            )
+            current_unavailable = not bool(current_period)
+        elif available_codes:
+            current_period = available_codes[0]
+
+        exact_previous = self._previous_calendar_period(current_period)
+        requested_comparison = filters["comparison_period"]
+        comparison_period = ""
+        comparison_mode = "none"
+
+        if (
+            current_period
+            and requested_comparison in available_set
+            and requested_comparison < current_period
+        ):
+            comparison_period = requested_comparison
+            comparison_mode = "selected"
+        elif current_period and exact_previous in available_set:
+            comparison_period = exact_previous
+            comparison_mode = "exact"
+        elif current_period:
+            comparison_period = next(
+                (code for code in available_codes if code < current_period),
+                "",
+            )
+            if comparison_period:
+                comparison_mode = "fallback"
+
+        available_periods = [
+            {
+                "value": code,
+                "label": self._period_label(code),
+                "is_current": code == current_period,
+                "is_comparison": code == comparison_period,
+                "can_compare": bool(current_period and code < current_period),
+            }
+            for code in available_codes
+        ]
+
+        if current_unavailable:
+            if requested_current:
+                status_message = (
+                    f"No HMIS fact report is available for "
+                    f"{self._period_label(requested_current)} under the active filters. "
+                    "Use the Year and Month filters to choose one of the available months shown below."
+                )
+            else:
+                status_message = (
+                    "No HMIS fact report matches the selected year or month. "
+                    "Use the Year and Month filters to choose one of the available months shown below."
+                )
+        elif not current_period:
+            status_message = "No HMIS fact reporting month is available under the active filters."
+        elif comparison_mode == "selected":
+            status_message = (
+                f"Comparing {self._period_label(current_period)} with the "
+                f"manually selected month, {self._period_label(comparison_period)}."
+            )
+        elif comparison_mode == "exact":
+            status_message = (
+                f"Comparing {self._period_label(current_period)} with the "
+                f"immediately preceding calendar month, "
+                f"{self._period_label(comparison_period)}."
+            )
+        elif comparison_mode == "fallback":
+            status_message = (
+                f"{self._period_label(exact_previous)} is not available under the active "
+                f"filters. The comparison therefore uses the closest earlier available "
+                f"month, {self._period_label(comparison_period)}."
+            )
+        else:
+            status_message = (
+                f"{self._period_label(current_period)} is available, but no earlier "
+                "reporting month is available for comparison."
+            )
+
+        return {
+            "available_codes": available_codes,
+            "available_periods": available_periods,
+            "current_period": current_period,
+            "current_label": self._period_label(current_period)
+            if current_period
+            else "Not available",
+            "comparison_period": comparison_period,
+            "comparison_label": self._period_label(comparison_period)
+            if comparison_period
+            else "Not available",
+            "exact_previous_period": exact_previous,
+            "comparison_mode": comparison_mode,
+            "status_message": status_message,
+        }
+
+    def _indicator_period_values(self, fact_queryset, periodcode):
+        if not periodcode:
+            return {}
+        grouped = (
+            fact_queryset.filter(periodcode=periodcode)
+            .values("indicator_code")
+            .annotate(
+                indicator_name=Max("indicator_name"),
+                total=Sum("value"),
+                reported_values=Count("value"),
+                facility_count=Count(
+                    "hf",
+                    filter=Q(value__isnull=False),
+                    distinct=True,
+                ),
+            )
+        )
+        return {item["indicator_code"]: item for item in grouped}
+
+    def _indicator_metadata(self):
+        metadata = {}
+        rows = (
+            IndicatorMetadata.objects.all()
+            .order_by("-is_active", "sort_order", "indicator_name")
+            .values(
+                "indicator_code",
+                "indicator_name",
+                "indicator_short_name",
+                "indicator_group",
+                "indicator_domain",
+                "sort_order",
+                "is_active",
+            )
+        )
+        for item in rows:
+            metadata.setdefault(item["indicator_code"], item)
+        return metadata
+
+    def _monthly_indicator_comparison(self, fact_queryset, filters):
+        period_data = self._resolve_comparison_periods(fact_queryset, filters)
+        current_values = self._indicator_period_values(
+            fact_queryset, period_data["current_period"]
+        )
+        comparison_values = self._indicator_period_values(
+            fact_queryset, period_data["comparison_period"]
+        )
+        metadata = self._indicator_metadata()
+
+        indicator_codes = set(current_values) | set(comparison_values)
+        rows = []
+        for code in indicator_codes:
+            current = current_values.get(code)
+            previous = comparison_values.get(code)
+            meta = metadata.get(code, {})
+
+            current_total = (
+                self._decimal(current["total"])
+                if current and current["reported_values"]
+                else None
+            )
+            previous_total = (
+                self._decimal(previous["total"])
+                if previous and previous["reported_values"]
+                else None
+            )
+
+            absolute_change = None
+            percent_change = None
+            if current_total is not None and previous_total is not None:
+                absolute_change = current_total - previous_total
+                if previous_total != 0:
+                    percent_change = self._round2(
+                        absolute_change / previous_total * Decimal("100")
+                    )
+
+            if current_total is None:
+                direction = "Not reported in current month"
+                direction_class = "missing"
+                availability = "Previous month only"
+            elif previous_total is None:
+                direction = "New / no previous value"
+                direction_class = "new"
+                availability = "Current month only"
+            elif absolute_change > 0:
+                direction = "Increased"
+                direction_class = "increase"
+                availability = "Both months"
+            elif absolute_change < 0:
+                direction = "Decreased"
+                direction_class = "decrease"
+                availability = "Both months"
+            else:
+                direction = "No change"
+                direction_class = "same"
+                availability = "Both months"
+
+            fact_name = ""
+            if current:
+                fact_name = current["indicator_name"] or ""
+            elif previous:
+                fact_name = previous["indicator_name"] or ""
+            full_name = meta.get("indicator_name") or fact_name or code
+            short_name = meta.get("indicator_short_name") or full_name
+            sort_order = meta.get("sort_order")
+
+            rows.append(
+                {
+                    "indicator_code": code,
+                    "indicator_name": full_name,
+                    "indicator_short_name": short_name,
+                    "indicator_group": meta.get("indicator_group") or "Not classified",
+                    "indicator_domain": meta.get("indicator_domain") or "Not classified",
+                    "sort_order": sort_order,
+                    "current_total": current_total,
+                    "current_total_display": self._number_display(current_total),
+                    "current_facilities": current["facility_count"] if current else 0,
+                    "previous_total": previous_total,
+                    "previous_total_display": self._number_display(previous_total),
+                    "previous_facilities": previous["facility_count"] if previous else 0,
+                    "absolute_change": absolute_change,
+                    "absolute_change_display": self._number_display(absolute_change),
+                    "percent_change": percent_change,
+                    "percent_change_display": self._percent_display(percent_change),
+                    "direction": direction,
+                    "direction_class": direction_class,
+                    "availability": availability,
+                }
+            )
+
+        rows.sort(
+            key=lambda row: (
+                row["sort_order"] is None,
+                row["sort_order"] if row["sort_order"] is not None else 0,
+                row["indicator_group"].lower(),
+                row["indicator_name"].lower(),
+                row["indicator_code"].lower(),
+            )
+        )
+
+        comparable_count = sum(
+            1
+            for row in rows
+            if row["current_total"] is not None and row["previous_total"] is not None
+        )
+        increased_count = sum(1 for row in rows if row["direction_class"] == "increase")
+        decreased_count = sum(1 for row in rows if row["direction_class"] == "decrease")
+        unchanged_count = sum(1 for row in rows if row["direction_class"] == "same")
+        current_only_count = sum(1 for row in rows if row["direction_class"] == "new")
+        previous_only_count = sum(1 for row in rows if row["direction_class"] == "missing")
+
+        chart_labels = []
+        for row in rows:
+            label = f"{row['indicator_short_name']} ({row['indicator_code']})"
+            chart_labels.append(label if len(label) <= 100 else f"{label[:97]}...")
+
+        period_data.update(
+            {
+                "rows": rows,
+                "indicator_count": len(rows),
+                "comparable_count": comparable_count,
+                "increased_count": increased_count,
+                "decreased_count": decreased_count,
+                "unchanged_count": unchanged_count,
+                "current_only_count": current_only_count,
+                "previous_only_count": previous_only_count,
+                "chart_height": max(380, min(len(rows) * 25 + 100, 12000)),
+                "chart": {
+                    "labels": chart_labels,
+                    "current_values": [
+                        float(row["current_total"])
+                        if row["current_total"] is not None
+                        else None
+                        for row in rows
+                    ],
+                    "comparison_values": [
+                        float(row["previous_total"])
+                        if row["previous_total"] is not None
+                        else None
+                        for row in rows
+                    ],
+                },
+            }
+        )
+        return period_data
 
     def _summary_aggregate(self, queryset):
         expressions = {
@@ -819,6 +1167,62 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             )
         self._style_worksheet(monthly_sheet)
 
+        comparison = data["monthly_indicator_comparison"]
+        comparison_sheet = workbook.create_sheet("All Indicator Comparison")
+        comparison_sheet.append(
+            [
+                "Indicator Code",
+                "Indicator Name",
+                "Short Name",
+                "Indicator Group",
+                "Indicator Domain",
+                f"{comparison['comparison_label']} Total",
+                f"{comparison['comparison_label']} Reporting HFs",
+                f"{comparison['current_label']} Total",
+                f"{comparison['current_label']} Reporting HFs",
+                "Absolute Change",
+                "Percent Change",
+                "Direction",
+                "Data Availability",
+            ]
+        )
+        for row in comparison["rows"]:
+            comparison_sheet.append(
+                [
+                    row["indicator_code"],
+                    row["indicator_name"],
+                    row["indicator_short_name"],
+                    row["indicator_group"],
+                    row["indicator_domain"],
+                    float(row["previous_total"])
+                    if row["previous_total"] is not None
+                    else None,
+                    row["previous_facilities"],
+                    float(row["current_total"])
+                    if row["current_total"] is not None
+                    else None,
+                    row["current_facilities"],
+                    float(row["absolute_change"])
+                    if row["absolute_change"] is not None
+                    else None,
+                    row["percent_change"],
+                    row["direction"],
+                    row["availability"],
+                ]
+            )
+        self._style_worksheet(comparison_sheet)
+
+        available_sheet = workbook.create_sheet("Available HMIS Months")
+        available_sheet.append(["Period Code", "Reporting Month", "Role"])
+        for period in comparison["available_periods"]:
+            role = ""
+            if period["is_current"]:
+                role = "Current month"
+            elif period["is_comparison"]:
+                role = "Comparison month"
+            available_sheet.append([period["value"], period["label"], role])
+        self._style_worksheet(available_sheet)
+
         province_sheet = workbook.create_sheet("Province Results")
         province_sheet.append(
             [
@@ -918,6 +1322,22 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         queryset = self._filter_queryset(base_queryset, filters)
         data = self._build_dashboard_data(queryset, filters["indicator"])
 
+        fact_scope = self._filter_fact_scope(HMISFact.objects.all(), filters)
+        monthly_comparison = self._monthly_indicator_comparison(
+            fact_scope,
+            filters,
+        )
+        data["monthly_indicator_comparison"] = monthly_comparison
+        data["chart_data"]["monthly_comparison"] = {
+            "labels": monthly_comparison["chart"]["labels"],
+            "current_label": monthly_comparison["current_label"],
+            "current_values": monthly_comparison["chart"]["current_values"],
+            "comparison_label": monthly_comparison["comparison_label"],
+            "comparison_values": monthly_comparison["chart"]["comparison_values"],
+            "has_current": bool(monthly_comparison["current_period"]),
+            "has_comparison": bool(monthly_comparison["comparison_period"]),
+        }
+
         if request.GET.get("export") == "xlsx":
             return self._export_excel(data, filters)
 
@@ -930,6 +1350,7 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "month",
             "facility_group",
             "indicator",
+            "comparison_period",
         ):
             value = filters[key]
             if value not in (None, "", "all"):

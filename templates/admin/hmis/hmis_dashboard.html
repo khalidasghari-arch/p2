@@ -210,6 +210,7 @@
         background: #fff;
         box-shadow: 0 2px 8px rgba(23, 79, 120, 0.05);
     }
+    .hmis-chart-card-full { grid-column: 1 / -1; }
     .hmis-chart-card h3 {
         margin: 0 0 4px;
         color: var(--hmis-blue);
@@ -224,6 +225,66 @@
     }
     .hmis-chart-wrap { position: relative; height: 315px; }
     .hmis-chart-wrap-small { height: 280px; }
+    .hmis-comparison-chart-scroll {
+        max-height: 760px;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    .hmis-comparison-chart-inner {
+        position: relative;
+        min-height: 380px;
+    }
+
+    .hmis-comparison-summary {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(120px, 1fr));
+        gap: 9px;
+        margin: 13px 0;
+    }
+    .hmis-comparison-stat {
+        padding: 10px;
+        border: 1px solid var(--hmis-border);
+        border-radius: 8px;
+        background: #f8fbfd;
+        text-align: center;
+    }
+    .hmis-comparison-stat strong {
+        display: block;
+        color: var(--hmis-blue);
+        font-size: 20px;
+    }
+    .hmis-comparison-stat span {
+        color: var(--hmis-muted);
+        font-size: 10px;
+        font-weight: 700;
+    }
+    .hmis-available-months {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 10px 0 14px;
+        flex-wrap: wrap;
+    }
+    .hmis-month-chip {
+        display: inline-block;
+        padding: 4px 8px;
+        border: 1px solid #c7dceb;
+        border-radius: 14px;
+        background: #f5f9fc;
+        color: #37576d;
+        font-size: 10px;
+        font-weight: 700;
+    }
+    .hmis-month-chip-current {
+        border-color: var(--hmis-blue);
+        background: var(--hmis-blue);
+        color: #fff;
+    }
+    .hmis-month-chip-comparison {
+        border-color: var(--hmis-gray);
+        background: var(--hmis-gray);
+        color: #fff;
+    }
 
     .hmis-note {
         margin-bottom: 18px;
@@ -315,6 +376,11 @@
     }
     .hmis-badge-hiva { background: #e5f4e7; color: #1b5e20; }
     .hmis-badge-other { background: #eceff1; color: #455a64; }
+    .hmis-badge-increase { background: #e5f4e7; color: #1b5e20; }
+    .hmis-badge-decrease { background: #fdeaea; color: #b71c1c; }
+    .hmis-badge-same { background: #eceff1; color: #455a64; }
+    .hmis-badge-new { background: #e3f2fd; color: #0d47a1; }
+    .hmis-badge-missing { background: #fff3e0; color: #a34a00; }
     .hmis-pagination {
         display: flex;
         justify-content: flex-end;
@@ -341,6 +407,7 @@
     @media (max-width: 1280px) {
         .hmis-filter-grid { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
         .hmis-kpi-grid { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
+        .hmis-comparison-summary { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
     }
     @media (max-width: 900px) {
         .hmis-header { flex-direction: column; }
@@ -354,6 +421,7 @@
         .hmis-filter-grid, .hmis-kpi-grid { grid-template-columns: 1fr; }
         .hmis-title { font-size: 24px; }
         .hmis-period-banner, .hmis-table-tools { flex-direction: column; align-items: flex-start; }
+        .hmis-comparison-summary { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
     }
 
     @media print {
@@ -370,18 +438,19 @@
         .hmis-tab-panel { display: block !important; margin-bottom: 18px; }
         .hmis-table-wrap { overflow: visible; }
         .hmis-table { white-space: normal; font-size: 7px; }
-        .facility-row { display: table-row !important; }
+        .facility-row, .indicator-comparison-row { display: table-row !important; }
     }
 </style>
 
 <div class="hmis-dashboard">
     <div class="hmis-header">
         <div>
-            <h1 class="hmis-title">HMIS Performance Dashboard</h1>
+            <h1 class="hmis-title">HMIS Dashboard</h1>
             <p class="hmis-subtitle">
-                Audience-ready analysis of maternal and newborn service indicators from
+                Ready analysis of maternal and newborn service indicators from
                 facility monthly summaries, including trends, geographic performance,
-                facility ranking, and HIVA versus non-HIVA comparison.
+                facility ranking, HIVA versus non-HIVA comparison, and month-to-month
+                comparison of every indicator stored in the long-format HMIS fact table.
             </p>
         </div>
         <div class="hmis-actions">
@@ -394,7 +463,9 @@
         <h2 class="hmis-section-title">Dashboard Filters</h2>
         <p class="hmis-section-note">
             Province limits the District list, and District limits the Health Facility list.
-            Select an indicator to update the trend, comparison, ranking, and summary tables.
+            Select a summary indicator to update the existing trend and ranking. The all-indicator
+            comparison automatically uses the preceding available HMIS month unless you choose a
+            different earlier comparison month.
         </p>
         <form method="get">
             <div class="hmis-filter-grid">
@@ -452,10 +523,21 @@
                     </select>
                 </div>
                 <div class="hmis-field">
-                    <label for="id_indicator">Selected Indicator</label>
+                    <label for="id_indicator">Selected Summary Indicator</label>
                     <select id="id_indicator" name="indicator">
                         {% for value, label in indicator_options %}
                             <option value="{{ value }}" {% if filters.indicator == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="hmis-field">
+                    <label for="id_comparison_period">Comparison Month</label>
+                    <select id="id_comparison_period" name="comparison_period">
+                        <option value="">Automatic — preceding available month</option>
+                        {% for option in monthly_indicator_comparison.available_periods %}
+                            {% if option.can_compare or not monthly_indicator_comparison.current_period %}
+                                <option value="{{ option.value }}" {% if filters.comparison_period == option.value %}selected{% endif %}>{{ option.label }}</option>
+                            {% endif %}
                         {% endfor %}
                     </select>
                 </div>
@@ -469,7 +551,7 @@
 
     <div class="hmis-period-banner">
         <span><strong>Selected reporting period:</strong> {{ period_range }}</span>
-        <span><strong>Analysis indicator:</strong> {{ selected_indicator_label }}</span>
+        <span><strong>Summary analysis indicator:</strong> {{ selected_indicator_label }}</span>
     </div>
 
     <div class="hmis-kpi-grid">
@@ -480,6 +562,132 @@
                 <div class="hmis-kpi-help">{{ kpi.help }}</div>
             </div>
         {% endfor %}
+    </div>
+
+    <div class="hmis-section">
+        <h2 class="hmis-section-title">All HMIS Indicator Monthly Comparison</h2>
+        <p class="hmis-section-note">
+            Every indicator below is read dynamically from <code>HMISFact</code>. The 11
+            <code>HMISMonthlySummary</code> fields remain available in the existing KPI and trend
+            sections, but they do not limit this comparison.
+        </p>
+
+        <div class="hmis-note">
+            <strong>Comparison status:</strong>
+            {{ monthly_indicator_comparison.status_message }}
+            A blank value means the indicator was not reported; a reported zero remains zero.
+        </div>
+
+        <div class="hmis-available-months">
+            <strong>Available months:</strong>
+            {% for period in monthly_indicator_comparison.available_periods %}
+                <span class="hmis-month-chip{% if period.is_current %} hmis-month-chip-current{% elif period.is_comparison %} hmis-month-chip-comparison{% endif %}">
+                    {{ period.label }}{% if period.is_current %} — current{% elif period.is_comparison %} — comparison{% endif %}
+                </span>
+            {% empty %}
+                <span class="hmis-month-chip">No available HMIS fact months</span>
+            {% endfor %}
+        </div>
+
+        {% if monthly_indicator_comparison.current_period %}
+            <div class="hmis-comparison-summary">
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.indicator_count }}</strong>
+                    <span>Indicators in either month</span>
+                </div>
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.comparable_count }}</strong>
+                    <span>Reported in both months</span>
+                </div>
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.increased_count }}</strong>
+                    <span>Increased</span>
+                </div>
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.decreased_count }}</strong>
+                    <span>Decreased</span>
+                </div>
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.unchanged_count }}</strong>
+                    <span>No change</span>
+                </div>
+                <div class="hmis-comparison-stat">
+                    <strong>{{ monthly_indicator_comparison.current_only_count }} / {{ monthly_indicator_comparison.previous_only_count }}</strong>
+                    <span>Current-only / previous-only</span>
+                </div>
+            </div>
+
+            {% if monthly_indicator_comparison.rows %}
+                <div class="hmis-chart-card hmis-chart-card-full">
+                    <h3>{{ monthly_indicator_comparison.current_label }} vs {{ monthly_indicator_comparison.comparison_label }}</h3>
+                    <p>
+                        Total value for every available HMIS indicator. Scroll vertically to review
+                        the full list; reporting-facility differences are shown in the table below.
+                    </p>
+                    <div class="hmis-comparison-chart-scroll">
+                        <div class="hmis-comparison-chart-inner" style="height: {{ monthly_indicator_comparison.chart_height }}px;">
+                            <canvas id="allIndicatorComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hmis-table-tools" style="margin-top: 15px;">
+                    <input id="indicatorComparisonSearch" class="hmis-search" type="search" placeholder="Search indicator code, name, group, or domain...">
+                    <span id="indicatorComparisonCount" class="hmis-table-count"></span>
+                </div>
+                <div class="hmis-table-wrap">
+                    <table class="hmis-table" id="indicatorComparisonTable">
+                        <thead>
+                            <tr>
+                                <th>Indicator Code</th>
+                                <th>Indicator</th>
+                                <th>Group</th>
+                                <th>Domain</th>
+                                <th>{{ monthly_indicator_comparison.comparison_label }}</th>
+                                <th>Previous HFs</th>
+                                <th>{{ monthly_indicator_comparison.current_label }}</th>
+                                <th>Current HFs</th>
+                                <th>Absolute Change</th>
+                                <th>Percent Change</th>
+                                <th>Direction</th>
+                                <th>Availability</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in monthly_indicator_comparison.rows %}
+                                <tr class="indicator-comparison-row">
+                                    <td class="text-left">{{ row.indicator_code }}</td>
+                                    <td class="text-left">{{ row.indicator_name }}</td>
+                                    <td class="text-left">{{ row.indicator_group }}</td>
+                                    <td class="text-left">{{ row.indicator_domain }}</td>
+                                    <td>{{ row.previous_total_display }}</td>
+                                    <td>{{ row.previous_facilities }}</td>
+                                    <td>{{ row.current_total_display }}</td>
+                                    <td>{{ row.current_facilities }}</td>
+                                    <td>{{ row.absolute_change_display }}</td>
+                                    <td>{{ row.percent_change_display }}</td>
+                                    <td class="text-center">
+                                        <span class="hmis-badge hmis-badge-{{ row.direction_class }}">{{ row.direction }}</span>
+                                    </td>
+                                    <td class="text-left">{{ row.availability }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="hmis-pagination">
+                    <button id="indicatorComparisonPrev" type="button">Previous</button>
+                    <span id="indicatorComparisonPage"></span>
+                    <button id="indicatorComparisonNext" type="button">Next</button>
+                </div>
+            {% else %}
+                <div class="hmis-empty">No indicator values are available for the selected current month.</div>
+            {% endif %}
+        {% else %}
+            <div class="hmis-empty">
+                Select an available reporting month using the Year and Month filters to display the comparison.
+            </div>
+        {% endif %}
     </div>
 
     {% if summary.reporting_records %}
@@ -765,6 +973,61 @@
         });
     }
 
+    if (
+        dashboardData &&
+        dashboardData.monthly_comparison &&
+        dashboardData.monthly_comparison.has_current &&
+        typeof Chart !== "undefined"
+    ) {
+        const comparison = dashboardData.monthly_comparison;
+        const comparisonCanvas = document.getElementById("allIndicatorComparisonChart");
+        if (comparisonCanvas) {
+            const datasets = [];
+            if (comparison.has_comparison) {
+                datasets.push({
+                    label: comparison.comparison_label,
+                    data: comparison.comparison_values,
+                    backgroundColor: "rgba(96, 125, 139, 0.72)",
+                    borderColor: "#607d8b",
+                    borderWidth: 1,
+                    borderRadius: 3
+                });
+            }
+            datasets.push({
+                label: comparison.current_label,
+                data: comparison.current_values,
+                backgroundColor: "rgba(45, 117, 173, 0.78)",
+                borderColor: "#174f78",
+                borderWidth: 1,
+                borderRadius: 3
+            });
+
+            new Chart(comparisonCanvas, {
+                type: "bar",
+                data: {
+                    labels: comparison.labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: "y",
+                    interaction: { mode: "index", intersect: false },
+                    plugins: commonPlugins,
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: { display: true, text: "Reported total" }
+                        },
+                        y: {
+                            ticks: { autoSkip: false, font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     if (dashboardData && dashboardData.has_data && typeof Chart !== "undefined") {
         const monthlyCanvas = document.getElementById("monthlyTrendChart");
         if (monthlyCanvas) {
@@ -913,6 +1176,64 @@
         });
     }
     renderFacilityRows();
+
+    const indicatorSearchInput = document.getElementById("indicatorComparisonSearch");
+    const allIndicatorRows = Array.from(
+        document.querySelectorAll("#indicatorComparisonTable tbody .indicator-comparison-row")
+    );
+    const indicatorPrevButton = document.getElementById("indicatorComparisonPrev");
+    const indicatorNextButton = document.getElementById("indicatorComparisonNext");
+    const indicatorPageLabel = document.getElementById("indicatorComparisonPage");
+    const indicatorCountLabel = document.getElementById("indicatorComparisonCount");
+    const indicatorPageSize = 25;
+    let indicatorCurrentPage = 1;
+
+    function filteredIndicatorRows() {
+        const term = indicatorSearchInput
+            ? indicatorSearchInput.value.trim().toLowerCase()
+            : "";
+        if (!term) return allIndicatorRows;
+        return allIndicatorRows.filter(row => row.textContent.toLowerCase().includes(term));
+    }
+
+    function renderIndicatorRows() {
+        if (!allIndicatorRows.length) return;
+        const rows = filteredIndicatorRows();
+        const totalPages = Math.max(1, Math.ceil(rows.length / indicatorPageSize));
+        indicatorCurrentPage = Math.min(Math.max(indicatorCurrentPage, 1), totalPages);
+        const start = (indicatorCurrentPage - 1) * indicatorPageSize;
+        const end = start + indicatorPageSize;
+        allIndicatorRows.forEach(row => { row.style.display = "none"; });
+        rows.slice(start, end).forEach(row => { row.style.display = "table-row"; });
+        if (indicatorPageLabel) {
+            indicatorPageLabel.textContent = "Page " + indicatorCurrentPage + " of " + totalPages;
+        }
+        if (indicatorCountLabel) {
+            indicatorCountLabel.textContent = rows.length.toLocaleString() + " indicators";
+        }
+        if (indicatorPrevButton) indicatorPrevButton.disabled = indicatorCurrentPage <= 1;
+        if (indicatorNextButton) indicatorNextButton.disabled = indicatorCurrentPage >= totalPages;
+    }
+
+    if (indicatorSearchInput) {
+        indicatorSearchInput.addEventListener("input", function () {
+            indicatorCurrentPage = 1;
+            renderIndicatorRows();
+        });
+    }
+    if (indicatorPrevButton) {
+        indicatorPrevButton.addEventListener("click", function () {
+            indicatorCurrentPage -= 1;
+            renderIndicatorRows();
+        });
+    }
+    if (indicatorNextButton) {
+        indicatorNextButton.addEventListener("click", function () {
+            indicatorCurrentPage += 1;
+            renderIndicatorRows();
+        });
+    }
+    renderIndicatorRows();
 })();
 </script>
 {% endblock %}
