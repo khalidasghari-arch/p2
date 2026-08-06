@@ -7426,7 +7426,7 @@ class HQIPContentDashboardAdmin(
 
         context = dict(
             self.admin_site.each_context(request),
-            title="HQIP Content Analysis: Baseline vs 2nd Round",
+            # title="HQIP Content Analysis: Baseline vs 2nd Round",
             filters=filters,
             province_options=province_options,
             district_options=district_options,
