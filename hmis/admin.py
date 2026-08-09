@@ -4,10 +4,11 @@ This keeps the four existing HMIS admin registrations and adds a separate,
 read-only HMIS performance dashboard through the ``HMISDashboard`` proxy model.
 The dashboard uses ``HMISFact`` to draw one separate monthly trend chart for
 every reported HMIS indicator and to build matching dynamic detailed-result
-tables. ``HMISMonthlySummary`` supplies the summary KPI cards. Excel and
-Print/PDF exports deliberately use the complete, unfiltered HMIS dataset.
+tables. ``HMISMonthlySummary`` supplies the summary KPI cards. Excel export
+uses the active dashboard filters and creates only Summary and Details sheets.
 """
 
+import csv
 # Required by _export_excel() when the HMIS upload report JSONField is
 # written into the "Upload Register" worksheet.
 import json
@@ -18,9 +19,10 @@ from calendar import month_name
 from decimal import Decimal, ROUND_HALF_UP
 import openpyxl
 from openpyxl.cell import WriteOnlyCell
+from django.conf import settings
 from django.contrib import admin, messages
 from django.db.models import Avg, Count, Max, Min, Sum
-from django.http import FileResponse, HttpResponseRedirect
+from django.http import FileResponse, HttpResponseRedirect, StreamingHttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from hmis.models import (
@@ -37,11 +39,9 @@ from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
-# This identifier is intentionally written to the production log whenever an
-# Excel export starts.  It makes it easy to confirm that Render is running this
-# replacement instead of an older admin.py with the obsolete three-payload
-# export signature.
-HMIS_EXPORT_BUILD = "2026.08.09-r4"
+# This identifier is written to the response header and production log so the
+# deployed filtered Excel implementation can be distinguished from old builds.
+HMIS_EXPORT_BUILD = "2026.08.09-xlsx-filtered-r1"
 
 
 # ===========================================================================
@@ -1437,7 +1437,104 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             row_count += 1
         self._finish_streaming_sheet(worksheet, row_count, len(headers))
 
-    def _export_excel(self, fact_queryset, summary_queryset):
+    def _legacy_export_csv_unused(self, fact_queryset):
+        """Stream every unfiltered HMIS fact row without building a file in RAM."""
+        logger.info(
+            "HMIS export build %s: complete CSV export started",
+            HMIS_EXPORT_BUILD,
+        )
+
+        headers = (
+            "Fact ID",
+            "Source Upload ID",
+            "Province",
+            "District",
+            "Health Facility",
+            "Period Code",
+            "Year",
+            "Month",
+            "Month Name",
+            "Cleaned Facility Name",
+            "HF ID",
+            "HIVA HF",
+            "Indicator Code",
+            "Indicator Name",
+            "Value",
+            "Created At",
+        )
+        value_fields = (
+            "id",
+            "source_upload_id",
+            "prov",
+            "dist",
+            "hf",
+            "periodcode",
+            "year",
+            "month",
+            "month_name",
+            "hf_name_cleaned",
+            "hfid",
+            "hiva_hfs",
+            "indicator_code",
+            "indicator_name",
+            "value",
+            "created_at",
+        )
+
+        class CsvEcho:
+            """Supply csv.writer's file interface while returning each row."""
+
+            @staticmethod
+            def write(value):
+                return value
+
+        writer = csv.writer(CsvEcho())
+
+        def stream_rows():
+            # The BOM makes Excel recognize UTF-8 province/facility names.
+            yield "\ufeff"
+            yield writer.writerow(headers)
+            row_count = 0
+            try:
+                rows = (
+                    fact_queryset.order_by()
+                    .values_list(*value_fields)
+                    .iterator(chunk_size=10000)
+                )
+                for row in rows:
+                    output = list(row)
+                    output[11] = "Yes" if output[11] else "No"
+                    output[15] = self._datetime_display(output[15])
+                    yield writer.writerow(output)
+                    row_count += 1
+                logger.info(
+                    "HMIS export build %s: complete CSV export finished (%s rows)",
+                    HMIS_EXPORT_BUILD,
+                    row_count,
+                )
+            except Exception:
+                logger.exception(
+                    "HMIS export build %s: CSV row streaming failed after %s rows",
+                    HMIS_EXPORT_BUILD,
+                    row_count,
+                )
+                raise
+
+        timestamp = timezone.localtime().strftime("%Y%m%d_%H%M%S")
+        response = StreamingHttpResponse(
+            stream_rows(),
+            content_type="text/csv; charset=utf-8",
+        )
+        response["Content-Disposition"] = (
+            f'attachment; filename="HMIS_Complete_Facts_{timestamp}.csv"'
+        )
+        response["Cache-Control"] = "no-store"
+        response["X-Accel-Buffering"] = "no"
+        response["X-Content-Type-Options"] = "nosniff"
+        response["X-HMIS-Export-Build"] = HMIS_EXPORT_BUILD
+        return response
+
+    def _legacy_complete_excel_unused(self, fact_queryset, summary_queryset):
         """Stream a complete, unfiltered workbook with bounded memory use."""
         logger.info(
             "HMIS export build %s: complete Excel export started",
@@ -1702,39 +1799,335 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                 os.remove(temp_path)
             raise
 
+    def _filtered_excel_row_limit(self):
+        """Return a deployment-safe limit, never exceeding Excel's hard cap."""
+        configured_limit = getattr(
+            settings,
+            "HMIS_EXCEL_MAX_DETAIL_ROWS",
+            250_000,
+        )
+        try:
+            configured_limit = int(configured_limit)
+        except (TypeError, ValueError):
+            configured_limit = 250_000
+        return min(max(configured_limit, 1), self.EXCEL_MAX_ROWS - 1)
+
+    @staticmethod
+    def _excel_text(value):
+        """Keep user-supplied text as text instead of an Excel formula."""
+        if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+            return f"'{value}"
+        return value
+
+    def _export_filtered_excel(self, fact_queryset, filters, detail_row_count):
+        """Create a two-sheet Excel workbook from the active dashboard filters."""
+        logger.info(
+            "HMIS export build %s: filtered Excel export started (%s rows)",
+            HMIS_EXPORT_BUILD,
+            detail_row_count,
+        )
+
+        workbook = openpyxl.Workbook(write_only=True)
+
+        # ------------------------------------------------------------------
+        # Sheet 1: export scope plus one aggregate row for every indicator.
+        # ------------------------------------------------------------------
+        summary_sheet = workbook.create_sheet("Summary")
+        summary_sheet.freeze_panes = "A2"
+        summary_widths = (25, 34, 24, 24, 20, 18, 18, 18)
+        for index, width in enumerate(summary_widths, start=1):
+            summary_sheet.column_dimensions[get_column_letter(index)].width = width
+
+        title_cell = WriteOnlyCell(summary_sheet, value="HMIS FILTERED DATA EXPORT")
+        title_cell.fill = PatternFill("solid", fgColor="1F4E78")
+        title_cell.font = Font(color="FFFFFF", bold=True, size=15)
+        summary_sheet.append([title_cell])
+        summary_sheet.append(
+            ["Generated", timezone.localtime().strftime("%Y-%m-%d %H:%M")]
+        )
+        summary_sheet.append(["Export Build", HMIS_EXPORT_BUILD])
+        summary_sheet.append(["Filtered Detail Rows", detail_row_count])
+        summary_sheet.append([])
+
+        group_labels = {
+            "all": "All Facilities",
+            "hiva": "HIVA Health Facilities",
+            "non_hiva": "Non-HIVA Health Facilities",
+        }
+        filter_rows = (
+            (
+                "Facility Group",
+                group_labels.get(filters["facility_group"], "All Facilities"),
+            ),
+            ("Province", filters["prov"] or "All Provinces"),
+            ("District", filters["dist"] or "All Districts"),
+            ("Health Facility", filters["hf"] or "All Health Facilities"),
+            ("Year", filters["year"] if filters["year"] is not None else "All Years"),
+            (
+                "Month",
+                month_name[filters["month"]]
+                if filters["month"] in range(1, 13)
+                else "All Months",
+            ),
+            (
+                "Selected Summary Indicator",
+                self.INDICATOR_LABELS.get(filters["indicator"], filters["indicator"]),
+            ),
+        )
+        filter_header = []
+        for heading in ("Applied Filter", "Selection"):
+            cell = WriteOnlyCell(summary_sheet, value=heading)
+            cell.fill = PatternFill("solid", fgColor="5B9BD5")
+            cell.font = Font(color="FFFFFF", bold=True)
+            filter_header.append(cell)
+        summary_sheet.append(filter_header)
+        for label, value in filter_rows:
+            summary_sheet.append([label, self._excel_text(value)])
+        summary_sheet.append([])
+
+        metadata = {
+            row["indicator_code"]: row
+            for row in IndicatorMetadata.objects.values(
+                "indicator_code",
+                "indicator_name",
+                "indicator_short_name",
+                "indicator_group",
+                "indicator_domain",
+            )
+        }
+        indicator_headers = (
+            "Indicator Code",
+            "Indicator Name",
+            "Indicator Group",
+            "Indicator Domain",
+            "Total Reported Value",
+            "Reporting Rows",
+            "Health Facilities",
+            "Reporting Months",
+        )
+        indicator_header_cells = []
+        for heading in indicator_headers:
+            cell = WriteOnlyCell(summary_sheet, value=heading)
+            cell.fill = PatternFill("solid", fgColor="1F4E78")
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            indicator_header_cells.append(cell)
+        summary_sheet.append(indicator_header_cells)
+
+        indicator_summary = (
+            fact_queryset.values("indicator_code")
+            .annotate(
+                indicator_name_max=Max("indicator_name"),
+                reported_total=Sum("value"),
+                reporting_rows=Count("value"),
+                health_facilities=Count("hf", distinct=True),
+                reporting_months=Count("periodcode", distinct=True),
+            )
+            .order_by("indicator_code")
+        )
+        indicator_count = 0
+        for row in indicator_summary.iterator(chunk_size=2000):
+            code = row["indicator_code"] or "Not coded"
+            meta = metadata.get(code, {})
+            indicator_name = (
+                meta.get("indicator_short_name")
+                or meta.get("indicator_name")
+                or row["indicator_name_max"]
+                or code
+            )
+            summary_sheet.append(
+                [
+                    self._excel_text(code),
+                    self._excel_text(indicator_name),
+                    self._excel_text(meta.get("indicator_group") or "Not classified"),
+                    self._excel_text(meta.get("indicator_domain") or "Not classified"),
+                    self._excel_value(row["reported_total"]),
+                    row["reporting_rows"],
+                    row["health_facilities"],
+                    row["reporting_months"],
+                ]
+            )
+            indicator_count += 1
+
+        # ------------------------------------------------------------------
+        # Sheet 2: filtered long-format facts behind the dashboard results.
+        # ------------------------------------------------------------------
+        detail_headers = (
+            "Fact ID",
+            "Source Upload ID",
+            "Province",
+            "District",
+            "Health Facility",
+            "Period Code",
+            "Year",
+            "Month",
+            "Month Name",
+            "Cleaned Facility Name",
+            "HF ID",
+            "HIVA HF",
+            "Indicator Code",
+            "Indicator Name",
+            "Value",
+            "Created At",
+        )
+        detail_fields = (
+            "id",
+            "source_upload_id",
+            "prov",
+            "dist",
+            "hf",
+            "periodcode",
+            "year",
+            "month",
+            "month_name",
+            "hf_name_cleaned",
+            "hfid",
+            "hiva_hfs",
+            "indicator_code",
+            "indicator_name",
+            "value",
+            "created_at",
+        )
+        details_sheet = workbook.create_sheet("Details")
+        self._streaming_header(
+            details_sheet,
+            detail_headers,
+            (12, 16, 18, 18, 34, 13, 10, 10, 14, 34, 14, 12, 18, 48, 14, 20),
+        )
+        detail_rows = (
+            fact_queryset.order_by()
+            .values_list(*detail_fields)
+            .iterator(chunk_size=5000)
+        )
+        written_rows = 0
+        for row in detail_rows:
+            output = list(row)
+            for index in (2, 3, 4, 5, 8, 9, 10, 12, 13):
+                output[index] = self._excel_text(output[index])
+            output[11] = "Yes" if output[11] else "No"
+            output[14] = self._excel_value(output[14])
+            output[15] = self._datetime_display(output[15])
+            details_sheet.append(output)
+            written_rows += 1
+        self._finish_streaming_sheet(details_sheet, written_rows, len(detail_headers))
+
+        temp_file = tempfile.NamedTemporaryFile(
+            prefix="hmis_filtered_export_",
+            suffix=".xlsx",
+            delete=False,
+        )
+        temp_path = temp_file.name
+        temp_file.close()
+        try:
+            workbook.save(temp_path)
+            content_length = os.path.getsize(temp_path)
+            export_stream = open(temp_path, "rb")
+            timestamp = timezone.localtime().strftime("%Y%m%d_%H%M%S")
+            response = FileResponse(
+                export_stream,
+                as_attachment=True,
+                filename=f"HMIS_Filtered_Export_{timestamp}.xlsx",
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+            response["Content-Length"] = str(content_length)
+            response["Cache-Control"] = "no-store"
+            response["X-Content-Type-Options"] = "nosniff"
+            response["X-HMIS-Export-Build"] = HMIS_EXPORT_BUILD
+            response._resource_closers.append(
+                lambda path=temp_path: os.path.exists(path) and os.remove(path)
+            )
+            logger.info(
+                "HMIS export build %s: filtered Excel ready "
+                "(%s detail rows, %s indicators, %s bytes)",
+                HMIS_EXPORT_BUILD,
+                written_rows,
+                indicator_count,
+                content_length,
+            )
+            return response
+        except Exception:
+            logger.exception(
+                "HMIS export build %s: filtered Excel generation failed",
+                HMIS_EXPORT_BUILD,
+            )
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+
     def changelist_view(self, request, extra_context=None):
         requested_filters = self._read_filters(request)
-        complete_export = request.GET.get("export") == "xlsx"
+        filtered_excel_export = request.GET.get("export") == "xlsx"
         complete_print = request.GET.get("print") == "all"
 
-        # Excel has its own bounded-memory export pipeline.  Return early so
-        # the complete facility/province/month matrices are never materialized
-        # in Python before the workbook is written.
-        if complete_export:
-            try:
-                return self._export_excel(
-                    HMISFact.objects.all(),
-                    HMISMonthlySummary.objects.all(),
+        # Export before building chart/table matrices. This keeps the request
+        # lightweight and guarantees that the workbook uses the active filters.
+        if filtered_excel_export:
+            filtered_facts = self._filter_fact_queryset(
+                HMISFact.objects.all(),
+                requested_filters,
+            )
+            detail_row_count = filtered_facts.count()
+            export_limit = self._filtered_excel_row_limit()
+            redirect_params = request.GET.copy()
+            redirect_params.pop("export", None)
+            redirect_url = request.path
+            if redirect_params:
+                redirect_url = f"{request.path}?{redirect_params.urlencode()}"
+
+            if detail_row_count == 0:
+                self.message_user(
+                    request,
+                    (
+                        "Excel export was not started because no HMIS detail rows "
+                        "match the selected filters. Please change one or more "
+                        "filters and try again."
+                    ),
+                    level=messages.WARNING,
                 )
-            except Exception as exc:
+                return HttpResponseRedirect(redirect_url)
+
+            if detail_row_count > export_limit:
+                self.message_user(
+                    request,
+                    (
+                        "Excel export was not started. The selected filters return "
+                        f"{detail_row_count:,} detail rows, which exceeds the safe "
+                        f"export limit of {export_limit:,} rows. Please narrow the "
+                        "selection by Year, Month, Province, District, or Health "
+                        "Facility, then try again."
+                    ),
+                    level=messages.WARNING,
+                )
+                return HttpResponseRedirect(redirect_url)
+
+            try:
+                return self._export_filtered_excel(
+                    filtered_facts,
+                    requested_filters,
+                    detail_row_count,
+                )
+            except Exception:
                 logger.exception(
-                    "HMIS export build %s: Excel export request failed",
+                    "HMIS export build %s: filtered Excel request failed",
                     HMIS_EXPORT_BUILD,
                 )
                 self.message_user(
                     request,
                     (
-                        "The complete HMIS Excel export failed: "
-                        f"{exc.__class__.__name__}: {str(exc)[:300]}. "
-                        f"Export build: {HMIS_EXPORT_BUILD}. "
-                        "The full traceback is recorded in the server logs."
+                        "The filtered Excel file could not be created. Please "
+                        "narrow the filters and try again. If the problem continues, "
+                        "contact the system administrator and mention export build "
+                        f"{HMIS_EXPORT_BUILD}."
                     ),
                     level=messages.ERROR,
                 )
-                return HttpResponseRedirect(request.path)
+                return HttpResponseRedirect(redirect_url)
 
-        # Dashboard filters are for interactive analysis only. Both export
-        # routes rebuild the dashboard from the full dataset.
+        # Print/PDF intentionally keeps its established complete-data scope.
+        # Excel export above uses requested_filters instead.
         if complete_print:
             filters = {
                 "prov": "",
@@ -1767,6 +2160,10 @@ class HMISDashboardAdmin(admin.ModelAdmin):
 
         options = self._filter_options(base_queryset, filters)
 
+        export_params = request.GET.copy()
+        export_params.pop("print", None)
+        export_params["export"] = "xlsx"
+
         context = {
             **self.admin_site.each_context(request),
             "title": "HMIS Performance Dashboard",
@@ -1774,7 +2171,8 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "filters": filters,
             "filter_options": options,
             "indicator_options": self.INDICATORS,
-            "export_url": "?export=xlsx",
+            "export_url": f"?{export_params.urlencode()}",
+            "excel_export_limit_display": f"{self._filtered_excel_row_limit():,}",
             "print_url": "?print=all",
             "print_all_mode": complete_print,
             **data,

@@ -417,7 +417,7 @@
             </p>
         </div>
         <div class="hmis-actions">
-            <a class="hmis-btn hmis-btn-green" href="{{ export_url }}">Export Complete Excel</a>
+            <a class="hmis-btn hmis-btn-green" href="{{ export_url }}">Export Filtered Excel</a>
             <a class="hmis-btn hmis-btn-gray" href="{{ print_url }}" target="_blank" rel="noopener">Print / PDF Complete Data</a>
         </div>
     </div>
@@ -438,7 +438,9 @@
             Province, District, Health Facility, Year, and Month apply to
             every indicator chart. The Selected Summary Indicator applies only to the
             ordering of the detailed province and facility tables below; every indicator
-            remains visible.
+            remains visible. Excel export uses these same filters and contains only
+            <strong>Summary</strong> and <strong>Details</strong> sheets. For reliability,
+            a single export is limited to {{ excel_export_limit_display }} detail rows.
         </p>
         <form id="hmisFilterForm" method="get">
             <div class="hmis-filter-grid">
@@ -711,7 +713,7 @@
     "use strict";
 
     const completePrintMode =
-    "{{ print_all_mode|yesno:'true,false' }}" === "true";
+        "{{ print_all_mode|yesno:'true,false' }}" === "true";
 
     const dataElement = document.getElementById("hmis-chart-data");
     const dashboardData = dataElement ? JSON.parse(dataElement.textContent) : null;
