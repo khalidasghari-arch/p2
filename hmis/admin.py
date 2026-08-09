@@ -11,12 +11,16 @@ Print/PDF exports deliberately use the complete, unfiltered HMIS dataset.
 # Required by _export_excel() when the HMIS upload report JSONField is
 # written into the "Upload Register" worksheet.
 import json
+import logging
+import os
+import tempfile
 from calendar import month_name
 from decimal import Decimal, ROUND_HALF_UP
 import openpyxl
+from openpyxl.cell import WriteOnlyCell
 from django.contrib import admin, messages
 from django.db.models import Avg, Count, Max, Min, Sum
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from hmis.models import (
@@ -29,6 +33,15 @@ from hmis.models import (
 from hmis.services.pipeline import run_import
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+
+
+logger = logging.getLogger(__name__)
+
+# This identifier is intentionally written to the production log whenever an
+# Excel export starts.  It makes it easy to confirm that Render is running this
+# replacement instead of an older admin.py with the obsolete three-payload
+# export signature.
+HMIS_EXPORT_BUILD = "2026.08.09-r4"
 
 
 # ===========================================================================
@@ -557,6 +570,66 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                 }
             )
         return cards, charts
+
+    def _export_indicator_columns(self, queryset):
+        """Return the export catalogue without building unused chart arrays.
+
+        The interactive dashboard needs a value for every indicator/month
+        combination.  Excel export only needs the ordered indicator catalogue,
+        so using the chart builder here wastes memory and CPU on large exports.
+        """
+        metadata = {}
+        for item in (
+            IndicatorMetadata.objects.all()
+            .order_by("-is_active", "sort_order", "indicator_name")
+            .values(
+                "indicator_code",
+                "indicator_name",
+                "indicator_short_name",
+                "indicator_group",
+                "indicator_domain",
+                "sort_order",
+            )
+        ):
+            metadata.setdefault(item["indicator_code"], item)
+
+        grouped = (
+            queryset.values("indicator_code")
+            .annotate(indicator_name_max=Max("indicator_name"))
+            .order_by("indicator_code")
+        )
+        columns = []
+        for item in grouped.iterator(chunk_size=2000):
+            code = item["indicator_code"] or "Not coded"
+            meta = metadata.get(code, {})
+            columns.append(
+                {
+                    "indicator_code": code,
+                    "title": (
+                        meta.get("indicator_short_name")
+                        or meta.get("indicator_name")
+                        or item["indicator_name_max"]
+                        or code
+                    ),
+                    "full_name": (
+                        meta.get("indicator_name")
+                        or item["indicator_name_max"]
+                        or code
+                    ),
+                    "group": meta.get("indicator_group") or "Not classified",
+                    "domain": meta.get("indicator_domain") or "Not classified",
+                    "sort_order": meta.get("sort_order"),
+                }
+            )
+        columns.sort(
+            key=lambda item: (
+                item["sort_order"] is None,
+                item["sort_order"] if item["sort_order"] is not None else 0,
+                item["title"].lower(),
+                item["indicator_code"],
+            )
+        )
+        return columns
 
     def _fact_detail_tables(self, queryset, indicator_cards, selected_indicator):
         """Build compact matrices using the exact indicator set shown in charts.
@@ -1115,118 +1188,131 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         self._style_worksheet(worksheet)
         return worksheet
 
-    def _export_excel(self, data, fact_queryset, summary_queryset):
-        """Export the complete HMIS dataset, deliberately ignoring UI filters."""
-        workbook = openpyxl.Workbook()
-        workbook.remove(workbook.active)
+    EXCEL_MAX_ROWS = 1_048_576
+    EXCEL_MAX_CELL_TEXT = 32_767
 
-        summary_sheet = workbook.create_sheet("Dashboard Summary")
-        summary_sheet.append(["HMIS PERFORMANCE DASHBOARD", ""])
-        summary_sheet.append(["Generated", timezone.localtime().strftime("%Y-%m-%d %H:%M")])
-        summary_sheet.append(
-            ["Export Scope", "Complete HMIS dataset — dashboard filters ignored"]
-        )
-        summary_sheet.append(["Reporting Period", data["period_range"]])
-        summary_sheet.append([])
-        summary_sheet.append(["KPI", "Result", "Definition"])
-        kpi_header_row = summary_sheet.max_row
-        for kpi in data["kpis"]:
-            summary_sheet.append([kpi["label"], kpi["value"], kpi["help"]])
-        summary_sheet.merge_cells("A1:B1")
-        summary_sheet["A1"].fill = PatternFill("solid", fgColor="1F4E78")
-        summary_sheet["A1"].font = Font(color="FFFFFF", bold=True, size=16)
-        summary_sheet["A1"].alignment = Alignment(horizontal="center")
-        for cell in summary_sheet[kpi_header_row]:
-            cell.fill = PatternFill("solid", fgColor="5B9BD5")
-            cell.font = Font(color="FFFFFF", bold=True)
-        summary_sheet.column_dimensions["A"].width = 28
-        summary_sheet.column_dimensions["B"].width = 28
-        summary_sheet.column_dimensions["C"].width = 55
+    @classmethod
+    def _excel_value(cls, value):
+        """Return an Excel-safe scalar without retaining extra cell objects."""
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, str) and len(value) > cls.EXCEL_MAX_CELL_TEXT:
+            return value[: cls.EXCEL_MAX_CELL_TEXT]
+        return value
 
-        # Reuse the exact same catalogue as the charts and on-screen tables.
-        indicator_columns = data["all_hmis_indicator_cards"]
-        self._append_matrix_sheet(
-            workbook,
-            "Monthly All Indicators",
-            ("Period Code", "Period"),
-            ("periodcode", "period"),
-            data["detailed_monthly_rows"],
-            indicator_columns,
-        )
-        self._append_matrix_sheet(
-            workbook,
-            "Province All Indicators",
-            ("Province",),
-            ("province",),
-            data["detailed_province_rows"],
-            indicator_columns,
-        )
-        self._append_matrix_sheet(
-            workbook,
-            "Facility All Indicators",
-            ("Province", "Health Facility", "Facility Group"),
-            ("province", "facility", "facility_group"),
-            data["detailed_facility_rows"],
-            indicator_columns,
-        )
+    @staticmethod
+    def _streaming_header(worksheet, headers, widths=None):
+        """Append a styled header to an openpyxl write-only worksheet."""
+        worksheet.freeze_panes = "A2"
+        header_fill = PatternFill("solid", fgColor="1F4E78")
+        header_font = Font(color="FFFFFF", bold=True)
+        header_cells = []
+        for index, header in enumerate(headers, start=1):
+            cell = WriteOnlyCell(worksheet, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            header_cells.append(cell)
+            width = widths[index - 1] if widths and index <= len(widths) else 18
+            worksheet.column_dimensions[get_column_letter(index)].width = width
+        worksheet.append(header_cells)
 
-        all_indicator_sheet = workbook.create_sheet("All Indicator Trends")
-        all_indicator_sheet.append(
-            [
-                "Indicator Code",
-                "Indicator Name",
-                "Indicator Group",
-                "Indicator Domain",
-                "Reporting Month",
-                "Reported Total",
-            ]
-        )
-        all_indicator_charts = {
-            chart["id"]: chart
-            for chart in data["chart_data"].get("all_hmis_indicator_trends", [])
+    @staticmethod
+    def _finish_streaming_sheet(worksheet, row_count, column_count):
+        if column_count:
+            worksheet.auto_filter.ref = (
+                f"A1:{get_column_letter(column_count)}{max(row_count + 1, 1)}"
+            )
+
+    def _append_streaming_matrix_sheet(
+        self,
+        workbook,
+        title,
+        fact_queryset,
+        indicator_columns,
+        group_fields,
+        leading_headers,
+        leading_values,
+    ):
+        """Write one dynamic dashboard matrix while holding only one row."""
+        headers = list(leading_headers) + [
+            f"{column['title']} [{column['indicator_code']}]"
+            for column in indicator_columns
+        ]
+        if len(headers) > 16_384:
+            raise ValueError(
+                "The HMIS indicator catalogue exceeds Excel's 16,384-column "
+                "worksheet limit. Reduce duplicate indicator codes first."
+            )
+
+        worksheet = workbook.create_sheet(title)
+        self._streaming_header(worksheet, headers)
+        indicator_indexes = {
+            column["indicator_code"]: index
+            for index, column in enumerate(indicator_columns)
         }
-        for card in data.get("all_hmis_indicator_cards", []):
-            chart = all_indicator_charts.get(card["chart_id"])
-            if not chart or not chart["datasets"]:
-                continue
-            values = chart["datasets"][0]["data"]
-            for period, value in zip(chart["labels"], values):
-                all_indicator_sheet.append(
-                    [
-                        card["indicator_code"],
-                        card["full_name"],
-                        card["group"],
-                        card["domain"],
-                        period,
-                        value,
-                    ]
-                )
-        self._style_worksheet(all_indicator_sheet)
-
-        # Raw long-format fact data is included so analysts have every field,
-        # even those intentionally hidden from the compact dashboard tables.
-        facts_sheet = workbook.create_sheet("Complete HMIS Facts")
-        facts_sheet.append(
-            [
-                "Fact ID",
-                "Source Upload ID",
-                "Province",
-                "District",
-                "Health Facility",
-                "Period Code",
-                "Year",
-                "Month",
-                "Month Name",
-                "Cleaned Facility Name",
-                "HF ID",
-                "HIVA HF",
-                "Indicator Code",
-                "Indicator Name",
-                "Value",
-                "Created At",
-            ]
+        grouped = (
+            fact_queryset.values(*group_fields, "indicator_code")
+            .annotate(
+                reported_total=Sum("value"),
+                reported_values=Count("value"),
+            )
+            .order_by(*group_fields, "indicator_code")
         )
-        for row in fact_queryset.values(
+
+        row_count = 0
+        current_key = None
+        current_values = None
+
+        def append_current():
+            nonlocal row_count
+            if current_key is None:
+                return
+            worksheet.append(
+                [self._excel_value(value) for value in leading_values(current_key)]
+                + [self._excel_value(value) for value in current_values]
+            )
+            row_count += 1
+
+        for item in grouped.iterator(chunk_size=5000):
+            key = tuple(item[field] for field in group_fields)
+            if key != current_key:
+                append_current()
+                current_key = key
+                current_values = [None] * len(indicator_columns)
+            code = item["indicator_code"] or "Not coded"
+            index = indicator_indexes.get(code)
+            if index is not None and item["reported_values"]:
+                current_values[index] = item["reported_total"]
+        append_current()
+        self._finish_streaming_sheet(worksheet, row_count, len(headers))
+
+    def _new_split_sheet(self, workbook, base_title, part, headers, widths=None):
+        title = base_title if part == 1 else f"{base_title[:27]} {part}"
+        worksheet = workbook.create_sheet(title)
+        self._streaming_header(worksheet, headers, widths)
+        return worksheet
+
+    def _append_complete_fact_sheets(self, workbook, fact_queryset):
+        headers = [
+            "Fact ID",
+            "Source Upload ID",
+            "Province",
+            "District",
+            "Health Facility",
+            "Period Code",
+            "Year",
+            "Month",
+            "Month Name",
+            "Cleaned Facility Name",
+            "HF ID",
+            "HIVA HF",
+            "Indicator Code",
+            "Indicator Name",
+            "Value",
+            "Created At",
+        ]
+        value_fields = (
             "id",
             "source_upload_id",
             "prov",
@@ -1243,48 +1329,64 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "indicator_name",
             "value",
             "created_at",
-        ).order_by("prov", "dist", "hf", "periodcode", "indicator_code").iterator(chunk_size=5000):
-            facts_sheet.append(
+        )
+        part = 1
+        row_count = 0
+        worksheet = self._new_split_sheet(
+            workbook, "Complete HMIS Facts", part, headers
+        )
+        # Raw facts do not need presentation sorting.  Avoiding ORDER BY here
+        # prevents PostgreSQL from sorting the complete fact table before the
+        # first export row can be written.
+        rows = fact_queryset.order_by().values(*value_fields).iterator(
+            chunk_size=5000
+        )
+        for row in rows:
+            if row_count >= self.EXCEL_MAX_ROWS - 1:
+                self._finish_streaming_sheet(worksheet, row_count, len(headers))
+                part += 1
+                row_count = 0
+                worksheet = self._new_split_sheet(
+                    workbook, "Complete HMIS Facts", part, headers
+                )
+            worksheet.append(
                 [
                     row["id"],
                     row["source_upload_id"],
-                    row["prov"],
-                    row["dist"],
-                    row["hf"],
+                    self._excel_value(row["prov"]),
+                    self._excel_value(row["dist"]),
+                    self._excel_value(row["hf"]),
                     row["periodcode"],
                     row["year"],
                     row["month"],
                     row["month_name"],
-                    row["hf_name_cleaned"],
+                    self._excel_value(row["hf_name_cleaned"]),
                     row["hfid"],
                     "Yes" if row["hiva_hfs"] else "No",
-                    row["indicator_code"],
-                    row["indicator_name"],
-                    float(row["value"]) if row["value"] is not None else None,
+                    self._excel_value(row["indicator_code"]),
+                    self._excel_value(row["indicator_name"]),
+                    self._excel_value(row["value"]),
                     self._datetime_display(row["created_at"]),
                 ]
             )
-        self._style_large_worksheet(facts_sheet)
+            row_count += 1
+        self._finish_streaming_sheet(worksheet, row_count, len(headers))
 
-        monthly_raw_sheet = workbook.create_sheet("Complete Monthly Summary")
-        monthly_raw_sheet.append(
-            [
-                "Summary ID",
-                "Source Upload ID",
-                "Province",
-                "District",
-                "Health Facility",
-                "Period Code",
-                "Year",
-                "Month",
-                "Month Name",
-                "HF ID",
-                "HIVA HF",
-            ]
-            + [label for _field, label in self.INDICATORS]
-            + ["Created At"]
-        )
-        monthly_value_fields = (
+    def _append_complete_summary_sheets(self, workbook, summary_queryset):
+        headers = [
+            "Summary ID",
+            "Source Upload ID",
+            "Province",
+            "District",
+            "Health Facility",
+            "Period Code",
+            "Year",
+            "Month",
+            "Month Name",
+            "HF ID",
+            "HIVA HF",
+        ] + [label for _field, label in self.INDICATORS] + ["Created At"]
+        value_fields = (
             "id",
             "source_upload_id",
             "prov",
@@ -1299,16 +1401,29 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             *self.INDICATOR_FIELDS,
             "created_at",
         )
-        for row in summary_queryset.values(*monthly_value_fields).order_by(
-            "prov", "dist", "hf", "periodcode"
-        ).iterator(chunk_size=5000):
-            monthly_raw_sheet.append(
+        part = 1
+        row_count = 0
+        worksheet = self._new_split_sheet(
+            workbook, "Complete Monthly Summary", part, headers
+        )
+        rows = summary_queryset.order_by().values(*value_fields).iterator(
+            chunk_size=5000
+        )
+        for row in rows:
+            if row_count >= self.EXCEL_MAX_ROWS - 1:
+                self._finish_streaming_sheet(worksheet, row_count, len(headers))
+                part += 1
+                row_count = 0
+                worksheet = self._new_split_sheet(
+                    workbook, "Complete Monthly Summary", part, headers
+                )
+            worksheet.append(
                 [
                     row["id"],
                     row["source_upload_id"],
-                    row["prov"],
-                    row["dist"],
-                    row["hf"],
+                    self._excel_value(row["prov"]),
+                    self._excel_value(row["dist"]),
+                    self._excel_value(row["hf"]),
                     row["periodcode"],
                     row["year"],
                     row["month"],
@@ -1316,15 +1431,137 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                     row["hfid"],
                     "Yes" if row["hiva_hfs"] else "No",
                 ]
-                + [
-                    float(row[field]) if row[field] is not None else None
-                    for field in self.INDICATOR_FIELDS
-                ]
+                + [self._excel_value(row[field]) for field in self.INDICATOR_FIELDS]
                 + [self._datetime_display(row["created_at"])]
             )
-        self._style_large_worksheet(monthly_raw_sheet)
+            row_count += 1
+        self._finish_streaming_sheet(worksheet, row_count, len(headers))
 
-        metadata_sheet = workbook.create_sheet("Indicator Metadata")
+    def _export_excel(self, fact_queryset, summary_queryset):
+        """Stream a complete, unfiltered workbook with bounded memory use."""
+        logger.info(
+            "HMIS export build %s: complete Excel export started",
+            HMIS_EXPORT_BUILD,
+        )
+        data = self._build_dashboard_data(summary_queryset, "anc1")
+        indicator_columns = self._export_indicator_columns(fact_queryset)
+        logger.info(
+            "HMIS export build %s: %s indicator columns loaded",
+            HMIS_EXPORT_BUILD,
+            len(indicator_columns),
+        )
+        workbook = openpyxl.Workbook(write_only=True)
+
+        summary_sheet = workbook.create_sheet("Dashboard Summary")
+        summary_sheet.column_dimensions["A"].width = 28
+        summary_sheet.column_dimensions["B"].width = 30
+        summary_sheet.column_dimensions["C"].width = 55
+        title_cell = WriteOnlyCell(summary_sheet, value="HMIS PERFORMANCE DASHBOARD")
+        title_cell.fill = PatternFill("solid", fgColor="1F4E78")
+        title_cell.font = Font(color="FFFFFF", bold=True, size=16)
+        summary_sheet.append([title_cell])
+        summary_sheet.append(
+            ["Generated", timezone.localtime().strftime("%Y-%m-%d %H:%M")]
+        )
+        summary_sheet.append(
+            ["Export Scope", "Complete HMIS dataset — dashboard filters ignored"]
+        )
+        summary_sheet.append(["Reporting Period", data["period_range"]])
+        summary_sheet.append([])
+        kpi_cells = []
+        for heading in ("KPI", "Result", "Definition"):
+            cell = WriteOnlyCell(summary_sheet, value=heading)
+            cell.fill = PatternFill("solid", fgColor="5B9BD5")
+            cell.font = Font(color="FFFFFF", bold=True)
+            kpi_cells.append(cell)
+        summary_sheet.append(kpi_cells)
+        for kpi in data["kpis"]:
+            summary_sheet.append([kpi["label"], kpi["value"], kpi["help"]])
+
+        self._append_streaming_matrix_sheet(
+            workbook,
+            "Monthly All Indicators",
+            fact_queryset,
+            indicator_columns,
+            ("periodcode",),
+            ("Period Code", "Period"),
+            lambda key: (key[0], self._period_label(key[0])),
+        )
+        logger.info("HMIS export: monthly indicator matrix completed")
+        self._append_streaming_matrix_sheet(
+            workbook,
+            "Province All Indicators",
+            fact_queryset,
+            indicator_columns,
+            ("prov",),
+            ("Province",),
+            lambda key: (key[0] or "Not specified",),
+        )
+        logger.info("HMIS export: province indicator matrix completed")
+        self._append_streaming_matrix_sheet(
+            workbook,
+            "Facility All Indicators",
+            fact_queryset,
+            indicator_columns,
+            ("prov", "hf", "hiva_hfs"),
+            ("Province", "Health Facility", "Facility Group"),
+            lambda key: (
+                key[0] or "Not specified",
+                key[1] or "Not specified",
+                "HIVA HF" if key[2] else "Non-HIVA HF",
+            ),
+        )
+        logger.info("HMIS export: facility indicator matrix completed")
+
+        trend_headers = [
+            "Indicator Code",
+            "Indicator Name",
+            "Indicator Group",
+            "Indicator Domain",
+            "Reporting Month",
+            "Reported Total",
+        ]
+        trends_sheet = workbook.create_sheet("All Indicator Trends")
+        self._streaming_header(trends_sheet, trend_headers)
+        cards_by_code = {
+            card["indicator_code"]: card for card in indicator_columns
+        }
+        trend_rows = (
+            fact_queryset.values("indicator_code", "periodcode")
+            .annotate(
+                indicator_name_max=Max("indicator_name"),
+                reported_total=Sum("value"),
+                reported_values=Count("value"),
+            )
+            .order_by("indicator_code", "periodcode")
+        )
+        trend_count = 0
+        for row in trend_rows.iterator(chunk_size=5000):
+            code = row["indicator_code"] or "Not coded"
+            card = cards_by_code.get(code, {})
+            trends_sheet.append(
+                [
+                    code,
+                    card.get("full_name") or row["indicator_name_max"] or code,
+                    card.get("group") or "Not classified",
+                    card.get("domain") or "Not classified",
+                    self._period_label(row["periodcode"]),
+                    self._excel_value(row["reported_total"])
+                    if row["reported_values"]
+                    else None,
+                ]
+            )
+            trend_count += 1
+        self._finish_streaming_sheet(
+            trends_sheet, trend_count, len(trend_headers)
+        )
+        logger.info("HMIS export: indicator trend sheet completed")
+
+        self._append_complete_fact_sheets(workbook, fact_queryset)
+        logger.info("HMIS export: complete fact sheets completed")
+        self._append_complete_summary_sheets(workbook, summary_queryset)
+        logger.info("HMIS export: complete summary sheets completed")
+
         metadata_fields = (
             "indicator_code",
             "indicator_name",
@@ -1342,39 +1579,46 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "created_at",
             "updated_at",
         )
-        metadata_sheet.append(
-            [field.replace("_", " ").title() for field in metadata_fields]
-        )
-        for row in IndicatorMetadata.objects.values(*metadata_fields).order_by(
+        metadata_headers = [
+            field.replace("_", " ").title() for field in metadata_fields
+        ]
+        metadata_sheet = workbook.create_sheet("Indicator Metadata")
+        self._streaming_header(metadata_sheet, metadata_headers)
+        metadata_count = 0
+        metadata_rows = IndicatorMetadata.objects.values(*metadata_fields).order_by(
             "sort_order", "indicator_name"
-        ):
+        )
+        for row in metadata_rows.iterator(chunk_size=2000):
             metadata_sheet.append(
                 [
                     self._datetime_display(row[field])
                     if field in {"created_at", "updated_at"}
-                    else row[field]
+                    else self._excel_value(row[field])
                     for field in metadata_fields
                 ]
             )
-        self._style_worksheet(metadata_sheet)
-
-        upload_sheet = workbook.create_sheet("Upload Register")
-        upload_sheet.append(
-            [
-                "Upload ID",
-                "Spreadsheet Name",
-                "File Path",
-                "Uploaded By",
-                "Uploaded At",
-                "Status",
-                "Rows Count",
-                "Health Facility Count",
-                "Start Month",
-                "End Month",
-                "Import Report",
-            ]
+            metadata_count += 1
+        self._finish_streaming_sheet(
+            metadata_sheet, metadata_count, len(metadata_headers)
         )
-        for row in HMISRawUpload.objects.values(
+
+        upload_headers = [
+            "Upload ID",
+            "Spreadsheet Name",
+            "File Path",
+            "Uploaded By",
+            "Uploaded At",
+            "Status",
+            "Rows Count",
+            "Health Facility Count",
+            "Start Month",
+            "End Month",
+            "Import Report",
+        ]
+        upload_sheet = workbook.create_sheet("Upload Register")
+        self._streaming_header(upload_sheet, upload_headers)
+        upload_count = 0
+        upload_rows = HMISRawUpload.objects.values(
             "id",
             "title",
             "file",
@@ -1386,12 +1630,13 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "period_min",
             "period_max",
             "report",
-        ).order_by("id"):
+        ).order_by("id")
+        for row in upload_rows.iterator(chunk_size=1000):
             upload_sheet.append(
                 [
                     row["id"],
-                    row["title"],
-                    row["file"],
+                    self._excel_value(row["title"]),
+                    self._excel_value(row["file"]),
                     row["uploaded_by_id"] or "",
                     self._datetime_display(row["uploaded_at"]),
                     row["status"],
@@ -1399,33 +1644,98 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                     row["hf_count"],
                     row["period_min"],
                     row["period_max"],
-                    json.dumps(
-                        row["report"], ensure_ascii=False, default=str
-                    )[:32767],
+                    self._excel_value(
+                        json.dumps(row["report"], ensure_ascii=False, default=str)
+                    ),
                 ]
             )
-        self._style_worksheet(upload_sheet)
+            upload_count += 1
+        self._finish_streaming_sheet(
+            upload_sheet, upload_count, len(upload_headers)
+        )
 
-        response = HttpResponse(
-            content_type=(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        # Write directly to disk.  SpooledTemporaryFile initially keeps bytes
+        # in RAM and can still create a memory spike while openpyxl finalizes
+        # the ZIP container on a small production instance.
+        temp_file = tempfile.NamedTemporaryFile(
+            prefix="hmis_complete_export_",
+            suffix=".xlsx",
+            delete=False,
+        )
+        temp_path = temp_file.name
+        temp_file.close()
+        try:
+            workbook.save(temp_path)
+            content_length = os.path.getsize(temp_path)
+            export_stream = open(temp_path, "rb")
+            timestamp = timezone.localtime().strftime("%Y%m%d_%H%M%S")
+            response = FileResponse(
+                export_stream,
+                as_attachment=True,
+                filename=f"HMIS_Performance_Dashboard_{timestamp}.xlsx",
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
             )
-        )
-        timestamp = timezone.localtime().strftime("%Y%m%d_%H%M%S")
-        response["Content-Disposition"] = (
-            f'attachment; filename="HMIS_Performance_Dashboard_{timestamp}.xlsx"'
-        )
-        workbook.save(response)
-        return response
+            response["Content-Length"] = str(content_length)
+            response["X-Content-Type-Options"] = "nosniff"
+            response["X-HMIS-Export-Build"] = HMIS_EXPORT_BUILD
+
+            # FileResponse closes the open handle when transmission finishes.
+            # Register a second closer to remove the temporary file afterward.
+            response._resource_closers.append(
+                lambda path=temp_path: os.path.exists(path) and os.remove(path)
+            )
+            logger.info(
+                "HMIS export build %s: complete Excel export ready (%s bytes)",
+                HMIS_EXPORT_BUILD,
+                content_length,
+            )
+            return response
+        except Exception:
+            logger.exception(
+                "HMIS export build %s: complete Excel export generation failed",
+                HMIS_EXPORT_BUILD,
+            )
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
 
     def changelist_view(self, request, extra_context=None):
         requested_filters = self._read_filters(request)
         complete_export = request.GET.get("export") == "xlsx"
         complete_print = request.GET.get("print") == "all"
 
+        # Excel has its own bounded-memory export pipeline.  Return early so
+        # the complete facility/province/month matrices are never materialized
+        # in Python before the workbook is written.
+        if complete_export:
+            try:
+                return self._export_excel(
+                    HMISFact.objects.all(),
+                    HMISMonthlySummary.objects.all(),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "HMIS export build %s: Excel export request failed",
+                    HMIS_EXPORT_BUILD,
+                )
+                self.message_user(
+                    request,
+                    (
+                        "The complete HMIS Excel export failed: "
+                        f"{exc.__class__.__name__}: {str(exc)[:300]}. "
+                        f"Export build: {HMIS_EXPORT_BUILD}. "
+                        "The full traceback is recorded in the server logs."
+                    ),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(request.path)
+
         # Dashboard filters are for interactive analysis only. Both export
         # routes rebuild the dashboard from the full dataset.
-        if complete_export or complete_print:
+        if complete_print:
             filters = {
                 "prov": "",
                 "dist": "",
@@ -1454,9 +1764,6 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                 filters["indicator"],
             )
         )
-
-        if complete_export:
-            return self._export_excel(data, fact_queryset, queryset)
 
         options = self._filter_options(base_queryset, filters)
 
