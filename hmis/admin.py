@@ -1,11 +1,18 @@
-from django.contrib import admin
-from django.contrib import messages
-from django.utils.html import format_html
-from hmis.models import HMISRawUpload, HMISFact, IndicatorMetadata, HMISMonthlySummary
-from hmis.services.pipeline import run_import
+"""Complete replacement for ``hmis/admin.py``.
+
+This keeps the four existing HMIS admin registrations and adds a separate,
+read-only HMIS performance dashboard through the ``HMISDashboard`` proxy model.
+The dashboard uses ``HMISFact`` to draw one separate monthly trend chart for
+every reported HMIS indicator and to build matching dynamic detailed-result
+tables. ``HMISMonthlySummary`` supplies the summary KPI cards. Excel and
+Print/PDF exports deliberately use the complete, unfiltered HMIS dataset.
+"""
+
+# Required by _export_excel() when the HMIS upload report JSONField is
+# written into the "Upload Register" worksheet.
+import json
 from calendar import month_name
 from decimal import Decimal, ROUND_HALF_UP
-from urllib.parse import urlencode
 import openpyxl
 from django.contrib import admin, messages
 from django.db.models import Avg, Count, Max, Min, Sum
@@ -22,44 +29,60 @@ from hmis.models import (
 from hmis.services.pipeline import run_import
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from django.db.models import Avg, Count, Max, Min, Q, Sum
-import json
-from django.contrib import admin
-from django.contrib import messages
+
+
+# ===========================================================================
+# EXISTING HMIS ADMINS
+# ===========================================================================
+
 
 @admin.register(HMISRawUpload)
 class HMISRawUploadAdmin(admin.ModelAdmin):
-    list_display = ("id", "status", "uploaded_at", "uploaded_by", "row_count", "hf_count", "period_min", "period_max")
+    list_display = (
+        "id",
+        "status",
+        "uploaded_at",
+        "uploaded_by",
+        "row_count",
+        "hf_count",
+        "period_min",
+        "period_max",
+    )
     list_filter = ("status", "uploaded_at")
     actions = ("import_selected",)
 
+    @admin.action(description="Import selected HMIS uploads")
     def import_selected(self, request, queryset):
         ok, failed = 0, 0
         for upload in queryset:
             try:
                 run_import(upload)
                 ok += 1
-            except Exception as e:
+            except Exception as exc:
                 upload.status = "FAILED"
-                upload.report = {"error": str(e)}
+                upload.report = {"error": str(exc)}
                 upload.save(update_fields=["status", "report"])
                 failed += 1
-        self.message_user(request, f"Import: {ok} success, {failed} failed.", level=messages.INFO)
-
-    import_selected.short_description = "Import selected HMIS uploads"
+        self.message_user(
+            request,
+            f"Import: {ok} success, {failed} failed.",
+            level=messages.INFO,
+        )
 
 
 @admin.register(HMISFact)
 class HMISFactAdmin(admin.ModelAdmin):
-    # ✅ What users should see first (clean)
     list_display = (
-        "prov", "dist", "hf",
-        "year", "month", "month_name",
-        "indicator_name", "value",
+        "prov",
+        "dist",
+        "hf",
+        "year",
+        "month",
+        "month_name",
+        "indicator_name",
+        "value",
         "hiva_hfs",
     )
-
-    # ✅ Sidebar filters (your request: HIVA-HFs in sidebar)
     list_filter = (
         "hiva_hfs",
         "prov",
@@ -67,48 +90,50 @@ class HMISFactAdmin(admin.ModelAdmin):
         "month",
         "indicator_name",
     )
-
-    # ✅ Quick search
     search_fields = ("hf", "prov", "dist", "indicator_name")
-
-    # ✅ Keep results ordered properly
     ordering = ("-year", "-month", "prov", "dist", "hf", "indicator_name")
-
-    # ✅ Make admin faster with big data
     list_per_page = 50
     list_select_related = ("source_upload",)
 
-    # ✅ Optional: quick navigation by year (works like date hierarchy)
-    # If you want, keep this OFF because we have year/month filters already
-    # date_hierarchy = "created_at"
-
-    # ✅ Cleaner period display "YYYY-MM"
     @admin.display(description="Period")
     def period_readable(self, obj):
-        # periodcode is YYYYMM; show YYYY-MM
-        p = obj.periodcode or ""
-        if len(p) == 6:
-            return f"{p[:4]}-{p[4:6]}"
-        return p
+        period = obj.periodcode or ""
+        return f"{period[:4]}-{period[4:6]}" if len(period) == 6 else period
+
 
 @admin.register(HMISMonthlySummary)
 class HMISMonthlySummaryAdmin(admin.ModelAdmin):
     list_display = (
-        "prov","dist","hf","year","month", "month_name",
+        "prov",
+        "dist",
+        "hf",
+        "year",
+        "month",
+        "month_name",
         "hiva_hfs",
-        "anc1","anc2","anc3","anc4",
-        "pnc1","pnc2",
-        "n_delivery","a_delivery","c_section",
-        "lbw","stillbirth",
+        "anc1",
+        "anc2",
+        "anc3",
+        "anc4",
+        "pnc1",
+        "pnc2",
+        "n_delivery",
+        "a_delivery",
+        "c_section",
+        "lbw",
+        "stillbirth",
     )
-    list_filter = ("hiva_hfs","prov","year","month")
-    search_fields = ("hf","prov","dist")
-    ordering = ("-year","-month","prov","dist","hf")
+    list_filter = ("hiva_hfs", "prov", "year", "month")
+    search_fields = ("hf", "prov", "dist")
+    ordering = ("-year", "-month", "prov", "dist", "hf")
+    list_per_page = 50
+    list_select_related = ("source_upload",)
 
     @admin.display(description="Period")
     def period_readable(self, obj):
-        p = obj.periodcode or ""
-        return f"{p[:4]}-{p[4:6]}" if len(p) == 6 else p
+        period = obj.periodcode or ""
+        return f"{period[:4]}-{period[4:6]}" if len(period) == 6 else period
+
 
 @admin.register(IndicatorMetadata)
 class IndicatorMetadataAdmin(admin.ModelAdmin):
@@ -122,8 +147,13 @@ class IndicatorMetadataAdmin(admin.ModelAdmin):
         "sort_order",
     )
     list_filter = ("indicator_group", "indicator_domain", "is_active")
-    search_fields = ("indicator_code", "indicator_name", "indicator_short_name")
+    search_fields = (
+        "indicator_code",
+        "indicator_name",
+        "indicator_short_name",
+    )
     ordering = ("sort_order", "indicator_name")
+
 
 # ===========================================================================
 # NEW HMIS PERFORMANCE DASHBOARD
