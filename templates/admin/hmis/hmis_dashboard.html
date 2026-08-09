@@ -318,6 +318,19 @@
     .hmis-table tbody tr:hover { background: #edf5fb; }
     .hmis-table .text-left { text-align: left; }
     .hmis-table .text-center { text-align: center; }
+    .hmis-indicator-header {
+        min-width: 118px;
+        max-width: 175px;
+        white-space: normal;
+        line-height: 1.25;
+    }
+    .hmis-indicator-code {
+        display: block;
+        margin-top: 3px;
+        color: #dcecf7;
+        font-size: 9px;
+        font-weight: 600;
+    }
     .hmis-badge {
         display: inline-block;
         padding: 3px 7px;
@@ -375,6 +388,7 @@
     }
 
     @media print {
+        @page { size: A3 landscape; margin: 8mm; }
         #header, .breadcrumbs, #nav-sidebar, .toggle-nav-sidebar,
         .hmis-filter-card, .hmis-actions, .hmis-tabs, .hmis-table-tools,
         .hmis-pagination { display: none !important; }
@@ -403,10 +417,18 @@
             </p>
         </div>
         <div class="hmis-actions">
-            <a class="hmis-btn hmis-btn-green" href="{{ export_url }}">Export Excel</a>
-            <button class="hmis-btn hmis-btn-gray" type="button" onclick="window.print()">Print / PDF</button>
+            <a class="hmis-btn hmis-btn-green" href="{{ export_url }}">Export Complete Excel</a>
+            <a class="hmis-btn hmis-btn-gray" href="{{ print_url }}" target="_blank" rel="noopener">Print / PDF Complete Data</a>
         </div>
     </div>
+
+    {% if print_all_mode %}
+        <div class="hmis-note">
+            <strong>Complete Print/PDF view:</strong>
+            dashboard filters are intentionally ignored so every available month,
+            province, facility, and HMIS indicator is included.
+        </div>
+    {% endif %}
 
     <div class="hmis-card hmis-filter-card">
         <h2 class="hmis-section-title">Dashboard Filters</h2>
@@ -415,7 +437,8 @@
             then limits District, and District limits Health Facility. Facility Group,
             Province, District, Health Facility, Year, and Month apply to
             every indicator chart. The Selected Summary Indicator applies only to the
-            detailed province and facility tables below.
+            ordering of the detailed province and facility tables below; every indicator
+            remains visible.
         </p>
         <form id="hmisFilterForm" method="get">
             <div class="hmis-filter-grid">
@@ -546,7 +569,7 @@
         </div>
     {% endif %}
 
-    {% if summary.reporting_records %}
+    {% if all_hmis_indicator_cards and detailed_monthly_rows %}
         <div class="hmis-note">
             <strong>Calculation notes:</strong>
             Total Deliveries = Normal + Assisted + C-section deliveries.
@@ -559,7 +582,9 @@
         <div class="hmis-section">
             <h2 class="hmis-section-title">Detailed Results</h2>
             <p class="hmis-section-note">
-                Use the tabs to review monthly, province, and facility-level results. Facility ranking follows the selected indicator total.
+                All {{ detailed_indicator_count }} indicators displayed in the trend
+                charts appear in each tab below. The chart headings and the three table
+                headings are generated from the same HMISFact indicator catalogue.
             </p>
             <div class="hmis-tabs">
                 <button class="hmis-tab-button active" type="button" data-tab="monthly-panel">Monthly Results</button>
@@ -573,42 +598,21 @@
                         <thead>
                             <tr>
                                 <th>Period</th>
-                                <th>Reports</th>
-                                <th>HFs</th>
-                                <th>ANC1</th>
-                                <th>ANC2</th>
-                                <th>ANC3</th>
-                                <th>ANC4</th>
-                                <th>PNC1</th>
-                                <th>PNC2</th>
-                                <th>Normal Delivery</th>
-                                <th>Assisted Delivery</th>
-                                <th>C-section</th>
-                                <th>Total Delivery</th>
-                                <th>C-section Rate</th>
-                                <th>LBW</th>
-                                <th>Stillbirth</th>
+                                {% for indicator in all_hmis_indicator_cards %}
+                                    <th class="hmis-indicator-header" title="{{ indicator.full_name }}">
+                                        {{ indicator.title }}
+                                        <span class="hmis-indicator-code">{{ indicator.indicator_code }}</span>
+                                    </th>
+                                {% endfor %}
                             </tr>
                         </thead>
                         <tbody>
-                            {% for row in monthly_rows %}
+                            {% for row in detailed_monthly_rows %}
                                 <tr>
                                     <td class="text-left">{{ row.period }}</td>
-                                    <td>{{ row.reporting_records }}</td>
-                                    <td>{{ row.facility_count }}</td>
-                                    <td>{{ row.anc1_display }}</td>
-                                    <td>{{ row.anc2_display }}</td>
-                                    <td>{{ row.anc3_display }}</td>
-                                    <td>{{ row.anc4_display }}</td>
-                                    <td>{{ row.pnc1_display }}</td>
-                                    <td>{{ row.pnc2_display }}</td>
-                                    <td>{{ row.n_delivery_display }}</td>
-                                    <td>{{ row.a_delivery_display }}</td>
-                                    <td>{{ row.c_section_display }}</td>
-                                    <td>{{ row.total_deliveries_display }}</td>
-                                    <td>{{ row.c_section_rate_display }}</td>
-                                    <td>{{ row.lbw_display }}</td>
-                                    <td>{{ row.stillbirth_display }}</td>
+                                    {% for value in row.indicator_values %}
+                                        <td>{{ value.display }}</td>
+                                    {% endfor %}
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -622,32 +626,21 @@
                         <thead>
                             <tr>
                                 <th>Province</th>
-                                <th>HFs</th>
-                                <th>Reports</th>
-                                <th>{{ selected_indicator_label }} Total</th>
-                                <th>Average / Report</th>
-                                <th>ANC4 / ANC1</th>
-                                <th>Total Deliveries</th>
-                                <th>C-section Rate</th>
-                                <th>LBW</th>
-                                <th>Stillbirths</th>
-                                <th>Stillbirths / 1,000 Deliveries</th>
+                                {% for indicator in all_hmis_indicator_cards %}
+                                    <th class="hmis-indicator-header" title="{{ indicator.full_name }}">
+                                        {{ indicator.title }}
+                                        <span class="hmis-indicator-code">{{ indicator.indicator_code }}</span>
+                                    </th>
+                                {% endfor %}
                             </tr>
                         </thead>
                         <tbody>
-                            {% for row in province_rows %}
+                            {% for row in detailed_province_rows %}
                                 <tr>
                                     <td class="text-left">{{ row.province }}</td>
-                                    <td>{{ row.facility_count }}</td>
-                                    <td>{{ row.reporting_records }}</td>
-                                    <td>{{ row.selected_total_display }}</td>
-                                    <td>{{ row.selected_average_display }}</td>
-                                    <td>{{ row.anc4_ratio_display }}</td>
-                                    <td>{{ row.total_deliveries_display }}</td>
-                                    <td>{{ row.c_section_rate_display }}</td>
-                                    <td>{{ row.lbw_total_display }}</td>
-                                    <td>{{ row.stillbirth_total_display }}</td>
-                                    <td>{{ row.stillbirth_rate_display }}</td>
+                                    {% for value in row.indicator_values %}
+                                        <td>{{ value.display }}</td>
+                                    {% endfor %}
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -657,40 +650,29 @@
 
             <div id="facility-panel" class="hmis-tab-panel">
                 <div class="hmis-table-tools">
-                    <input id="facilitySearch" class="hmis-search" type="search" placeholder="Search province, district, facility, HF ID, or group...">
+                    <input id="facilitySearch" class="hmis-search" type="search" placeholder="Search province, facility, or group...">
                     <span id="facilityCount" class="hmis-table-count"></span>
                 </div>
                 <div class="hmis-table-wrap">
                     <table class="hmis-table" id="facilityTable">
                         <thead>
                             <tr>
-                                <th>Rank</th>
                                 <th>Province</th>
-                                <th>District</th>
                                 <th>Health Facility</th>
-                                <th>HF ID</th>
                                 <th>Group</th>
-                                <th>Reports</th>
-                                <th>Start</th>
-                                <th>End</th>
-                                <th>{{ selected_indicator_label }} Total</th>
-                                <th>Average / Report</th>
-                                <th>ANC4 / ANC1</th>
-                                <th>Total Deliveries</th>
-                                <th>C-section Rate</th>
-                                <th>LBW</th>
-                                <th>Stillbirths</th>
-                                <th>Stillbirths / 1,000</th>
+                                {% for indicator in all_hmis_indicator_cards %}
+                                    <th class="hmis-indicator-header" title="{{ indicator.full_name }}">
+                                        {{ indicator.title }}
+                                        <span class="hmis-indicator-code">{{ indicator.indicator_code }}</span>
+                                    </th>
+                                {% endfor %}
                             </tr>
                         </thead>
                         <tbody>
-                            {% for row in facility_rows %}
+                            {% for row in detailed_facility_rows %}
                                 <tr class="facility-row">
-                                    <td>{{ row.rank }}</td>
                                     <td class="text-left">{{ row.province }}</td>
-                                    <td class="text-left">{{ row.district }}</td>
                                     <td class="text-left">{{ row.facility }}</td>
-                                    <td>{{ row.hfid }}</td>
                                     <td class="text-center">
                                         {% if row.hiva_hfs %}
                                             <span class="hmis-badge hmis-badge-hiva">HIVA HF</span>
@@ -698,17 +680,9 @@
                                             <span class="hmis-badge hmis-badge-other">Non-HIVA HF</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ row.reporting_records }}</td>
-                                    <td>{{ row.period_min }}</td>
-                                    <td>{{ row.period_max }}</td>
-                                    <td>{{ row.selected_total_display }}</td>
-                                    <td>{{ row.selected_average_display }}</td>
-                                    <td>{{ row.anc4_ratio_display }}</td>
-                                    <td>{{ row.total_deliveries_display }}</td>
-                                    <td>{{ row.c_section_rate_display }}</td>
-                                    <td>{{ row.lbw_total_display }}</td>
-                                    <td>{{ row.stillbirth_total_display }}</td>
-                                    <td>{{ row.stillbirth_rate_display }}</td>
+                                    {% for value in row.indicator_values %}
+                                        <td>{{ value.display }}</td>
+                                    {% endfor %}
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -723,8 +697,8 @@
         </div>
     {% else %}
         <div class="hmis-card hmis-empty">
-            <h2>No HMIS monthly summary data found</h2>
-            <p>Change the filters or import HMIS data into <code>HMISMonthlySummary</code>.</p>
+            <h2>No HMIS detailed indicator data found</h2>
+            <p>Change the filters or import HMIS data into <code>HMISFact</code>.</p>
         </div>
     {% endif %}
 </div>
@@ -735,6 +709,9 @@
 <script>
 (function () {
     "use strict";
+
+    const completePrintMode =
+    "{{ print_all_mode|yesno:'true,false' }}" === "true";
 
     const dataElement = document.getElementById("hmis-chart-data");
     const dashboardData = dataElement ? JSON.parse(dataElement.textContent) : null;
@@ -874,6 +851,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: completePrintMode ? false : undefined,
                 interaction: { mode: "index", intersect: false },
                 plugins: {
                     ...commonPlugins,
@@ -976,6 +954,12 @@
         });
     });
     window.addEventListener("afterprint", renderAllIndicatorTrendPage);
+
+    if (completePrintMode) {
+        window.addEventListener("load", function () {
+            window.setTimeout(function () { window.print(); }, 900);
+        });
+    }
 
     document.querySelectorAll(".hmis-tab-button").forEach(button => {
         button.addEventListener("click", function () {

@@ -23,6 +23,9 @@ from hmis.services.pipeline import run_import
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from django.db.models import Avg, Count, Max, Min, Q, Sum
+import json
+from django.contrib import admin
+from django.contrib import messages
 
 @admin.register(HMISRawUpload)
 class HMISRawUploadAdmin(admin.ModelAdmin):
@@ -525,6 +528,121 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             )
         return cards, charts
 
+    def _fact_detail_tables(self, queryset, indicator_cards, selected_indicator):
+        """Build compact matrices using the exact indicator set shown in charts.
+
+        The values lists are aligned with ``indicator_cards``. This lets the
+        Django template render a fully dynamic set of indicator columns without
+        custom template filters or hard-coded ANC/PNC fields.
+        """
+        indicator_codes = [card["indicator_code"] for card in indicator_cards]
+        indicator_indexes = {
+            code: index for index, code in enumerate(indicator_codes)
+        }
+
+        def matrix(group_fields):
+            grouped = (
+                queryset.values(*group_fields, "indicator_code")
+                .annotate(
+                    reported_total=Sum("value"),
+                    reported_values=Count("value"),
+                )
+                .order_by(*group_fields, "indicator_code")
+            )
+            rows_by_key = {}
+            for item in grouped:
+                code = item["indicator_code"] or "Not coded"
+                index = indicator_indexes.get(code)
+                if index is None:
+                    continue
+                key = tuple(item[field] for field in group_fields)
+                if key not in rows_by_key:
+                    rows_by_key[key] = {
+                        "key": key,
+                        "raw_values": [None] * len(indicator_codes),
+                    }
+                value = (
+                    float(item["reported_total"])
+                    if item["reported_values"]
+                    and item["reported_total"] is not None
+                    else None
+                )
+                rows_by_key[key]["raw_values"][index] = value
+
+            rows = []
+            for row in rows_by_key.values():
+                row["indicator_values"] = [
+                    {
+                        "raw": value,
+                        "display": self._number_display(value),
+                    }
+                    for value in row["raw_values"]
+                ]
+                rows.append(row)
+            return rows
+
+        monthly_rows = matrix(("periodcode",))
+        for row in monthly_rows:
+            row["periodcode"] = row["key"][0]
+            row["period"] = self._period_label(row["periodcode"])
+        monthly_rows.sort(key=lambda row: row["periodcode"] or "")
+
+        province_rows = matrix(("prov",))
+        for row in province_rows:
+            row["province"] = row["key"][0] or "Not specified"
+
+        facility_rows = matrix(("prov", "hf", "hiva_hfs"))
+        for row in facility_rows:
+            row["province"] = row["key"][0] or "Not specified"
+            row["facility"] = row["key"][1] or "Not specified"
+            row["hiva_hfs"] = bool(row["key"][2])
+            row["facility_group"] = (
+                "HIVA HF" if row["hiva_hfs"] else "Non-HIVA HF"
+            )
+
+        # Preserve the existing Selected Summary Indicator control by using it
+        # to order province and facility rows when the same code exists in the
+        # HMISFact indicator catalogue. Every indicator remains visible.
+        selected_index = next(
+            (
+                index
+                for index, code in enumerate(indicator_codes)
+                if str(code).strip().lower() == selected_indicator.lower()
+            ),
+            None,
+        )
+
+        def sort_geography_rows(rows, name_key):
+            if selected_index is None:
+                rows.sort(key=lambda row: str(row[name_key]).lower())
+                return
+            rows.sort(
+                key=lambda row: (
+                    row["raw_values"][selected_index] is None,
+                    -(
+                        row["raw_values"][selected_index]
+                        if row["raw_values"][selected_index] is not None
+                        else 0
+                    ),
+                    str(row[name_key]).lower(),
+                )
+            )
+
+        sort_geography_rows(province_rows, "province")
+        sort_geography_rows(facility_rows, "facility")
+
+        # Do not return a second indicator-column catalogue.  The template
+        # deliberately uses ``all_hmis_indicator_cards`` for both the trend
+        # charts and every Detailed Results header.  This single source of
+        # truth makes it impossible for the chart indicators and table
+        # indicators to drift apart again.
+        return {
+            "detailed_monthly_rows": monthly_rows,
+            "detailed_province_rows": province_rows,
+            "detailed_facility_rows": facility_rows,
+            "detailed_indicator_count": len(indicator_cards),
+        }
+
     def _summary_aggregate(self, queryset):
         expressions = {
             "reporting_records": Count("id"),
@@ -797,11 +915,6 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             totals["stillbirth"], total_deliveries
         )
 
-        monthly_rows = self._monthly_rows(queryset, selected_indicator)
-        province_rows = self._province_rows(queryset, selected_indicator)
-        facility_rows = self._facility_rows(queryset, selected_indicator)
-        facility_monthly_rows = self._facility_monthly_export_rows(queryset)
-
         selected_label = self.INDICATOR_LABELS[selected_indicator]
         period_min = summary["period_min"]
         period_max = summary["period_max"]
@@ -892,10 +1005,6 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "pnc2_ratio": pnc2_ratio,
             "c_section_rate": c_section_rate,
             "stillbirth_rate": stillbirth_rate,
-            "monthly_rows": monthly_rows,
-            "province_rows": province_rows,
-            "facility_rows": facility_rows,
-            "facility_monthly_rows": facility_monthly_rows,
             "chart_data": chart_data,
         }
 
@@ -926,95 +1035,110 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             letter = get_column_letter(column_cells[0].column)
             worksheet.column_dimensions[letter].width = min(max(length + 2, 12), 42)
 
-    def _export_excel(self, data, filters):
+    @staticmethod
+    def _style_large_worksheet(worksheet, freeze="A2"):
+        """Style large raw-data sheets without scanning/styling every cell."""
+        header_fill = PatternFill("solid", fgColor="1F4E78")
+        header_font = Font(color="FFFFFF", bold=True)
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            letter = get_column_letter(cell.column)
+            worksheet.column_dimensions[letter].width = min(
+                max(len(str(cell.value)) + 2, 12), 28
+            )
+        worksheet.freeze_panes = freeze
+        if worksheet.max_row >= 2 and worksheet.max_column >= 1:
+            worksheet.auto_filter.ref = worksheet.dimensions
+
+    @staticmethod
+    def _datetime_display(value):
+        if value is None:
+            return ""
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _append_matrix_sheet(
+        self,
+        workbook,
+        title,
+        leading_headers,
+        leading_keys,
+        rows,
+        indicator_columns,
+    ):
+        worksheet = workbook.create_sheet(title)
+        worksheet.append(
+            list(leading_headers)
+            + [
+                f"{column['title']} [{column['indicator_code']}]"
+                for column in indicator_columns
+            ]
+        )
+        for row in rows:
+            worksheet.append(
+                [row[key] for key in leading_keys]
+                + [cell["raw"] for cell in row["indicator_values"]]
+            )
+        self._style_worksheet(worksheet)
+        return worksheet
+
+    def _export_excel(self, data, fact_queryset, summary_queryset):
+        """Export the complete HMIS dataset, deliberately ignoring UI filters."""
         workbook = openpyxl.Workbook()
         workbook.remove(workbook.active)
 
         summary_sheet = workbook.create_sheet("Dashboard Summary")
         summary_sheet.append(["HMIS PERFORMANCE DASHBOARD", ""])
         summary_sheet.append(["Generated", timezone.localtime().strftime("%Y-%m-%d %H:%M")])
-        summary_sheet.append(["Province", filters["prov"] or "All"])
-        summary_sheet.append(["District", filters["dist"] or "All"])
-        summary_sheet.append(["Health Facility", filters["hf"] or "All"])
-        summary_sheet.append(["Year", filters["year"] or "All"])
-        summary_sheet.append(["Month", month_name[filters["month"]] if filters["month"] else "All"])
-        group_label = {
-            "all": "All facilities",
-            "hiva": "HIVA health facilities",
-            "non_hiva": "Non-HIVA health facilities",
-        }[filters["facility_group"]]
-        summary_sheet.append(["Facility Group", group_label])
-        summary_sheet.append(["Selected Indicator", data["selected_indicator_label"]])
+        summary_sheet.append(
+            ["Export Scope", "Complete HMIS dataset — dashboard filters ignored"]
+        )
         summary_sheet.append(["Reporting Period", data["period_range"]])
         summary_sheet.append([])
         summary_sheet.append(["KPI", "Result", "Definition"])
+        kpi_header_row = summary_sheet.max_row
         for kpi in data["kpis"]:
             summary_sheet.append([kpi["label"], kpi["value"], kpi["help"]])
         summary_sheet.merge_cells("A1:B1")
         summary_sheet["A1"].fill = PatternFill("solid", fgColor="1F4E78")
         summary_sheet["A1"].font = Font(color="FFFFFF", bold=True, size=16)
         summary_sheet["A1"].alignment = Alignment(horizontal="center")
-        for cell in summary_sheet[12]:
+        for cell in summary_sheet[kpi_header_row]:
             cell.fill = PatternFill("solid", fgColor="5B9BD5")
             cell.font = Font(color="FFFFFF", bold=True)
         summary_sheet.column_dimensions["A"].width = 28
         summary_sheet.column_dimensions["B"].width = 28
         summary_sheet.column_dimensions["C"].width = 55
 
-        monthly_sheet = workbook.create_sheet("Monthly Results")
-        monthly_headers = [
-            "Period Code",
-            "Period",
-            "Reporting Records",
-            "Health Facilities",
-        ] + [label for _field, label in self.INDICATORS] + [
-            "Total Deliveries",
-            "C-section Rate (%)",
-        ]
-        monthly_sheet.append(monthly_headers)
-        for row in data["monthly_rows"]:
-            monthly_sheet.append(
-                [
-                    row["periodcode"],
-                    row["period"],
-                    row["reporting_records"],
-                    row["facility_count"],
-                ]
-                + [float(row[field]) for field in self.INDICATOR_FIELDS]
-                + [
-                    float(row["total_deliveries"]),
-                    row["c_section_rate"],
-                ]
-            )
-        self._style_worksheet(monthly_sheet)
-
-        facility_monthly_sheet = workbook.create_sheet("Facility Monthly Trends")
-        facility_monthly_sheet.append(
-            [
-                "Province",
-                "District",
-                "Health Facility",
-                "HF ID",
-                "Facility Group",
-                "Period Code",
-                "Period",
-            ]
-            + [label for _field, label in self.INDICATORS]
+        # Reuse the exact same catalogue as the charts and on-screen tables.
+        indicator_columns = data["all_hmis_indicator_cards"]
+        self._append_matrix_sheet(
+            workbook,
+            "Monthly All Indicators",
+            ("Period Code", "Period"),
+            ("periodcode", "period"),
+            data["detailed_monthly_rows"],
+            indicator_columns,
         )
-        for row in data["facility_monthly_rows"]:
-            facility_monthly_sheet.append(
-                [
-                    row["province"],
-                    row["district"],
-                    row["facility"],
-                    row["hfid"],
-                    "HIVA HF" if row["hiva_hfs"] else "Non-HIVA HF",
-                    row["periodcode"],
-                    row["period"],
-                ]
-                + [row[field] for field in self.INDICATOR_FIELDS]
-            )
-        self._style_worksheet(facility_monthly_sheet)
+        self._append_matrix_sheet(
+            workbook,
+            "Province All Indicators",
+            ("Province",),
+            ("province",),
+            data["detailed_province_rows"],
+            indicator_columns,
+        )
+        self._append_matrix_sheet(
+            workbook,
+            "Facility All Indicators",
+            ("Province", "Health Facility", "Facility Group"),
+            ("province", "facility", "facility_group"),
+            data["detailed_facility_rows"],
+            indicator_columns,
+        )
 
         all_indicator_sheet = workbook.create_sheet("All Indicator Trends")
         all_indicator_sheet.append(
@@ -1049,85 +1173,208 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                 )
         self._style_worksheet(all_indicator_sheet)
 
-        province_sheet = workbook.create_sheet("Province Results")
-        province_sheet.append(
+        # Raw long-format fact data is included so analysts have every field,
+        # even those intentionally hidden from the compact dashboard tables.
+        facts_sheet = workbook.create_sheet("Complete HMIS Facts")
+        facts_sheet.append(
             [
-                "Province",
-                "Health Facilities",
-                "Reporting Records",
-                f"{data['selected_indicator_label']} Total",
-                f"{data['selected_indicator_label']} Average per Report",
-                "ANC4 / ANC1 (%)",
-                "Total Deliveries",
-                "C-section Rate (%)",
-                "Low Birth Weight",
-                "Stillbirths",
-                "Stillbirths per 1,000 Deliveries",
-            ]
-        )
-        for row in data["province_rows"]:
-            province_sheet.append(
-                [
-                    row["province"],
-                    row["facility_count"],
-                    row["reporting_records"],
-                    float(row["selected_total"]),
-                    row["selected_average"],
-                    row["anc4_ratio"],
-                    float(row["total_deliveries"]),
-                    row["c_section_rate"],
-                    float(row["lbw_total"]),
-                    float(row["stillbirth_total"]),
-                    row["stillbirth_rate"],
-                ]
-            )
-        self._style_worksheet(province_sheet)
-
-        facility_sheet = workbook.create_sheet("Facility Results")
-        facility_sheet.append(
-            [
-                "Rank",
+                "Fact ID",
+                "Source Upload ID",
                 "Province",
                 "District",
                 "Health Facility",
+                "Period Code",
+                "Year",
+                "Month",
+                "Month Name",
+                "Cleaned Facility Name",
                 "HF ID",
-                "Facility Group",
-                "Reporting Records",
-                "Start Period",
-                "End Period",
-                f"{data['selected_indicator_label']} Total",
-                f"{data['selected_indicator_label']} Average per Report",
-                "ANC4 / ANC1 (%)",
-                "Total Deliveries",
-                "C-section Rate (%)",
-                "Low Birth Weight",
-                "Stillbirths",
-                "Stillbirths per 1,000 Deliveries",
+                "HIVA HF",
+                "Indicator Code",
+                "Indicator Name",
+                "Value",
+                "Created At",
             ]
         )
-        for row in data["facility_rows"]:
-            facility_sheet.append(
+        for row in fact_queryset.values(
+            "id",
+            "source_upload_id",
+            "prov",
+            "dist",
+            "hf",
+            "periodcode",
+            "year",
+            "month",
+            "month_name",
+            "hf_name_cleaned",
+            "hfid",
+            "hiva_hfs",
+            "indicator_code",
+            "indicator_name",
+            "value",
+            "created_at",
+        ).order_by("prov", "dist", "hf", "periodcode", "indicator_code").iterator(chunk_size=5000):
+            facts_sheet.append(
                 [
-                    row["rank"],
-                    row["province"],
-                    row["district"],
-                    row["facility"],
+                    row["id"],
+                    row["source_upload_id"],
+                    row["prov"],
+                    row["dist"],
+                    row["hf"],
+                    row["periodcode"],
+                    row["year"],
+                    row["month"],
+                    row["month_name"],
+                    row["hf_name_cleaned"],
                     row["hfid"],
-                    row["facility_group"],
-                    row["reporting_records"],
-                    row["period_min"],
-                    row["period_max"],
-                    float(row["selected_total"]),
-                    row["selected_average"],
-                    row["anc4_ratio"],
-                    float(row["total_deliveries"]),
-                    row["c_section_rate"],
-                    float(row["lbw_total"]),
-                    float(row["stillbirth_total"]),
-                    row["stillbirth_rate"],
+                    "Yes" if row["hiva_hfs"] else "No",
+                    row["indicator_code"],
+                    row["indicator_name"],
+                    float(row["value"]) if row["value"] is not None else None,
+                    self._datetime_display(row["created_at"]),
                 ]
             )
-        self._style_worksheet(facility_sheet)
+        self._style_large_worksheet(facts_sheet)
+
+        monthly_raw_sheet = workbook.create_sheet("Complete Monthly Summary")
+        monthly_raw_sheet.append(
+            [
+                "Summary ID",
+                "Source Upload ID",
+                "Province",
+                "District",
+                "Health Facility",
+                "Period Code",
+                "Year",
+                "Month",
+                "Month Name",
+                "HF ID",
+                "HIVA HF",
+            ]
+            + [label for _field, label in self.INDICATORS]
+            + ["Created At"]
+        )
+        monthly_value_fields = (
+            "id",
+            "source_upload_id",
+            "prov",
+            "dist",
+            "hf",
+            "periodcode",
+            "year",
+            "month",
+            "month_name",
+            "hfid",
+            "hiva_hfs",
+            *self.INDICATOR_FIELDS,
+            "created_at",
+        )
+        for row in summary_queryset.values(*monthly_value_fields).order_by(
+            "prov", "dist", "hf", "periodcode"
+        ).iterator(chunk_size=5000):
+            monthly_raw_sheet.append(
+                [
+                    row["id"],
+                    row["source_upload_id"],
+                    row["prov"],
+                    row["dist"],
+                    row["hf"],
+                    row["periodcode"],
+                    row["year"],
+                    row["month"],
+                    row["month_name"],
+                    row["hfid"],
+                    "Yes" if row["hiva_hfs"] else "No",
+                ]
+                + [
+                    float(row[field]) if row[field] is not None else None
+                    for field in self.INDICATOR_FIELDS
+                ]
+                + [self._datetime_display(row["created_at"])]
+            )
+        self._style_large_worksheet(monthly_raw_sheet)
+
+        metadata_sheet = workbook.create_sheet("Indicator Metadata")
+        metadata_fields = (
+            "indicator_code",
+            "indicator_name",
+            "indicator_short_name",
+            "indicator_group",
+            "indicator_domain",
+            "indicator_description",
+            "numerator_definition",
+            "denominator_definition",
+            "unit_of_measure",
+            "reporting_level",
+            "data_source",
+            "is_active",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        )
+        metadata_sheet.append(
+            [field.replace("_", " ").title() for field in metadata_fields]
+        )
+        for row in IndicatorMetadata.objects.values(*metadata_fields).order_by(
+            "sort_order", "indicator_name"
+        ):
+            metadata_sheet.append(
+                [
+                    self._datetime_display(row[field])
+                    if field in {"created_at", "updated_at"}
+                    else row[field]
+                    for field in metadata_fields
+                ]
+            )
+        self._style_worksheet(metadata_sheet)
+
+        upload_sheet = workbook.create_sheet("Upload Register")
+        upload_sheet.append(
+            [
+                "Upload ID",
+                "Spreadsheet Name",
+                "File Path",
+                "Uploaded By",
+                "Uploaded At",
+                "Status",
+                "Rows Count",
+                "Health Facility Count",
+                "Start Month",
+                "End Month",
+                "Import Report",
+            ]
+        )
+        for row in HMISRawUpload.objects.values(
+            "id",
+            "title",
+            "file",
+            "uploaded_by_id",
+            "uploaded_at",
+            "status",
+            "row_count",
+            "hf_count",
+            "period_min",
+            "period_max",
+            "report",
+        ).order_by("id"):
+            upload_sheet.append(
+                [
+                    row["id"],
+                    row["title"],
+                    row["file"],
+                    row["uploaded_by_id"] or "",
+                    self._datetime_display(row["uploaded_at"]),
+                    row["status"],
+                    row["row_count"],
+                    row["hf_count"],
+                    row["period_min"],
+                    row["period_max"],
+                    json.dumps(
+                        row["report"], ensure_ascii=False, default=str
+                    )[:32767],
+                ]
+            )
+        self._style_worksheet(upload_sheet)
 
         response = HttpResponse(
             content_type=(
@@ -1142,9 +1389,26 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         return response
 
     def changelist_view(self, request, extra_context=None):
-        filters = self._read_filters(request)
+        requested_filters = self._read_filters(request)
+        complete_export = request.GET.get("export") == "xlsx"
+        complete_print = request.GET.get("print") == "all"
+
+        # Dashboard filters are for interactive analysis only. Both export
+        # routes rebuild the dashboard from the full dataset.
+        if complete_export or complete_print:
+            filters = {
+                "prov": "",
+                "dist": "",
+                "hf": "",
+                "year": None,
+                "month": None,
+                "facility_group": "all",
+                "indicator": "anc1",
+            }
+        else:
+            filters = requested_filters
+
         base_queryset = HMISMonthlySummary.objects.all()
-        options = self._filter_options(base_queryset, filters)
         queryset = self._filter_queryset(base_queryset, filters)
         data = self._build_dashboard_data(queryset, filters["indicator"])
         fact_queryset = self._filter_fact_queryset(HMISFact.objects.all(), filters)
@@ -1153,24 +1417,18 @@ class HMISDashboardAdmin(admin.ModelAdmin):
         )
         data["all_hmis_indicator_cards"] = all_indicator_cards
         data["chart_data"]["all_hmis_indicator_trends"] = all_indicator_charts
+        data.update(
+            self._fact_detail_tables(
+                fact_queryset,
+                all_indicator_cards,
+                filters["indicator"],
+            )
+        )
 
-        if request.GET.get("export") == "xlsx":
-            return self._export_excel(data, filters)
+        if complete_export:
+            return self._export_excel(data, fact_queryset, queryset)
 
-        query_parameters = []
-        for key in (
-            "prov",
-            "dist",
-            "hf",
-            "year",
-            "month",
-            "facility_group",
-            "indicator",
-        ):
-            value = filters[key]
-            if value not in (None, "", "all"):
-                query_parameters.append((key, value))
-        export_parameters = query_parameters + [("export", "xlsx")]
+        options = self._filter_options(base_queryset, filters)
 
         context = {
             **self.admin_site.each_context(request),
@@ -1179,7 +1437,9 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             "filters": filters,
             "filter_options": options,
             "indicator_options": self.INDICATORS,
-            "export_url": f"?{urlencode(export_parameters)}",
+            "export_url": "?export=xlsx",
+            "print_url": "?print=all",
+            "print_all_mode": complete_print,
             **data,
         }
         if extra_context:
