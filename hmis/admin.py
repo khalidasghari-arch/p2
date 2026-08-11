@@ -150,23 +150,84 @@ class HMISMonthlySummaryAdmin(admin.ModelAdmin):
 
 @admin.register(IndicatorMetadata)
 class IndicatorMetadataAdmin(admin.ModelAdmin):
+
     list_display = (
         "indicator_code",
         "indicator_name",
         "indicator_short_name",
         "indicator_group",
         "indicator_domain",
+        "unit_of_measure",
+        "reporting_level",
+        "data_source",
         "is_active",
         "sort_order",
     )
-    list_filter = ("indicator_group", "indicator_domain", "is_active")
+
+    list_filter = (
+        "indicator_group",
+        "indicator_domain",
+        "unit_of_measure",
+        "reporting_level",
+        "data_source",
+        "is_active",
+    )
+
     search_fields = (
         "indicator_code",
         "indicator_name",
         "indicator_short_name",
+        "indicator_group",
+        "indicator_domain",
+        "indicator_description",
     )
-    ordering = ("sort_order", "indicator_name")
 
+    ordering = (
+        "sort_order",
+        "indicator_name",
+    )
+
+    list_per_page = 30
+    save_on_top = True
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        ("① Indicator Identification", {
+            "fields": (
+                ("indicator_code", "sort_order"),
+                "indicator_name",
+                "indicator_short_name",
+                ("indicator_group", "indicator_domain"),
+                "is_active",
+            )
+        }),
+
+        ("② Indicator Definition", {
+            "fields": (
+                "indicator_description",
+                "numerator_definition",
+                "denominator_definition",
+            )
+        }),
+
+        ("③ Measurement and Reporting", {
+            "fields": (
+                ("unit_of_measure", "reporting_level"),
+                "data_source",
+            )
+        }),
+
+        ("④ Audit Trail", {
+            "classes": ("collapse",),
+            "fields": (
+                ("created_at", "updated_at"),
+            )
+        }),
+    )
 
 # ===========================================================================
 # NEW HMIS PERFORMANCE DASHBOARD

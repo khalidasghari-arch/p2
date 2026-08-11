@@ -3,6 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
+from . import admin_custom
 
 urlpatterns = [
     path("", lambda request: redirect("admin/")),

@@ -43,6 +43,13 @@ CSRF_TRUSTED_ORIGINS = os.environ.get(
     "http://127.0.0.1:8000,http://localhost:8000"
 ).split(",")
 
+ADMIN_HIDDEN_APPS = [
+    "qqm",
+    "km_dashboard",
+    "kms",
+    "survey",
+]
+
 # -----------------------------
 # Applications
 # -----------------------------
@@ -60,7 +67,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.postgres',
     'taggit',
-    'kms.apps.KmsConfig',
+    'kms',
     'survey',
     'hmis',
     'rest_framework',

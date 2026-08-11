@@ -1,6 +1,6 @@
 from django.apps import AppConfig
-
-
 class GancgpncConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'gancgpnc'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "gancgpnc"
+
+    verbose_name = "Group Antenatal Care and Postnatal Care (GANC/PNC)"

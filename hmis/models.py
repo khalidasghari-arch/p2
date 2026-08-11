@@ -133,6 +133,8 @@ class IndicatorMetadata(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        verbose_name ="INDICATOR METADATA"
+        verbose_name_plural = "INDICATOR METADATA"
         db_table = "hmis_indicator_metadata"
         unique_together = ("indicator_code", "indicator_name")
         ordering = ["sort_order", "indicator_name"]

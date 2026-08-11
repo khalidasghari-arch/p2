@@ -1,0 +1,34 @@
+fieldset.indicator-meta-card {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+fieldset.indicator-meta-card .description {
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
+    padding: 10px 12px;
+    margin: 8px 0 15px 0;
+    color: #1e3a8a;
+    border-radius: 4px;
+}
+
+fieldset.indicator-meta-card textarea {
+    width: 95%;
+    min-height: 90px;
+}
+
+fieldset.indicator-meta-card input[type="text"],
+fieldset.indicator-meta-card input[type="number"],
+fieldset.indicator-meta-card select {
+    border-radius: 6px;
+}
+
+.readonly {
+    background: #f8fafc;
+    border-left: 4px solid #38bdf8;
+    padding: 8px 10px;
+    border-radius: 4px;
+}

@@ -19,6 +19,77 @@ from openpyxl.utils import get_column_letter
 from django import forms
 
 # ============================================================
+# CUSTOM ADMIN MODEL ORDER
+# GANC / PNC CLINICAL WORKFLOW
+# ============================================================
+
+from django.contrib import admin
+
+# Keep a reference to Django's original get_app_list method
+_original_get_app_list = admin.AdminSite.get_app_list
+
+def custom_get_app_list(self, request, app_label=None):
+    """
+    Custom ordering for models inside Django Admin.
+
+    GANC/PNC workflow:
+        1. Cohort
+        2. Enrollment
+        3. ANC First Session
+        4. ANC Second Session
+        5. ANC Third Session
+        6. ANC Fourth Session
+        7. Delivery
+        8. PNC First Session
+        9. PNC Second Session
+
+    Other applications/models keep their normal ordering.
+    """
+
+    app_list = _original_get_app_list(
+        self,
+        request,
+        app_label,
+    )
+
+    # --------------------------------------------------------
+    # Desired GANC/PNC ordering
+    # Use model class names, not verbose names.
+    # --------------------------------------------------------
+
+    ganc_model_order = {
+        "Gancohort": 1,
+        "Gancenrollment": 2,
+        "Gancfirstsession": 3,
+        "Gancsecondsession": 4,
+        "Gancthirdsession": 5,
+        "Gancfouthsession": 6,
+        "Gancdelivery": 7,
+        "GroupPncfirstSession": 8,
+        "GroupPncsecondSession": 9,
+    }
+
+    # --------------------------------------------------------
+    # Find GANC/PNC application
+    # --------------------------------------------------------
+
+    for app in app_list:
+
+        if app.get("app_label") == "gancgpnc":
+
+            app["models"].sort(
+                key=lambda model: ganc_model_order.get(
+                    model.get("object_name"),
+                    999,
+                )
+            )
+
+    return app_list
+
+# Apply custom ordering
+admin.AdminSite.get_app_list = custom_get_app_list
+
+# ============================================================
 # Province helper (same style as hiva admin.py)
 # ============================================================
 

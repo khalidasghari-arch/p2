@@ -29,6 +29,10 @@ class Indicator(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = "PERFORMANCE INDICATOR"
+        verbose_name_plural = "PERFORMANCE INDICATOR"
+
     def __str__(self):
         return f"{self.code} - {self.name}"# Create your models here.
 
@@ -73,6 +77,8 @@ class IndicatorReport(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "INDICATOR TRACKING"
+        verbose_name_plural = "INDICATOR TRACKING"
         unique_together = (
             "indicator",
             "year",

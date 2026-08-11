@@ -2010,37 +2010,61 @@ class safesurgeryclinical(models.Model):
 # ============================================================
 
 class ShamsiMonth(models.Model):
-    name = models.CharField(max_length=50, unique=True, verbose_name="Afghanistan Month")
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+            verbose_name ="SHAMSI MONTH"
+            verbose_name_plural ="SHAMRI MONTH"
 
     def __str__(self):
         return self.name
 
 class ShamsiYear(models.Model):
-    year = models.CharField(max_length=10, unique=True, verbose_name="Afghanistan Year")
+    year = models.CharField(max_length=10, unique=True)
+
+    class Meta:
+        verbose_name ="SHAMSI YEAR"
+        verbose_name_plural ="SHAMRI YEAR"
 
     def __str__(self):
         return self.year
 
 class Period(models.Model):
-    name = models.CharField(max_length=50, unique=True, verbose_name="Period")
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+        verbose_name ="PERIOD"
+        verbose_name_plural = "PERIOD"
 
     def __str__(self):
         return self.name
 
 class BaselineProgress(models.Model):
-    name = models.CharField(max_length=50, unique=True, verbose_name="Baseline / Progress")
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+            verbose_name = "BASELINE PROGRESS"
+            verbose_name_plural = "BASELINE PROGRESS"
 
     def __str__(self):
         return self.name
 
 class GregorianMonth(models.Model):
-    name = models.CharField(max_length=50, unique=True, verbose_name="Calendar Month")
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+                verbose_name = "GREGORIAN MONTHS"
+                verbose_name_plural = "GREGORIAN MONTHS"
 
     def __str__(self):
         return self.name
 
 class GregorianYear(models.Model):
-    year = models.CharField(max_length=10, unique=True, verbose_name="Calendar Year")
+    year = models.CharField(max_length=10, unique=True)
+
+    class Meta:
+                    verbose_name = "GREGORIAN YEARS"
+                    verbose_name_plural = "GREGORIAN YEARS"
 
     def __str__(self):
         return self.year
