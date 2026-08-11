@@ -2074,13 +2074,92 @@ class GancdeliveryAdmin(BaseSessionAdmin):
         return response
 
 # ============================================================
+# GROUP PNC - CUSTOM REGISTER DROPDOWN
+# ============================================================
+
+class GroupPncRegisterChoiceField(forms.ModelChoiceField):
+    """
+    Display:
+    Register ID | Woman Name | Father Name | Cohort
+    """
+
+    def label_from_instance(self, obj):
+        register_id = obj.pk
+        name = getattr(obj, "name", "") or ""
+        father_name = getattr(obj, "fathername", "") or ""
+
+        cohort = getattr(obj, "cohortname", None)
+        cohort_name = str(cohort) if cohort else "-"
+
+        return (
+            f"{register_id} | "
+            f"{name} | "
+            f"{father_name} | "
+            f"{cohort_name}"
+        )
+
+
+class GroupPncFirstSessionAdminForm(forms.ModelForm):
+
+    class Meta:
+        model = GroupPncfirstSession
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if "registerid" in self.fields:
+            original_field = self.fields["registerid"]
+
+            self.fields["registerid"] = GroupPncRegisterChoiceField(
+                queryset=original_field.queryset,
+                required=original_field.required,
+                label=original_field.label,
+                help_text=(
+                    "Select using Register ID, Woman Name, "
+                    "Father Name and Cohort."
+                ),
+            )
+
+
+class GroupPncSecondSessionAdminForm(forms.ModelForm):
+
+    class Meta:
+        model = GroupPncsecondSession
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if "registerid" in self.fields:
+            original_field = self.fields["registerid"]
+
+            self.fields["registerid"] = GroupPncRegisterChoiceField(
+                queryset=original_field.queryset,
+                required=original_field.required,
+                label=original_field.label,
+                help_text=(
+                    "Select using Register ID, Woman Name, "
+                    "Father Name and Cohort."
+                ),
+            )
+
+# ============================================================
 # PNC First Session
+# ============================================================
+
+# ============================================================
+# PNC FIRST SESSION
 # ============================================================
 
 @admin.register(GroupPncfirstSession)
 class GroupPncfirstSessionAdmin(BaseSessionAdmin):
+
+    form = GroupPncFirstSessionAdminForm
+
     list_display = (
         "registerid",
+        "get_cohort",
         "get_facility",
         "get_province",
         "session_type",
@@ -2093,9 +2172,12 @@ class GroupPncfirstSessionAdmin(BaseSessionAdmin):
         "newborn_death",
         "maternal_death",
     )
+
     list_filter = (
         SessionProvinceFilter,
+        "registerid__cohortname",
         "session_type",
+        "session_round",
         "session_date",
         "attendance",
         "diagnosed_with_hypertension",
@@ -2105,79 +2187,426 @@ class GroupPncfirstSessionAdmin(BaseSessionAdmin):
         "exclusive_breast_feeding",
         "chosen_ppfp_method",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "type_of_maternal_danger_sign",
         "type_of_newborn_danger_sign",
     )
+
     ordering = ("-session_date",)
+    list_per_page = 25
+    save_on_top = True
+
+    actions = (
+        "export_pnc_first_session_excel",
+    )
+
+    readonly_fields = (
+        "session_help",
+        "maternal_help",
+        "danger_help",
+        "laboratory_help",
+        "newborn_fp_help",
+    )
 
     fieldsets = (
-        ("Session Information", {
+
+        ("① Session Information", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Select the correct registered woman and complete "
+                "the first postnatal session information."
+            ),
             "fields": (
+                "session_help",
                 "registerid",
-                "session_type",
-                "session_round",
-                "session_date",
-                "post_natal_day",
+                ("session_type", "session_round"),
+                ("session_date", "post_natal_day"),
                 "attendance",
-            )
+            ),
         }),
-        ("Maternal Assessment", {
+
+        ("② Maternal Assessment", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Record maternal blood pressure, nutritional status, "
+                "anemia, supplementation and referrals."
+            ),
             "fields": (
-                "bp",
-                "diagnosed_with_hypertension",
-                "referred_hypertension_to_md",
-                "muac",
-                "diagnosed_with_mam",
-                "refer_mam_to_nutrition_counselor",
-                "diagnosed_with_sam",
-                "refer_sam_to_higher_level",
-                "anemia",
-                "iron_folate_routine_dose",
-                "iron_folate_plus_for_anemic_woman",
-            )
+                "maternal_help",
+                ("bp", "muac"),
+                (
+                    "diagnosed_with_hypertension",
+                    "referred_hypertension_to_md",
+                ),
+                (
+                    "diagnosed_with_mam",
+                    "refer_mam_to_nutrition_counselor",
+                ),
+                (
+                    "diagnosed_with_sam",
+                    "refer_sam_to_higher_level",
+                ),
+                (
+                    "anemia",
+                    "iron_folate_routine_dose",
+                    "iron_folate_plus_for_anemic_woman",
+                ),
+            ),
         }),
-        ("Danger Signs and Outcome", {
+
+        ("③ Danger Signs and Outcome", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Record maternal and newborn danger signs and outcomes."
+            ),
             "fields": (
+                "danger_help",
                 "type_of_maternal_danger_sign",
                 "type_of_newborn_danger_sign",
-                "newborn_death",
-                "maternal_death",
-            )
+                ("newborn_death", "maternal_death"),
+            ),
         }),
-        ("Laboratory and Screening", {
+
+        ("④ Laboratory and Screening", {
+            "classes": ("ganc-section", "collapse"),
+            "description": (
+                "Record urine examination, proteinuria, cough "
+                "screening and referral information."
+            ),
             "fields": (
-                "urine_exam",
-                "protein_uria",
+                "laboratory_help",
+                ("urine_exam", "protein_uria"),
                 "referred_positive_protein_uria_to_md",
-                "cough_more_than_two_weeks",
-                "referred_cough_to_dots_room",
-            )
+                (
+                    "cough_more_than_two_weeks",
+                    "referred_cough_to_dots_room",
+                ),
+            ),
         }),
-        ("Newborn and FP", {
+
+        ("⑤ Newborn and Postpartum Family Planning", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Record newborn vaccination, breastfeeding and "
+                "postpartum family planning information."
+            ),
             "fields": (
-                "newborn_vaccination_completed",
-                "exclusive_breast_feeding",
-                "chosen_ppfp_method",
-                "ppfp_method_taken",
-            )
+                "newborn_fp_help",
+                (
+                    "newborn_vaccination_completed",
+                    "exclusive_breast_feeding",
+                ),
+                ("chosen_ppfp_method", "ppfp_method_taken"),
+            ),
         }),
-        ("Other Information", {
-            "fields": ("remark",)
+
+        ("⑥ Remarks", {
+            "classes": ("ganc-section", "collapse"),
+            "fields": ("remark",),
         }),
     )
+
+    class Media:
+        css = {
+            "all": ("admin/css/ganc_admin.css",)
+        }
+
+    # --------------------------------------------------------
+    # Cohort
+    # --------------------------------------------------------
+
+    @admin.display(
+        description="Cohort",
+        ordering="registerid__cohortname",
+    )
+    def get_cohort(self, obj):
+        if not obj.registerid:
+            return "-"
+
+        cohort = getattr(obj.registerid, "cohortname", None)
+        return str(cohort) if cohort else "-"
+
+    # --------------------------------------------------------
+    # Guidance
+    # --------------------------------------------------------
+
+    def session_help(self, obj=None):
+        return (
+            "Select the correct woman using Register ID, Name, "
+            "Father Name and Cohort."
+        )
+    session_help.short_description = "Session guidance"
+
+    def maternal_help(self, obj=None):
+        return (
+            "Complete maternal assessment, nutrition, anemia "
+            "and referral information carefully."
+        )
+    maternal_help.short_description = "Maternal assessment guidance"
+
+    def danger_help(self, obj=None):
+        return (
+            "Record maternal and newborn danger signs and "
+            "their respective outcomes."
+        )
+    danger_help.short_description = "Danger sign guidance"
+
+    def laboratory_help(self, obj=None):
+        return (
+            "Complete urine, proteinuria and cough screening "
+            "information where applicable."
+        )
+    laboratory_help.short_description = "Screening guidance"
+
+    def newborn_fp_help(self, obj=None):
+        return (
+            "Complete newborn vaccination, exclusive breastfeeding "
+            "and postpartum family planning information."
+        )
+    newborn_fp_help.short_description = "Newborn and FP guidance"
+
+    # --------------------------------------------------------
+    # Excel Export
+    # --------------------------------------------------------
+
+    @admin.action(
+        description="Export selected PNC First Session records to Excel"
+    )
+    def export_pnc_first_session_excel(self, request, queryset):
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "PNC First Session"
+
+        headers = [
+            "Register ID",
+            "Woman Name",
+            "Father Name",
+            "Cohort",
+            "Facility",
+            "Province",
+
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Post Natal Day",
+            "Attendance",
+
+            "BP",
+            "Diagnosed With Hypertension",
+            "Referred Hypertension To MD",
+            "MUAC",
+            "Diagnosed With MAM",
+            "Refer MAM To Nutrition Counselor",
+            "Diagnosed With SAM",
+            "Refer SAM To Higher Level",
+            "Anemia",
+            "Iron Folate Routine Dose",
+            "Iron Folate Plus For Anemic Woman",
+
+            "Type of Maternal Danger Sign",
+            "Type of Newborn Danger Sign",
+            "Newborn Death",
+            "Maternal Death",
+
+            "Urine Exam",
+            "Protein Uria",
+            "Referred Positive Protein Uria To MD",
+            "Cough More Than Two Weeks",
+            "Referred Cough To DOTS Room",
+
+            "Newborn Vaccination Completed",
+            "Exclusive Breast Feeding",
+            "Chosen PPFP Method",
+            "PPFP Method Taken",
+
+            "Remark",
+        ]
+
+        worksheet.append(headers)
+
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E",
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        worksheet.row_dimensions[1].height = 40
+
+        def yes_no(value):
+            if value is True:
+                return "Yes"
+            if value is False:
+                return "No"
+            return ""
+
+        def safe_text(value):
+            return "" if value is None else str(value)
+
+        for obj in queryset:
+
+            enrollment = obj.registerid
+
+            register_id = ""
+            woman_name = ""
+            father_name = ""
+            cohort_name = ""
+
+            if enrollment:
+                register_id = enrollment.pk
+                woman_name = getattr(
+                    enrollment, "name", ""
+                ) or ""
+
+                father_name = getattr(
+                    enrollment, "fathername", ""
+                ) or ""
+
+                cohort = getattr(
+                    enrollment, "cohortname", None
+                )
+
+                cohort_name = (
+                    safe_text(cohort)
+                    if cohort else ""
+                )
+
+            worksheet.append([
+                register_id,
+                woman_name,
+                father_name,
+                cohort_name,
+                self.get_facility(obj),
+                self.get_province(obj),
+
+                safe_text(obj.session_type),
+                safe_text(obj.session_round),
+
+                (
+                    obj.session_date.strftime("%Y-%m-%d")
+                    if obj.session_date else ""
+                ),
+
+                obj.post_natal_day,
+                safe_text(obj.attendance),
+
+                safe_text(obj.bp),
+                yes_no(obj.diagnosed_with_hypertension),
+                yes_no(obj.referred_hypertension_to_md),
+                obj.muac,
+
+                yes_no(obj.diagnosed_with_mam),
+                yes_no(obj.refer_mam_to_nutrition_counselor),
+                yes_no(obj.diagnosed_with_sam),
+                yes_no(obj.refer_sam_to_higher_level),
+
+                yes_no(obj.anemia),
+                yes_no(obj.iron_folate_routine_dose),
+                yes_no(obj.iron_folate_plus_for_anemic_woman),
+
+                safe_text(obj.type_of_maternal_danger_sign),
+                safe_text(obj.type_of_newborn_danger_sign),
+
+                yes_no(obj.newborn_death),
+                yes_no(obj.maternal_death),
+
+                safe_text(obj.urine_exam),
+                safe_text(obj.protein_uria),
+                yes_no(obj.referred_positive_protein_uria_to_md),
+
+                yes_no(obj.cough_more_than_two_weeks),
+                yes_no(obj.referred_cough_to_dots_room),
+
+                yes_no(obj.newborn_vaccination_completed),
+                yes_no(obj.exclusive_breast_feeding),
+
+                yes_no(obj.chosen_ppfp_method),
+                safe_text(obj.ppfp_method_taken),
+
+                safe_text(obj.remark),
+            ])
+
+        self._format_pnc_excel(worksheet)
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+
+        response["Content-Disposition"] = (
+            'attachment; filename="pnc_first_session.xlsx"'
+        )
+
+        workbook.save(response)
+        return response
+
+    def _format_pnc_excel(self, worksheet):
+
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+        for column_cells in worksheet.columns:
+
+            max_length = 0
+
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
+
+            for cell in column_cells:
+
+                if cell.value is not None:
+                    max_length = max(
+                        max_length,
+                        len(str(cell.value)),
+                    )
+
+            worksheet.column_dimensions[
+                column_letter
+            ].width = min(max_length + 3, 40)
+
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
 
 
 # ============================================================
 # PNC Second Session
 # ============================================================
 
+# ============================================================
+# PNC SECOND SESSION
+# ============================================================
+
 @admin.register(GroupPncsecondSession)
 class GroupPncsecondSessionAdmin(BaseSessionAdmin):
+
+    form = GroupPncSecondSessionAdminForm
+
     list_display = (
         "registerid",
+        "get_cohort",
         "get_facility",
         "get_province",
         "sessiontype",
@@ -2191,9 +2620,12 @@ class GroupPncsecondSessionAdmin(BaseSessionAdmin):
         "maternaldeath",
         "birthspacingmethodchosen",
     )
+
     list_filter = (
         SessionProvinceFilter,
+        "registerid__cohortname",
         "sessiontype",
+        "sessionround",
         "sessiondate",
         "attendance",
         "dhypertension",
@@ -2204,69 +2636,390 @@ class GroupPncsecondSessionAdmin(BaseSessionAdmin):
         "birthspacingmethodchosen",
         "postnataldepressiondiagnosed",
     )
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "typeofmaternaldangersign",
         "typeofnewborndangersign",
     )
+
     ordering = ("-sessiondate",)
+    list_per_page = 25
+    save_on_top = True
+
+    actions = (
+        "export_pnc_second_session_excel",
+    )
+
+    readonly_fields = (
+        "session_help",
+        "maternal_help",
+        "mental_health_help",
+        "danger_help",
+        "newborn_help",
+        "birth_spacing_help",
+    )
 
     fieldsets = (
-        ("Session Information", {
+
+        ("① Session Information", {
+            "classes": ("ganc-section", "wide"),
+            "description": (
+                "Select the correct registered woman and complete "
+                "the second postnatal session information."
+            ),
             "fields": (
+                "session_help",
                 "registerid",
-                "sessiontype",
-                "sessionround",
-                "sessiondate",
-                "postnatalday",
+                ("sessiontype", "sessionround"),
+                ("sessiondate", "postnatalday"),
                 "attendance",
-            )
+            ),
         }),
-        ("Maternal Assessment", {
+
+        ("② Maternal Assessment", {
+            "classes": ("ganc-section", "wide"),
             "fields": (
-                "bp",
-                "dhypertension",
-                "rhypertensiontomd",
-                "muac",
-                "dmam",
-                "rmam",
-                "dsam",
-                "rsam",
-                "anemia",
-                "ironfolate",
-                "ironfolatepluswomen",
-            )
+                "maternal_help",
+                ("bp", "muac"),
+                ("dhypertension", "rhypertensiontomd"),
+                ("dmam", "rmam"),
+                ("dsam", "rsam"),
+                (
+                    "anemia",
+                    "ironfolate",
+                    "ironfolatepluswomen",
+                ),
+            ),
         }),
-        ("Mental Health", {
+
+        ("③ Mental Health", {
+            "classes": ("ganc-section", "wide"),
             "fields": (
-                "postnataldepressiondiagnosed",
-                "rpsychosocialcounselor",
-            )
+                "mental_health_help",
+                (
+                    "postnataldepressiondiagnosed",
+                    "rpsychosocialcounselor",
+                ),
+            ),
         }),
-        ("Danger Signs and Outcome", {
+
+        ("④ Danger Signs and Outcome", {
+            "classes": ("ganc-section", "wide"),
             "fields": (
+                "danger_help",
                 "typeofmaternaldangersign",
                 "typeofnewborndangersign",
-                "newborndeath",
-                "maternaldeath",
-            )
+                ("newborndeath", "maternaldeath"),
+            ),
         }),
-        ("Other Health Information", {
+
+        ("⑤ Other Health Information", {
+            "classes": ("ganc-section", "collapse"),
             "fields": (
+                "newborn_help",
                 "newbornvaccinationcompleted",
-                "coughmorethantwoweeks",
-                "rcough",
+                ("coughmorethantwoweeks", "rcough"),
                 "exclusivebreastfeeding",
-            )
+            ),
         }),
-        ("Birth Spacing", {
+
+        ("⑥ Birth Spacing", {
+            "classes": ("ganc-section", "wide"),
             "fields": (
-                "birthspacingmethodchosen",
-                "birthspacingmethod",
-            )
+                "birth_spacing_help",
+                (
+                    "birthspacingmethodchosen",
+                    "birthspacingmethod",
+                ),
+            ),
         }),
-        ("Other Information", {
-            "fields": ("remark",)
+
+        ("⑦ Remarks", {
+            "classes": ("ganc-section", "collapse"),
+            "fields": ("remark",),
         }),
     )
+
+    class Media:
+        css = {
+            "all": ("admin/css/ganc_admin.css",)
+        }
+
+    @admin.display(
+        description="Cohort",
+        ordering="registerid__cohortname",
+    )
+    def get_cohort(self, obj):
+        if not obj.registerid:
+            return "-"
+
+        cohort = getattr(
+            obj.registerid,
+            "cohortname",
+            None,
+        )
+
+        return str(cohort) if cohort else "-"
+
+    def session_help(self, obj=None):
+        return (
+            "Select the correct woman using Register ID, Name, "
+            "Father Name and Cohort."
+        )
+    session_help.short_description = "Session guidance"
+
+    def maternal_help(self, obj=None):
+        return (
+            "Complete maternal assessment, nutritional status, "
+            "anemia and referral information."
+        )
+    maternal_help.short_description = "Maternal assessment guidance"
+
+    def mental_health_help(self, obj=None):
+        return (
+            "Record postnatal depression diagnosis and "
+            "psychosocial referral."
+        )
+    mental_health_help.short_description = "Mental health guidance"
+
+    def danger_help(self, obj=None):
+        return (
+            "Record maternal and newborn danger signs "
+            "and maternal/newborn outcomes."
+        )
+    danger_help.short_description = "Danger sign guidance"
+
+    def newborn_help(self, obj=None):
+        return (
+            "Record vaccination, cough screening, referral "
+            "and exclusive breastfeeding."
+        )
+    newborn_help.short_description = "Newborn guidance"
+
+    def birth_spacing_help(self, obj=None):
+        return (
+            "Record whether a birth-spacing method was chosen "
+            "and specify the selected method."
+        )
+    birth_spacing_help.short_description = "Birth spacing guidance"
+
+    @admin.action(
+        description="Export selected PNC Second Session records to Excel"
+    )
+    def export_pnc_second_session_excel(self, request, queryset):
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "PNC Second Session"
+
+        headers = [
+            "Register ID",
+            "Woman Name",
+            "Father Name",
+            "Cohort",
+            "Facility",
+            "Province",
+
+            "Session Type",
+            "Session Round",
+            "Session Date",
+            "Post Natal Day",
+            "Attendance",
+
+            "BP",
+            "Diagnosed With Hypertension",
+            "Referred Hypertension To MD",
+            "MUAC",
+            "Diagnosed With MAM",
+            "Refer MAM",
+            "Diagnosed With SAM",
+            "Refer SAM",
+            "Anemia",
+            "Iron Folate",
+            "Iron Folate Plus For Anemic Woman",
+
+            "Postnatal Depression Diagnosed",
+            "Refer To Psychosocial Counselor",
+
+            "Type of Maternal Danger Sign",
+            "Type of Newborn Danger Sign",
+            "Newborn Death",
+            "Maternal Death",
+
+            "Newborn Vaccination Completed",
+            "Cough More Than Two Weeks",
+            "Referred Cough To DOTS Room",
+            "Exclusive Breastfeeding",
+
+            "Birth Spacing Method Chosen",
+            "Birth Spacing Method",
+
+            "Remark",
+        ]
+
+        worksheet.append(headers)
+
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E",
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        worksheet.row_dimensions[1].height = 40
+
+        def yes_no(value):
+            if value is True:
+                return "Yes"
+            if value is False:
+                return "No"
+            return ""
+
+        def safe_text(value):
+            return "" if value is None else str(value)
+
+        for obj in queryset:
+
+            enrollment = obj.registerid
+
+            register_id = ""
+            woman_name = ""
+            father_name = ""
+            cohort_name = ""
+
+            if enrollment:
+                register_id = enrollment.pk
+
+                woman_name = getattr(
+                    enrollment,
+                    "name",
+                    "",
+                ) or ""
+
+                father_name = getattr(
+                    enrollment,
+                    "fathername",
+                    "",
+                ) or ""
+
+                cohort = getattr(
+                    enrollment,
+                    "cohortname",
+                    None,
+                )
+
+                cohort_name = (
+                    safe_text(cohort)
+                    if cohort else ""
+                )
+
+            worksheet.append([
+                register_id,
+                woman_name,
+                father_name,
+                cohort_name,
+                self.get_facility(obj),
+                self.get_province(obj),
+
+                safe_text(obj.sessiontype),
+                safe_text(obj.sessionround),
+
+                (
+                    obj.sessiondate.strftime("%Y-%m-%d")
+                    if obj.sessiondate else ""
+                ),
+
+                obj.postnatalday,
+                safe_text(obj.attendance),
+
+                safe_text(obj.bp),
+                yes_no(obj.dhypertension),
+                yes_no(obj.rhypertensiontomd),
+                obj.muac,
+
+                yes_no(obj.dmam),
+                yes_no(obj.rmam),
+                yes_no(obj.dsam),
+                yes_no(obj.rsam),
+
+                yes_no(obj.anemia),
+                yes_no(obj.ironfolate),
+                yes_no(obj.ironfolatepluswomen),
+
+                yes_no(obj.postnataldepressiondiagnosed),
+                yes_no(obj.rpsychosocialcounselor),
+
+                safe_text(obj.typeofmaternaldangersign),
+                safe_text(obj.typeofnewborndangersign),
+
+                yes_no(obj.newborndeath),
+                yes_no(obj.maternaldeath),
+
+                yes_no(obj.newbornvaccinationcompleted),
+                yes_no(obj.coughmorethantwoweeks),
+                yes_no(obj.rcough),
+                yes_no(obj.exclusivebreastfeeding),
+
+                yes_no(obj.birthspacingmethodchosen),
+                safe_text(obj.birthspacingmethod),
+
+                safe_text(obj.remark),
+            ])
+
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+        for column_cells in worksheet.columns:
+
+            max_length = 0
+
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
+
+            for cell in column_cells:
+
+                if cell.value is not None:
+                    max_length = max(
+                        max_length,
+                        len(str(cell.value)),
+                    )
+
+            worksheet.column_dimensions[
+                column_letter
+            ].width = min(max_length + 3, 40)
+
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+
+        response["Content-Disposition"] = (
+            'attachment; filename="pnc_second_session.xlsx"'
+        )
+
+        workbook.save(response)
+        return response
