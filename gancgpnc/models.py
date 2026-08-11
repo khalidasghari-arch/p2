@@ -81,10 +81,12 @@ class Gancfirstsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
     ("GROUP", "GROUP"),
     ("INDIVIDUAL","INDIVIDUAL"),
+    ("dropout","DROPOUT"),
     ("ABSENT","ABSENT"),]
 
     URIN_EXAM = [
     ("NO/+", "NO/+"),
+    ("+","+"),
     ("++","++"),
     ("+++","+++"),]
 
@@ -110,6 +112,7 @@ class Gancfirstsession(models.Model):
     rsam = models.BooleanField(verbose_name="Refer SAM to higher level (Y/N)")
     clabexm = models.BooleanField(verbose_name="Completing Laboratory Exam (Y/N)")
     hemoglobin = models.DecimalField(max_digits=4, decimal_places=1,verbose_name="Hemoglobin")
+    urinexamcheck = models.BooleanField(blank=True, null=True, verbose_name="Urine Exam Check (Y/N)")
     urinexam = models.CharField(max_length=255, choices=URIN_EXAM,default="NO/+", verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
     rpositivepuriatomd = models.BooleanField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
     coughmorethantwoweeks= models.BooleanField(verbose_name="cough for more than two weeks(Y/N)")
@@ -173,7 +176,7 @@ class Gancsecondsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent)"
+        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present_GA")
@@ -196,6 +199,11 @@ class Gancsecondsession(models.Model):
     rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
     dsam = models.BooleanField(verbose_name="Diagnosed with SAM (Y/N)")
     rsam = models.BooleanField(verbose_name="Refer SAM to higher level (Y/N)")
+
+    urinexamcheck = models.BooleanField(blank=True, null=True,
+        verbose_name="Urine Exam Check (Y/N)"
+    )
+
     urinexam = models.CharField(
         max_length=255,
         choices=URIN_EXAM,
@@ -236,6 +244,7 @@ class Gancthirdsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
         ("GROUP", "GROUP"),
         ("INDIVIDUAL", "INDIVIDUAL"),
+        ("dropout", "DROPOUT"),
         ("ABSENT", "ABSENT"),
     ]
 
@@ -271,7 +280,7 @@ class Gancthirdsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent)"
+        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present_GA")
@@ -312,11 +321,15 @@ class Gancthirdsession(models.Model):
         verbose_name="Refer to the psychosocial counselor (Y/N)"
     )
 
+    urinexamcheck = models.BooleanField(blank=True, null=True,
+        verbose_name="Urine Exam Check (Y/N)"
+    )
+
     urinexam = models.CharField(
         max_length=255,
         choices=URIN_EXAM,
         default="NO/+",
-        verbose_name="Urine exam/Protein Uria (NO/+,++,+++)"
+        verbose_name="Urine exam/Protein Uria (NO/+, +, ++, +++)"
     )
 
     rpositivepuriatomd = models.BooleanField(
@@ -369,11 +382,13 @@ class Gancfouthsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
         ("GROUP", "GROUP"),
         ("INDIVIDUAL", "INDIVIDUAL"),
+        ("DROPOUT", "DROPOUT"),
         ("ABSENT", "ABSENT"),
     ]
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
     ]
@@ -404,7 +419,7 @@ class Gancfouthsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent)"
+        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present_GA")
@@ -473,11 +488,15 @@ class Gancfouthsession(models.Model):
         verbose_name="Refer to the Psychosocial Counselor (Y/N)"
     )
 
+    urinexamcheck = models.BooleanField(blank=True, null=True,
+        verbose_name="Urine Exam Check (Y/N)"
+    )
+
     urinexam = models.CharField(
         max_length=255,
         choices=URIN_EXAM,
         default="NO/+",
-        verbose_name="Urine Exam / Protein Uria (NO/+, ++, +++)"
+        verbose_name="Urine Exam / Protein Uria (NO/+, +, ++, +++)"
     )
 
     rpositivepuriatomd = models.BooleanField(
@@ -657,6 +676,7 @@ class GroupPncfirstSession(models.Model):
     ATTENDANCE_CHOICES = [
         ("group", "Group"),
         ("individual", "Individual"),
+        ("Dropout", "Dropout"),
         ("no", "No"),
     ]
 
@@ -856,6 +876,7 @@ class GroupPncsecondSession(models.Model):
     ATTENDANCE_CHOICES = [
         ("group", "Group"),
         ("individual", "Individual"),
+        ("Dropout", "Dropout"),
         ("no", "No"),
     ]
 

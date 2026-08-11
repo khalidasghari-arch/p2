@@ -10,7 +10,6 @@ from .models import (
     GroupPncfirstSession,
     GroupPncsecondSession,
 )
-# import Facility from hiva
 from hiva.models import Facility
 from django.http import HttpResponse
 from openpyxl import Workbook
@@ -428,6 +427,96 @@ class BaseSessionAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         except Exception:
             return "-"
 
+# ============================================================
+# GANC ANC SESSION - ENRICHED REGISTER DROPDOWN
+# ============================================================
+
+class GancRegisterChoiceField(forms.ModelChoiceField):
+    """
+    Display enrollment as:
+    Register ID | Woman Name | Father Name | Cohort
+    """
+
+    def label_from_instance(self, obj):
+        register_id = obj.pk
+        name = getattr(obj, "name", "") or ""
+        father_name = getattr(obj, "fathername", "") or ""
+
+        cohort = getattr(obj, "cohortname", None)
+        cohort_name = str(cohort) if cohort else "-"
+
+        return (
+            f"{register_id} | "
+            f"{name} | "
+            f"{father_name} | "
+            f"{cohort_name}"
+        )
+
+
+class BaseGancSessionAdminForm(forms.ModelForm):
+    """
+    Shared form behavior for all four GANC ANC sessions.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if "registerid" in self.fields:
+            original_field = self.fields["registerid"]
+
+            self.fields["registerid"] = GancRegisterChoiceField(
+                queryset=original_field.queryset,
+                required=original_field.required,
+                label="Register Name",
+                help_text=(
+                    "Select the correct woman using Register ID, "
+                    "Name, Father Name and Cohort."
+                ),
+            )
+
+
+# ============================================================
+# FIRST SESSION FORM
+# ============================================================
+
+class GancFirstSessionAdminForm(BaseGancSessionAdminForm):
+
+    class Meta:
+        model = Gancfirstsession
+        fields = "__all__"
+
+
+# ============================================================
+# SECOND SESSION FORM
+# ============================================================
+
+class GancSecondSessionAdminForm(BaseGancSessionAdminForm):
+
+    class Meta:
+        model = Gancsecondsession
+        fields = "__all__"
+
+
+# ============================================================
+# THIRD SESSION FORM
+# ============================================================
+
+class GancThirdSessionAdminForm(BaseGancSessionAdminForm):
+
+    class Meta:
+        model = Gancthirdsession
+        fields = "__all__"
+
+
+# ============================================================
+# FOURTH SESSION FORM
+# ============================================================
+
+class GancFourthSessionAdminForm(BaseGancSessionAdminForm):
+
+    class Meta:
+        model = Gancfouthsession
+        fields = "__all__"
 
 # ============================================================
 # GANC First Session
@@ -435,6 +524,7 @@ class BaseSessionAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 
 @admin.register(Gancfirstsession)
 class GancfirstsessionAdmin(BaseSessionAdmin):
+    form = GancFirstSessionAdminForm
     list_display = (
         "registerid",
         "get_facility",
@@ -507,6 +597,7 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
             "fields": (
                 "clabexm",
                 "hemoglobin",
+                "urinexamcheck",
                 "urinexam",
                 "rpositivepuriatomd",
                 "coughmorethantwoweeks",
@@ -604,6 +695,7 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
                 yes_no(obj.rsam),
                 yes_no(obj.clabexm),
                 obj.hemoglobin,
+                obj.urinexamcheck,
                 obj.urinexam,
                 yes_no(obj.rpositivepuriatomd),
                 yes_no(obj.coughmorethantwoweeks),
@@ -646,6 +738,7 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
 # ============================================================
 @admin.register(Gancsecondsession)
 class GancsecondsessionAdmin(BaseSessionAdmin):
+    form = GancSecondSessionAdminForm
     list_display = (
         "registerid",
         "get_facility",
@@ -723,7 +816,7 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
             "description": "Record urine protein, cough screening, referral and TT vaccine status.",
             "fields": (
                 "lab_help",
-                ("urinexam", "rpositivepuriatomd"),
+                ("urinexamcheck", "urinexam", "rpositivepuriatomd"),
                 ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
             )
@@ -841,6 +934,7 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
                 yes_no(obj.rmam),
                 yes_no(obj.dsam),
                 yes_no(obj.rsam),
+                yes_no(obj.urinexamcheck),
                 obj.urinexam,
                 yes_no(obj.rpositivepuriatomd),
                 yes_no(obj.coughmorethantwoweeks),
@@ -884,6 +978,7 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
 
 @admin.register(Gancthirdsession)
 class GancthirdsessionAdmin(BaseSessionAdmin):
+    form = GancThirdSessionAdminForm
     list_display = (
         "registerid", "get_facility", "get_province",
         "sessiontype", "sessionround", "sessiondate",
@@ -1092,6 +1187,7 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
                 yes_no(obj.antedepressionscreening),
                 yes_no(obj.antedepressiondiagnosed),
                 yes_no(obj.rpsychosocialcounselor),
+                yes_no(obj.urinexamcheck),
                 obj.urinexam,
                 yes_no(obj.rpositivepuriatomd),
                 yes_no(obj.coughmorethantwoweeks),
@@ -1136,6 +1232,7 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
 
 @admin.register(Gancfouthsession)
 class GancfouthsessionAdmin(BaseSessionAdmin):
+    form = GancFourthSessionAdminForm
     list_display = (
         "registerid",
         "get_facility",
@@ -1246,7 +1343,7 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
             ),
             "fields": (
                 "lab_help",
-                ("urinexam", "rpositivepuriatomd"),
+                ("urinexamcheck", "urinexam", "rpositivepuriatomd"),
                 ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
             ),
@@ -1422,6 +1519,7 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
                 yes_no(obj.antedepressionscreening),
                 yes_no(obj.antedepressiondiagnosed),
                 yes_no(obj.rpsychosocialcounselor),
+                yes_no(obj.urinexamcheck),
                 obj.urinexam or "",
                 yes_no(obj.rpositivepuriatomd),
                 yes_no(obj.coughmorethantwoweeks),
