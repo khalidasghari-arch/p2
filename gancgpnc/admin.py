@@ -10,13 +10,13 @@ from .models import (
     GroupPncfirstSession,
     GroupPncsecondSession,
 )
-
 # import Facility from hiva
 from hiva.models import Facility
 from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
+from django import forms
 
 # ============================================================
 # Province helper (same style as hiva admin.py)
@@ -27,7 +27,6 @@ def user_province(request):
         return None
     profile = getattr(request.user, "profile", None) or getattr(request.user, "userprofile", None)
     return getattr(profile, "province", None)
-
 
 class ProvinceRestrictedAdminMixin:
     """
@@ -75,7 +74,6 @@ class ProvinceRestrictedAdminMixin:
             return True
         return self._obj_in_scope(request, obj)
 
-
 # ============================================================
 # Optional reusable province filters
 # ============================================================
@@ -114,7 +112,6 @@ class EnrollmentProvinceFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(cohortname__facility__districtfk__provincefk_id=self.value())
         return queryset
-
 
 class SessionProvinceFilter(admin.SimpleListFilter):
     title = "Province"
@@ -222,7 +219,6 @@ class GancohortAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 if prov else Facility.objects.none()
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # ============================================================
 # GANC Enrollment
@@ -573,7 +569,6 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
         return response
 
     export_ganc_first_session_excel.short_description = "Export selected GANC First Session records to Excel"
-
 
 # ============================================================
 # GANC Second Session
@@ -1414,13 +1409,72 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
     )
 
 # ============================================================
-# Delivery
+# GANC DELIVERY - CUSTOM REGISTER DROPDOWN
+# ============================================================
+
+class GancDeliveryRegisterChoiceField(forms.ModelChoiceField):
+    """
+    Displays enrollment records as:
+
+    Register ID | Woman Name | Father Name | Cohort
+    """
+
+    def label_from_instance(self, obj):
+        register_id = obj.pk
+
+        name = getattr(obj, "name", "") or ""
+        father_name = getattr(obj, "fathername", "") or ""
+
+        cohort = getattr(obj, "cohortname", None)
+        cohort_name = str(cohort) if cohort else "-"
+
+        return (
+            f"{register_id} | "
+            f"{name} | "
+            f"{father_name} | "
+            f"{cohort_name}"
+        )
+
+
+class GancDeliveryAdminForm(forms.ModelForm):
+
+    class Meta:
+        model = Gancdelivery
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if "registerid" in self.fields:
+            original_field = self.fields["registerid"]
+
+            self.fields["registerid"] = GancDeliveryRegisterChoiceField(
+                queryset=original_field.queryset,
+                required=original_field.required,
+                label=original_field.label,
+                help_text=(
+                    "Select the correct woman using Register ID, "
+                    "Name, Father Name and Cohort."
+                ),
+            )
+
+
+# ============================================================
+# GANC DELIVERY ADMIN
 # ============================================================
 
 @admin.register(Gancdelivery)
 class GancdeliveryAdmin(BaseSessionAdmin):
+
+    form = GancDeliveryAdminForm
+
+    # ========================================================
+    # LIST VIEW
+    # ========================================================
+
     list_display = (
         "registerid",
+        "get_cohort",
         "get_facility",
         "get_province",
         "date_of_delivery",
@@ -1433,8 +1487,14 @@ class GancdeliveryAdmin(BaseSessionAdmin):
         "number_of_newborn_death",
         "number_of_fresh_still_birth",
     )
+
+    # ========================================================
+    # FILTERS
+    # ========================================================
+
     list_filter = (
         SessionProvinceFilter,
+        "registerid__cohortname",
         "date_of_delivery",
         "place_of_delivery",
         "type_of_delivery",
@@ -1444,54 +1504,574 @@ class GancdeliveryAdmin(BaseSessionAdmin):
         "counseled_on_postpartum_fp_before_discharge",
         "immediate_ppfp_before_discharge",
     )
+
+    # ========================================================
+    # SEARCH
+    # ========================================================
+
     search_fields = (
         "registerid__name",
         "registerid__fathername",
         "types_of_complication",
         "how_complication_was_managed",
     )
+
     ordering = ("-date_of_delivery",)
 
+    list_per_page = 25
+
+    save_on_top = True
+
+    # ========================================================
+    # EXCEL EXPORT
+    # ========================================================
+
+    actions = (
+        "export_delivery_to_excel",
+    )
+
+    # ========================================================
+    # READ-ONLY GUIDANCE
+    # ========================================================
+
+    readonly_fields = (
+        "delivery_help",
+        "complication_help",
+        "newborn_help",
+        "ppfp_help",
+    )
+
+    # ========================================================
+    # FORM LAYOUT
+    # ========================================================
+
     fieldsets = (
-        ("Delivery Information", {
+
+        ("① Delivery Information", {
+
+            "classes": (
+                "ganc-section",
+                "wide",
+            ),
+
+            "description": (
+                "Select the correct registered woman and complete "
+                "the main delivery information."
+            ),
+
             "fields": (
+
+                "delivery_help",
+
                 "registerid",
-                "date_of_delivery",
-                "gestational_age_at_delivery",
-                "place_of_delivery",
-                "type_of_delivery",
+
+                (
+                    "date_of_delivery",
+                    "gestational_age_at_delivery",
+                ),
+
+                (
+                    "place_of_delivery",
+                    "type_of_delivery",
+                ),
+
                 "immediate_uterotonic_for_amtsl",
-            )
+            ),
         }),
-        ("Complications", {
+
+        ("② Maternal Complications", {
+
+            "classes": (
+                "ganc-section",
+                "wide",
+            ),
+
+            "description": (
+                "Record maternal complications, management "
+                "and maternal outcome."
+            ),
+
             "fields": (
+
+                "complication_help",
+
                 "types_of_complication",
+
                 "how_complication_was_managed",
+
                 "maternal_death",
-            )
+            ),
         }),
-        ("Newborn Outcome", {
+
+        ("③ Newborn Outcome", {
+
+            "classes": (
+                "ganc-section",
+                "wide",
+            ),
+
+            "description": (
+                "Record newborn numbers and outcomes, "
+                "including breastfeeding and vaccination."
+            ),
+
             "fields": (
-                "number_of_newborn",
-                "number_of_alive_newborn",
-                "number_of_newborn_death",
-                "number_of_fresh_still_birth",
-                "early_breastfeeding",
-                "newborn_vaccination_before_discharge",
-            )
+
+                "newborn_help",
+
+                (
+                    "number_of_newborn",
+                    "number_of_alive_newborn",
+                ),
+
+                (
+                    "number_of_newborn_death",
+                    "number_of_fresh_still_birth",
+                ),
+
+                (
+                    "early_breastfeeding",
+                    "newborn_vaccination_before_discharge",
+                ),
+            ),
         }),
-        ("Postpartum Family Planning", {
+
+        ("④ Postpartum Family Planning", {
+
+            "classes": (
+                "ganc-section",
+                "wide",
+            ),
+
+            "description": (
+                "Record postpartum family planning counseling "
+                "and method uptake before discharge."
+            ),
+
             "fields": (
-                "counseled_on_postpartum_fp_before_discharge",
-                "immediate_ppfp_before_discharge",
+
+                "ppfp_help",
+
+                (
+                    "counseled_on_postpartum_fp_before_discharge",
+                    "immediate_ppfp_before_discharge",
+                ),
+
                 "ppfp_method_taken_before_discharge",
-            )
+            ),
         }),
-        ("Other Information", {
-            "fields": ("remark",)
+
+        ("⑤ Remarks", {
+
+            "classes": (
+                "ganc-section",
+                "collapse",
+            ),
+
+            "fields": (
+                "remark",
+            ),
         }),
     )
 
+    # ========================================================
+    # CSS
+    # ========================================================
+
+    class Media:
+        css = {
+            "all": (
+                "admin/css/ganc_admin.css",
+            )
+        }
+
+    # ========================================================
+    # COHORT DISPLAY
+    # ========================================================
+
+    @admin.display(
+        description="Cohort",
+        ordering="registerid__cohortname",
+    )
+    def get_cohort(self, obj):
+        if not obj.registerid:
+            return "-"
+
+        cohort = getattr(
+            obj.registerid,
+            "cohortname",
+            None,
+        )
+
+        return str(cohort) if cohort else "-"
+
+    # ========================================================
+    # GUIDANCE
+    # ========================================================
+
+    def delivery_help(self, obj=None):
+        return (
+            "Select the correct woman carefully. "
+            "The Register Name dropdown displays Register ID, "
+            "Woman Name, Father Name and Cohort."
+        )
+
+    delivery_help.short_description = "Delivery guidance"
+
+    def complication_help(self, obj=None):
+        return (
+            "If a maternal complication occurred, record the "
+            "type of complication and how it was managed."
+        )
+
+    complication_help.short_description = (
+        "Complication guidance"
+    )
+
+    def newborn_help(self, obj=None):
+        return (
+            "Ensure the total number of newborns and all "
+            "newborn outcomes are entered consistently."
+        )
+
+    newborn_help.short_description = (
+        "Newborn outcome guidance"
+    )
+
+    def ppfp_help(self, obj=None):
+        return (
+            "Record whether postpartum family planning counseling "
+            "was provided, whether immediate PPFP was accepted, "
+            "and the method taken before discharge."
+        )
+
+    ppfp_help.short_description = (
+        "Postpartum FP guidance"
+    )
+
+    # ========================================================
+    # EXCEL EXPORT
+    # ========================================================
+
+    @admin.action(
+        description=(
+            "Export selected GANC Delivery records to Excel"
+        )
+    )
+    def export_delivery_to_excel(
+        self,
+        request,
+        queryset,
+    ):
+
+        workbook = Workbook()
+
+        worksheet = workbook.active
+
+        worksheet.title = "GANC Delivery"
+
+        # ====================================================
+        # HEADERS
+        # ====================================================
+
+        headers = [
+
+            # Enrollment information
+            "Register ID",
+            "Woman Name",
+            "Father Name",
+            "Cohort",
+            "Facility",
+            "Province",
+
+            # Delivery information
+            "Date of Delivery",
+            "Gestational Age at Delivery",
+            "Place of Delivery",
+            "Type of Delivery",
+            "Immediate Uterotonic for AMTSL",
+
+            # Maternal outcome
+            "Types of Complication",
+            "How Complication Was Managed",
+            "Maternal Death",
+
+            # Newborn outcome
+            "Number of Newborn",
+            "Number of Alive Newborn",
+            "Number of Newborn Death",
+            "Number of Fresh Still Birth",
+            "Early Breastfeeding",
+            "Newborn Vaccination Before Discharge",
+
+            # PPFP
+            "Counseled on Postpartum FP Before Discharge",
+            "Immediate PPFP Before Discharge",
+            "PPFP Method Taken Before Discharge",
+
+            # Other
+            "Remark",
+        ]
+
+        worksheet.append(headers)
+
+        # ====================================================
+        # HEADER STYLE
+        # ====================================================
+
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E",
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True,
+        )
+
+        for cell in worksheet[1]:
+
+            cell.fill = header_fill
+
+            cell.font = header_font
+
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
+            )
+
+        worksheet.row_dimensions[1].height = 40
+
+        # ====================================================
+        # HELPER FUNCTIONS
+        # ====================================================
+
+        def yes_no(value):
+
+            if value is True:
+                return "Yes"
+
+            if value is False:
+                return "No"
+
+            return ""
+
+        def safe_text(value):
+
+            if value is None:
+                return ""
+
+            return str(value)
+
+        # ====================================================
+        # EXPORT DATA
+        # ====================================================
+
+        for obj in queryset:
+
+            enrollment = obj.registerid
+
+            # -----------------------------------------------
+            # Enrollment data
+            # -----------------------------------------------
+
+            register_id = ""
+
+            woman_name = ""
+
+            father_name = ""
+
+            cohort_name = ""
+
+            if enrollment:
+
+                register_id = enrollment.pk
+
+                woman_name = getattr(
+                    enrollment,
+                    "name",
+                    "",
+                ) or ""
+
+                father_name = getattr(
+                    enrollment,
+                    "fathername",
+                    "",
+                ) or ""
+
+                cohort = getattr(
+                    enrollment,
+                    "cohortname",
+                    None,
+                )
+
+                cohort_name = (
+                    safe_text(cohort)
+                    if cohort
+                    else ""
+                )
+
+            # -----------------------------------------------
+            # Add Excel row
+            # -----------------------------------------------
+
+            worksheet.append([
+
+                # Enrollment
+                register_id,
+                woman_name,
+                father_name,
+                cohort_name,
+                self.get_facility(obj),
+                self.get_province(obj),
+
+                # Delivery
+                (
+                    obj.date_of_delivery.strftime(
+                        "%Y-%m-%d"
+                    )
+                    if obj.date_of_delivery
+                    else ""
+                ),
+
+                obj.gestational_age_at_delivery,
+
+                safe_text(
+                    obj.place_of_delivery
+                ),
+
+                safe_text(
+                    obj.type_of_delivery
+                ),
+
+                yes_no(
+                    obj.immediate_uterotonic_for_amtsl
+                ),
+
+                # Maternal complications
+                safe_text(
+                    obj.types_of_complication
+                ),
+
+                safe_text(
+                    obj.how_complication_was_managed
+                ),
+
+                yes_no(
+                    obj.maternal_death
+                ),
+
+                # Newborn
+                obj.number_of_newborn,
+
+                obj.number_of_alive_newborn,
+
+                obj.number_of_newborn_death,
+
+                obj.number_of_fresh_still_birth,
+
+                yes_no(
+                    obj.early_breastfeeding
+                ),
+
+                yes_no(
+                    obj.newborn_vaccination_before_discharge
+                ),
+
+                # PPFP
+                yes_no(
+                    obj.counseled_on_postpartum_fp_before_discharge
+                ),
+
+                yes_no(
+                    obj.immediate_ppfp_before_discharge
+                ),
+
+                safe_text(
+                    obj.ppfp_method_taken_before_discharge
+                ),
+
+                # Remarks
+                safe_text(
+                    obj.remark
+                ),
+            ])
+
+        # ====================================================
+        # DATA FORMATTING
+        # ====================================================
+
+        for row in worksheet.iter_rows():
+
+            for cell in row:
+
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True,
+                )
+
+        # ====================================================
+        # AUTO COLUMN WIDTH
+        # ====================================================
+
+        for column_cells in worksheet.columns:
+
+            max_length = 0
+
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
+
+            for cell in column_cells:
+
+                if cell.value is not None:
+
+                    value_length = len(
+                        str(cell.value)
+                    )
+
+                    if value_length > max_length:
+                        max_length = value_length
+
+            worksheet.column_dimensions[
+                column_letter
+            ].width = min(
+                max_length + 3,
+                40,
+            )
+
+        # ====================================================
+        # EXCEL ANALYSIS FEATURES
+        # ====================================================
+
+        worksheet.freeze_panes = "A2"
+
+        worksheet.auto_filter.ref = (
+            worksheet.dimensions
+        )
+
+        # ====================================================
+        # DOWNLOAD RESPONSE
+        # ====================================================
+
+        response = HttpResponse(
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
+        )
+
+        response[
+            "Content-Disposition"
+        ] = (
+            'attachment; '
+            'filename="ganc_delivery_export.xlsx"'
+        )
+
+        workbook.save(response)
+
+        return response
 
 # ============================================================
 # PNC First Session
