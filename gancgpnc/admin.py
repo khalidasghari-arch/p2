@@ -525,6 +525,7 @@ class GancFourthSessionAdminForm(BaseGancSessionAdminForm):
 @admin.register(Gancfirstsession)
 class GancfirstsessionAdmin(BaseSessionAdmin):
     form = GancFirstSessionAdminForm
+    actions = ["export_ganc_first_session_excel",]
     list_display = (
         "registerid",
         "get_facility",
@@ -1200,6 +1201,7 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
 @admin.register(Gancsecondsession)
 class GancsecondsessionAdmin(BaseSessionAdmin):
     form = GancSecondSessionAdminForm
+    actions = ["export_ganc_second_session_excel",]
     list_display = (
         "registerid",
         "get_facility",
@@ -1891,6 +1893,7 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
 @admin.register(Gancthirdsession)
 class GancthirdsessionAdmin(BaseSessionAdmin):
     form = GancThirdSessionAdminForm
+    actions = ["export_ganc_third_session_excel",]
     list_display = (
         "registerid", "get_facility", "get_province",
         "sessiontype", "sessionround", "sessiondate",
@@ -2482,6 +2485,7 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
 @admin.register(Gancfouthsession)
 class GancfouthsessionAdmin(BaseSessionAdmin):
     form = GancFourthSessionAdminForm
+    actions = ["export_ganc_fourth_session_excel",]
     list_display = (
         "registerid",
         "get_facility",
