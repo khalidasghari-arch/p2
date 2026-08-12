@@ -81,7 +81,7 @@ class Gancfirstsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
     ("GROUP", "GROUP"),
     ("INDIVIDUAL","INDIVIDUAL"),
-    ("dropout","DROPOUT"),
+    ("DROPOUT","DROPOUT"),
     ("ABSENT","ABSENT"),]
 
     URIN_EXAM = [
@@ -141,11 +141,13 @@ class Gancsecondsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
         ("GROUP", "GROUP"),
         ("INDIVIDUAL", "INDIVIDUAL"),
+        ("DROPOUT", "DROPOUT"),
         ("ABSENT", "ABSENT"),
     ]
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
     ]
@@ -244,12 +246,13 @@ class Gancthirdsession(models.Model):
     INDIVIDUAL_ATTENDANCE = [
         ("GROUP", "GROUP"),
         ("INDIVIDUAL", "INDIVIDUAL"),
-        ("dropout", "DROPOUT"),
+        ("DROPOUT", "DROPOUT"),
         ("ABSENT", "ABSENT"),
     ]
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
     ]

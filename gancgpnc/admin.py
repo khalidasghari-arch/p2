@@ -617,19 +617,77 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
     )
 
     def export_ganc_first_session_excel(self, request, queryset):
+
+        # ========================================================
+        # LOAD RELATED ENROLLMENT + COHORT DATA EFFICIENTLY
+        # ========================================================
+        queryset = queryset.select_related(
+            "registerid",
+            "registerid__cohortname",
+            "registerid__cohortname__facility",
+            "registerid__cohortname__created_by",
+            "registerid__cohortname__updated_by",
+        )
+
         wb = Workbook()
         ws = wb.active
         ws.title = "GANC First Session"
 
+        # ========================================================
+        # HEADERS
+        # ========================================================
         headers = [
-            "Register Name",
+
+            # ====================================================
+            # ENROLLMENT INFORMATION
+            # ====================================================
+            "Enrollment Database ID",
+            "Register Number",
+            "Woman Name",
+            "Father Name",
+            "Contact Number",
+            "Address",
+            "Education Level",
+            "Gravida",
+            "GA at First ANC",
+            "Expected Date of Delivery",
+            "Age (Years)",
+            "Transfer In",
+            "Individual ANC Visits",
+            "Enrollment Remarks",
+
+            # ====================================================
+            # COHORT INFORMATION
+            # ====================================================
+            "Cohort Database ID",
+            "Cohort Name",
+            "Cohort Number",
+            "Cohort Status",
+            "Cohort Checklist",
+            "Cohort Target Size",
+            "Cohort Facility",
+            "Cohort Created By",
+            "Cohort Created At",
+            "Cohort Updated By",
+            "Cohort Updated At",
+            "Cohort Remarks",
+
+            # ====================================================
+            # LOCATION
+            # ====================================================
             "Facility",
             "Province",
+
+            # ====================================================
+            # GANC FIRST SESSION
+            # ====================================================
             "Session Type",
             "Session Round",
             "Session Date",
             "Attendance",
             "Present GA",
+
+            # Maternal Assessment
             "BP",
             "Diagnosed Hypertension",
             "Referred Hypertension to MD",
@@ -644,94 +702,497 @@ class GancfirstsessionAdmin(BaseSessionAdmin):
             "Refer MAM to Nutrition Counsellor",
             "Diagnosed SAM",
             "Refer SAM to Higher Level",
+
+            # Laboratory / Screening
             "Completing Laboratory Exam",
             "Hemoglobin",
+
+            # This header was missing in your previous export
+            "Urine Exam Check",
+
             "Urine Exam / Protein Uria",
             "Referred Positive Protein Uria to MD",
             "Cough More Than Two Weeks",
             "Referred Cough to DOTS Room",
             "TT Vaccine",
+
+            # Danger Signs
             "Danger Sign",
             "Type of Danger Sign",
-            "Remarks",
+
+            # Other
+            "Session Remarks",
         ]
 
         ws.append(headers)
 
-        header_fill = PatternFill("solid", fgColor="0F766E")
-        header_font = Font(color="FFFFFF", bold=True)
+        # ========================================================
+        # HEADER STYLE
+        # ========================================================
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E"
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True
+        )
 
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True
+            )
 
+        ws.row_dimensions[1].height = 40
+
+        # ========================================================
+        # HELPER FUNCTIONS
+        # ========================================================
         def yes_no(value):
-            return "Yes" if value else "No"
+            if value is True:
+                return "Yes"
 
+            if value is False:
+                return "No"
+
+            return ""
+
+        def safe_text(value):
+            if value is None:
+                return ""
+
+            return str(value)
+
+        def safe_date(value):
+            if not value:
+                return ""
+
+            return value.strftime("%Y-%m-%d")
+
+        def safe_datetime(value):
+            if not value:
+                return ""
+
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+
+        # ========================================================
+        # DATA
+        # ========================================================
         for obj in queryset:
+
+            enrollment = obj.registerid
+
+            # ----------------------------------------------------
+            # Default Enrollment Values
+            # ----------------------------------------------------
+            enrollment_db_id = ""
+            enrollment_number = ""
+            woman_name = ""
+            father_name = ""
+            contact_number = ""
+            address = ""
+            education_level = ""
+            gravida = ""
+            ga_first_anc = ""
+            edd = ""
+            age_years = ""
+            transfer_in = ""
+            number_anc_visits = ""
+            enrollment_remarks = ""
+
+            # ----------------------------------------------------
+            # Default Cohort Values
+            # ----------------------------------------------------
+            cohort_db_id = ""
+            cohort_name = ""
+            cohort_number = ""
+            cohort_status = ""
+            cohort_checklist = ""
+            cohort_target_size = ""
+            cohort_facility = ""
+            cohort_created_by = ""
+            cohort_created_at = ""
+            cohort_updated_by = ""
+            cohort_updated_at = ""
+            cohort_remarks = ""
+
+            # ====================================================
+            # ENROLLMENT DATA
+            # ====================================================
+            if enrollment:
+
+                enrollment_db_id = enrollment.pk
+
+                enrollment_number = (
+                    enrollment.enrollmentid
+                    if enrollment.enrollmentid is not None
+                    else ""
+                )
+
+                woman_name = safe_text(
+                    enrollment.name
+                )
+
+                father_name = safe_text(
+                    enrollment.fathername
+                )
+
+                contact_number = safe_text(
+                    enrollment.contactnumber
+                )
+
+                address = safe_text(
+                    enrollment.address
+                )
+
+                education_level = safe_text(
+                    enrollment.education_level
+                )
+
+                gravida = (
+                    enrollment.gravida
+                    if enrollment.gravida is not None
+                    else ""
+                )
+
+                ga_first_anc = (
+                    enrollment.gafirstanc
+                    if enrollment.gafirstanc is not None
+                    else ""
+                )
+
+                edd = safe_date(
+                    enrollment.edd
+                )
+
+                age_years = (
+                    enrollment.age_years
+                    if enrollment.age_years is not None
+                    else ""
+                )
+
+                transfer_in = yes_no(
+                    enrollment.transfer_in
+                )
+
+                number_anc_visits = (
+                    enrollment.numerof_ancvisits
+                    if enrollment.numerof_ancvisits is not None
+                    else ""
+                )
+
+                enrollment_remarks = safe_text(
+                    enrollment.remarks
+                )
+
+                # =================================================
+                # COHORT DATA
+                # =================================================
+                cohort = enrollment.cohortname
+
+                if cohort:
+
+                    cohort_db_id = cohort.pk
+
+                    cohort_name = safe_text(
+                        cohort.cohortname
+                    )
+
+                    cohort_number = (
+                        cohort.cohortnumber
+                        if cohort.cohortnumber is not None
+                        else ""
+                    )
+
+                    # Human-readable status
+                    cohort_status = safe_text(
+                        cohort.get_cohortstatus_display()
+                    )
+
+                    cohort_checklist = safe_text(
+                        cohort.cohortchecklist
+                    )
+
+                    cohort_target_size = (
+                        cohort.target_size
+                        if cohort.target_size is not None
+                        else ""
+                    )
+
+                    cohort_facility = safe_text(
+                        cohort.facility
+                    )
+
+                    cohort_created_by = safe_text(
+                        cohort.created_by
+                    )
+
+                    cohort_created_at = safe_datetime(
+                        cohort.created_at
+                    )
+
+                    cohort_updated_by = safe_text(
+                        cohort.updated_by
+                    )
+
+                    cohort_updated_at = safe_datetime(
+                        cohort.updated_at
+                    )
+
+                    cohort_remarks = safe_text(
+                        cohort.remarks
+                    )
+
+            # ====================================================
+            # WRITE EXCEL ROW
+            # ====================================================
             ws.append([
-                str(obj.registerid) if obj.registerid else "",
+
+                # =================================================
+                # ENROLLMENT
+                # =================================================
+                enrollment_db_id,
+                enrollment_number,
+                woman_name,
+                father_name,
+                contact_number,
+                address,
+                education_level,
+                gravida,
+                ga_first_anc,
+                edd,
+                age_years,
+                transfer_in,
+                number_anc_visits,
+                enrollment_remarks,
+
+                # =================================================
+                # COHORT
+                # =================================================
+                cohort_db_id,
+                cohort_name,
+                cohort_number,
+                cohort_status,
+                cohort_checklist,
+                cohort_target_size,
+                cohort_facility,
+                cohort_created_by,
+                cohort_created_at,
+                cohort_updated_by,
+                cohort_updated_at,
+                cohort_remarks,
+
+                # =================================================
+                # LOCATION
+                # =================================================
                 self.get_facility(obj),
                 self.get_province(obj),
-                obj.sessiontype,
-                obj.sessionround,
-                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
-                obj.attendance,
-                obj.presentga,
-                obj.bp,
-                yes_no(obj.dhypertension),
-                yes_no(obj.rhypertensiontoMD),
-                obj.weight,
-                yes_no(obj.anemia),
-                yes_no(obj.ironfolate),
-                yes_no(obj.ironfolatepluswomen),
-                yes_no(obj.pcalcium),
-                yes_no(obj.acalcium),
-                obj.muac,
-                yes_no(obj.dmam),
-                yes_no(obj.rmam),
-                yes_no(obj.dsam),
-                yes_no(obj.rsam),
-                yes_no(obj.clabexm),
-                obj.hemoglobin,
-                obj.urinexamcheck,
-                obj.urinexam,
-                yes_no(obj.rpositivepuriatomd),
-                yes_no(obj.coughmorethantwoweeks),
-                yes_no(obj.rcough),
-                yes_no(obj.ttvaccine),
-                yes_no(obj.dangersign),
-                obj.typeofdangersign,
-                obj.remarks,
+
+                # =================================================
+                # SESSION
+                # =================================================
+                safe_text(obj.sessiontype),
+                safe_text(obj.sessionround),
+                safe_date(obj.sessiondate),
+                safe_text(obj.attendance),
+
+                (
+                    obj.presentga
+                    if obj.presentga is not None
+                    else ""
+                ),
+
+                # =================================================
+                # MATERNAL ASSESSMENT
+                # =================================================
+                safe_text(obj.bp),
+
+                yes_no(
+                    obj.dhypertension
+                ),
+
+                yes_no(
+                    obj.rhypertensiontoMD
+                ),
+
+                (
+                    obj.weight
+                    if obj.weight is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.anemia
+                ),
+
+                yes_no(
+                    obj.ironfolate
+                ),
+
+                yes_no(
+                    obj.ironfolatepluswomen
+                ),
+
+                yes_no(
+                    obj.pcalcium
+                ),
+
+                yes_no(
+                    obj.acalcium
+                ),
+
+                (
+                    obj.muac
+                    if obj.muac is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.dmam
+                ),
+
+                yes_no(
+                    obj.rmam
+                ),
+
+                yes_no(
+                    obj.dsam
+                ),
+
+                yes_no(
+                    obj.rsam
+                ),
+
+                # =================================================
+                # LABORATORY
+                # =================================================
+                yes_no(
+                    obj.clabexm
+                ),
+
+                (
+                    obj.hemoglobin
+                    if obj.hemoglobin is not None
+                    else ""
+                ),
+
+                # Your existing field
+                safe_text(
+                    obj.urinexamcheck
+                ),
+
+                safe_text(
+                    obj.urinexam
+                ),
+
+                yes_no(
+                    obj.rpositivepuriatomd
+                ),
+
+                yes_no(
+                    obj.coughmorethantwoweeks
+                ),
+
+                yes_no(
+                    obj.rcough
+                ),
+
+                yes_no(
+                    obj.ttvaccine
+                ),
+
+                # =================================================
+                # DANGER SIGNS
+                # =================================================
+                yes_no(
+                    obj.dangersign
+                ),
+
+                safe_text(
+                    obj.typeofdangersign
+                ),
+
+                # =================================================
+                # REMARKS
+                # =================================================
+                safe_text(
+                    obj.remarks
+                ),
             ])
 
+        # ========================================================
+        # CELL FORMATTING
+        # ========================================================
         for row in ws.iter_rows():
             for cell in row:
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True
+                )
 
+        # ========================================================
+        # COLUMN WIDTH
+        # ========================================================
         for column_cells in ws.columns:
+
             max_length = 0
-            column_letter = get_column_letter(column_cells[0].column)
+
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
 
             for cell in column_cells:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
 
-            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+                if cell.value is not None:
 
+                    value_length = len(
+                        str(cell.value)
+                    )
+
+                    if value_length > max_length:
+                        max_length = value_length
+
+            ws.column_dimensions[
+                column_letter
+            ].width = min(
+                max_length + 3,
+                40
+            )
+
+        # ========================================================
+        # EXCEL ANALYSIS FEATURES
+        # ========================================================
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
 
+        # ========================================================
+        # DOWNLOAD
+        # ========================================================
         response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
         )
-        response["Content-Disposition"] = 'attachment; filename="ganc_first_session.xlsx"'
+
+        response["Content-Disposition"] = (
+            'attachment; '
+            'filename="ganc_first_session_full_export.xlsx"'
+        )
 
         wb.save(response)
+
         return response
 
-    export_ganc_first_session_excel.short_description = "Export selected GANC First Session records to Excel"
+
+    export_ganc_first_session_excel.short_description = (
+        "Export selected GANC First Session records to Excel"
+    )
 
 # ============================================================
 # GANC Second Session
@@ -858,19 +1319,77 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
     danger_help.short_description = "Danger sign guidance"
 
     def export_ganc_second_session_excel(self, request, queryset):
+
+        # ========================================================
+        # LOAD RELATED ENROLLMENT + COHORT DATA EFFICIENTLY
+        # ========================================================
+        queryset = queryset.select_related(
+            "registerid",
+            "registerid__cohortname",
+            "registerid__cohortname__facility",
+            "registerid__cohortname__created_by",
+            "registerid__cohortname__updated_by",
+        )
+
         wb = Workbook()
         ws = wb.active
         ws.title = "GANC Second Session"
 
+        # ========================================================
+        # HEADERS
+        # ========================================================
         headers = [
-            "Register Name",
+
+            # ====================================================
+            # ENROLLMENT INFORMATION
+            # ====================================================
+            "Enrollment Database ID",
+            "Register Number",
+            "Woman Name",
+            "Father Name",
+            "Contact Number",
+            "Address",
+            "Education Level",
+            "Gravida",
+            "GA at First ANC",
+            "Expected Date of Delivery",
+            "Age (Years)",
+            "Transfer In",
+            "Individual ANC Visits",
+            "Enrollment Remarks",
+
+            # ====================================================
+            # COHORT INFORMATION
+            # ====================================================
+            "Cohort Database ID",
+            "Cohort Name",
+            "Cohort Number",
+            "Cohort Status",
+            "Cohort Checklist",
+            "Cohort Target Size",
+            "Cohort Facility",
+            "Cohort Created By",
+            "Cohort Created At",
+            "Cohort Updated By",
+            "Cohort Updated At",
+            "Cohort Remarks",
+
+            # ====================================================
+            # LOCATION
+            # ====================================================
             "Facility",
             "Province",
+
+            # ====================================================
+            # GANC SECOND SESSION
+            # ====================================================
             "Session Type",
             "Session Round",
             "Session Date",
             "Attendance",
             "Present GA",
+
+            # Maternal Assessment
             "BP",
             "Diagnosed Hypertension",
             "Referred Hypertension to MD",
@@ -886,91 +1405,484 @@ class GancsecondsessionAdmin(BaseSessionAdmin):
             "Refer MAM to Nutrition Counsellor",
             "Diagnosed SAM",
             "Refer SAM to Higher Level",
+
+            # Laboratory / Screening
+            "Urine Exam Check",
             "Urine Exam / Protein Uria",
             "Referred Positive Protein Uria to MD",
             "Cough More Than Two Weeks",
             "Referred Cough to DOTS Room",
             "TT Vaccine",
+
+            # Danger Signs
             "Danger Sign",
             "Type of Danger Sign",
-            "Remarks",
+
+            # Other
+            "Session Remarks",
         ]
 
         ws.append(headers)
 
-        header_fill = PatternFill("solid", fgColor="0F766E")
-        header_font = Font(color="FFFFFF", bold=True)
+        # ========================================================
+        # HEADER STYLE
+        # ========================================================
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E"
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True
+        )
 
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True
+            )
 
+        ws.row_dimensions[1].height = 40
+
+        # ========================================================
+        # HELPER FUNCTIONS
+        # ========================================================
         def yes_no(value):
-            return "Yes" if value else "No"
+            if value is True:
+                return "Yes"
 
+            if value is False:
+                return "No"
+
+            return ""
+
+        def safe_text(value):
+            if value is None:
+                return ""
+
+            return str(value)
+
+        def safe_date(value):
+            if not value:
+                return ""
+
+            return value.strftime("%Y-%m-%d")
+
+        def safe_datetime(value):
+            if not value:
+                return ""
+
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+
+        # ========================================================
+        # EXPORT DATA
+        # ========================================================
         for obj in queryset:
+
+            enrollment = obj.registerid
+
+            # ----------------------------------------------------
+            # Default Enrollment Values
+            # ----------------------------------------------------
+            enrollment_db_id = ""
+            enrollment_number = ""
+            woman_name = ""
+            father_name = ""
+            contact_number = ""
+            address = ""
+            education_level = ""
+            gravida = ""
+            ga_first_anc = ""
+            edd = ""
+            age_years = ""
+            transfer_in = ""
+            number_anc_visits = ""
+            enrollment_remarks = ""
+
+            # ----------------------------------------------------
+            # Default Cohort Values
+            # ----------------------------------------------------
+            cohort_db_id = ""
+            cohort_name = ""
+            cohort_number = ""
+            cohort_status = ""
+            cohort_checklist = ""
+            cohort_target_size = ""
+            cohort_facility = ""
+            cohort_created_by = ""
+            cohort_created_at = ""
+            cohort_updated_by = ""
+            cohort_updated_at = ""
+            cohort_remarks = ""
+
+            # ====================================================
+            # ENROLLMENT DATA
+            # ====================================================
+            if enrollment:
+
+                enrollment_db_id = enrollment.pk
+
+                enrollment_number = (
+                    enrollment.enrollmentid
+                    if enrollment.enrollmentid is not None
+                    else ""
+                )
+
+                woman_name = safe_text(
+                    enrollment.name
+                )
+
+                father_name = safe_text(
+                    enrollment.fathername
+                )
+
+                contact_number = safe_text(
+                    enrollment.contactnumber
+                )
+
+                address = safe_text(
+                    enrollment.address
+                )
+
+                education_level = safe_text(
+                    enrollment.education_level
+                )
+
+                gravida = (
+                    enrollment.gravida
+                    if enrollment.gravida is not None
+                    else ""
+                )
+
+                ga_first_anc = (
+                    enrollment.gafirstanc
+                    if enrollment.gafirstanc is not None
+                    else ""
+                )
+
+                edd = safe_date(
+                    enrollment.edd
+                )
+
+                age_years = (
+                    enrollment.age_years
+                    if enrollment.age_years is not None
+                    else ""
+                )
+
+                transfer_in = yes_no(
+                    enrollment.transfer_in
+                )
+
+                number_anc_visits = (
+                    enrollment.numerof_ancvisits
+                    if enrollment.numerof_ancvisits is not None
+                    else ""
+                )
+
+                enrollment_remarks = safe_text(
+                    enrollment.remarks
+                )
+
+                # =================================================
+                # COHORT DATA
+                # =================================================
+                cohort = enrollment.cohortname
+
+                if cohort:
+
+                    cohort_db_id = cohort.pk
+
+                    cohort_name = safe_text(
+                        cohort.cohortname
+                    )
+
+                    cohort_number = (
+                        cohort.cohortnumber
+                        if cohort.cohortnumber is not None
+                        else ""
+                    )
+
+                    cohort_status = safe_text(
+                        cohort.get_cohortstatus_display()
+                    )
+
+                    cohort_checklist = safe_text(
+                        cohort.cohortchecklist
+                    )
+
+                    cohort_target_size = (
+                        cohort.target_size
+                        if cohort.target_size is not None
+                        else ""
+                    )
+
+                    cohort_facility = safe_text(
+                        cohort.facility
+                    )
+
+                    cohort_created_by = safe_text(
+                        cohort.created_by
+                    )
+
+                    cohort_created_at = safe_datetime(
+                        cohort.created_at
+                    )
+
+                    cohort_updated_by = safe_text(
+                        cohort.updated_by
+                    )
+
+                    cohort_updated_at = safe_datetime(
+                        cohort.updated_at
+                    )
+
+                    cohort_remarks = safe_text(
+                        cohort.remarks
+                    )
+
+            # ====================================================
+            # WRITE ROW
+            # ====================================================
             ws.append([
-                str(obj.registerid) if obj.registerid else "",
+
+                # =================================================
+                # ENROLLMENT
+                # =================================================
+                enrollment_db_id,
+                enrollment_number,
+                woman_name,
+                father_name,
+                contact_number,
+                address,
+                education_level,
+                gravida,
+                ga_first_anc,
+                edd,
+                age_years,
+                transfer_in,
+                number_anc_visits,
+                enrollment_remarks,
+
+                # =================================================
+                # COHORT
+                # =================================================
+                cohort_db_id,
+                cohort_name,
+                cohort_number,
+                cohort_status,
+                cohort_checklist,
+                cohort_target_size,
+                cohort_facility,
+                cohort_created_by,
+                cohort_created_at,
+                cohort_updated_by,
+                cohort_updated_at,
+                cohort_remarks,
+
+                # =================================================
+                # LOCATION
+                # =================================================
                 self.get_facility(obj),
                 self.get_province(obj),
-                obj.sessiontype,
-                obj.sessionround,
-                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
-                obj.attendance,
-                obj.presentga,
-                obj.bp,
-                yes_no(obj.dhypertension),
-                yes_no(obj.rhypertensiontoMD),
-                obj.weight,
-                yes_no(obj.anemia),
-                yes_no(obj.ironfolate),
-                yes_no(obj.ironfolatepluswomen),
-                yes_no(obj.pcalcium),
-                yes_no(obj.acalcium),
-                yes_no(obj.mebendazole),
-                obj.muac,
-                yes_no(obj.dmam),
-                yes_no(obj.rmam),
-                yes_no(obj.dsam),
-                yes_no(obj.rsam),
-                yes_no(obj.urinexamcheck),
-                obj.urinexam,
-                yes_no(obj.rpositivepuriatomd),
-                yes_no(obj.coughmorethantwoweeks),
-                yes_no(obj.rcough),
-                yes_no(obj.ttvaccine),
-                yes_no(obj.dangersign),
-                obj.typeofdangersign,
-                obj.remarks,
+
+                # =================================================
+                # SESSION
+                # =================================================
+                safe_text(obj.sessiontype),
+                safe_text(obj.sessionround),
+                safe_date(obj.sessiondate),
+                safe_text(obj.attendance),
+
+                (
+                    obj.presentga
+                    if obj.presentga is not None
+                    else ""
+                ),
+
+                # =================================================
+                # MATERNAL ASSESSMENT
+                # =================================================
+                safe_text(obj.bp),
+
+                yes_no(
+                    obj.dhypertension
+                ),
+
+                yes_no(
+                    obj.rhypertensiontoMD
+                ),
+
+                (
+                    obj.weight
+                    if obj.weight is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.anemia
+                ),
+
+                yes_no(
+                    obj.ironfolate
+                ),
+
+                yes_no(
+                    obj.ironfolatepluswomen
+                ),
+
+                yes_no(
+                    obj.pcalcium
+                ),
+
+                yes_no(
+                    obj.acalcium
+                ),
+
+                yes_no(
+                    obj.mebendazole
+                ),
+
+                (
+                    obj.muac
+                    if obj.muac is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.dmam
+                ),
+
+                yes_no(
+                    obj.rmam
+                ),
+
+                yes_no(
+                    obj.dsam
+                ),
+
+                yes_no(
+                    obj.rsam
+                ),
+
+                # =================================================
+                # LABORATORY / SCREENING
+                # =================================================
+                yes_no(
+                    obj.urinexamcheck
+                ),
+
+                safe_text(
+                    obj.urinexam
+                ),
+
+                yes_no(
+                    obj.rpositivepuriatomd
+                ),
+
+                yes_no(
+                    obj.coughmorethantwoweeks
+                ),
+
+                yes_no(
+                    obj.rcough
+                ),
+
+                yes_no(
+                    obj.ttvaccine
+                ),
+
+                # =================================================
+                # DANGER SIGNS
+                # =================================================
+                yes_no(
+                    obj.dangersign
+                ),
+
+                safe_text(
+                    obj.typeofdangersign
+                ),
+
+                # =================================================
+                # REMARKS
+                # =================================================
+                safe_text(
+                    obj.remarks
+                ),
             ])
 
+        # ========================================================
+        # CELL FORMATTING
+        # ========================================================
         for row in ws.iter_rows():
             for cell in row:
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True
+                )
 
+        # ========================================================
+        # COLUMN WIDTHS
+        # ========================================================
         for column_cells in ws.columns:
+
             max_length = 0
-            column_letter = get_column_letter(column_cells[0].column)
+
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
 
             for cell in column_cells:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
 
-            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+                if cell.value is not None:
 
+                    value_length = len(
+                        str(cell.value)
+                    )
+
+                    if value_length > max_length:
+                        max_length = value_length
+
+            ws.column_dimensions[
+                column_letter
+            ].width = min(
+                max_length + 3,
+                40
+            )
+
+        # ========================================================
+        # ANALYSIS-FRIENDLY FEATURES
+        # ========================================================
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
 
+        # ========================================================
+        # RESPONSE
+        # ========================================================
         response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
         )
-        response["Content-Disposition"] = 'attachment; filename="ganc_second_session.xlsx"'
+
+        response["Content-Disposition"] = (
+            'attachment; '
+            'filename="ganc_second_session_full_export.xlsx"'
+        )
 
         wb.save(response)
+
         return response
 
-    export_ganc_second_session_excel.short_description = "Export selected GANC Second Session records to Excel"
+
+    export_ganc_second_session_excel.short_description = (
+        "Export selected GANC Second Session records to Excel"
+    )
 
 # ============================================================
 # GANC Third Session
@@ -1106,19 +2018,77 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
     danger_counseling_help.short_description = "Guidance"
 
     def export_ganc_third_session_excel(self, request, queryset):
+
+        # ========================================================
+        # LOAD RELATED ENROLLMENT + COHORT DATA EFFICIENTLY
+        # ========================================================
+        queryset = queryset.select_related(
+            "registerid",
+            "registerid__cohortname",
+            "registerid__cohortname__facility",
+            "registerid__cohortname__created_by",
+            "registerid__cohortname__updated_by",
+        )
+
         wb = Workbook()
         ws = wb.active
         ws.title = "GANC Third Session"
 
+        # ========================================================
+        # HEADERS
+        # ========================================================
         headers = [
-            "Register Name",
+
+            # ====================================================
+            # ENROLLMENT INFORMATION
+            # ====================================================
+            "Enrollment Database ID",
+            "Register Number",
+            "Woman Name",
+            "Father Name",
+            "Contact Number",
+            "Address",
+            "Education Level",
+            "Gravida",
+            "GA at First ANC",
+            "Expected Date of Delivery",
+            "Age (Years)",
+            "Transfer In",
+            "Individual ANC Visits",
+            "Enrollment Remarks",
+
+            # ====================================================
+            # COHORT INFORMATION
+            # ====================================================
+            "Cohort Database ID",
+            "Cohort Name",
+            "Cohort Number",
+            "Cohort Status",
+            "Cohort Checklist",
+            "Cohort Target Size",
+            "Cohort Facility",
+            "Cohort Created By",
+            "Cohort Created At",
+            "Cohort Updated By",
+            "Cohort Updated At",
+            "Cohort Remarks",
+
+            # ====================================================
+            # LOCATION
+            # ====================================================
             "Facility",
             "Province",
+
+            # ====================================================
+            # GANC THIRD SESSION
+            # ====================================================
             "Session Type",
             "Session Round",
             "Session Date",
             "Attendance",
             "Present GA",
+
+            # Maternal Assessment
             "BP",
             "Diagnosed Hypertension",
             "Referred Hypertension to MD",
@@ -1133,98 +2103,377 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
             "Refer MAM to Nutrition Counsellor",
             "Diagnosed SAM",
             "Refer SAM to Higher Level",
+
+            # Mental Health
             "Antenatal Depression Screening",
             "Antenatal Depression Diagnosed",
             "Refer to Psychosocial Counselor",
+
+            # Laboratory / Screening
+            "Urine Exam Check",
             "Urine Exam / Protein Uria",
             "Referred Positive Protein Uria to MD",
             "Cough More Than Two Weeks",
             "Referred Cough to DOTS Room",
             "TT Vaccine",
+
+            # Danger Signs / Counseling
             "Danger Sign",
             "Type of Danger Sign",
             "Birth Planning Counseling",
-            "Remarks",
+
+            # Other
+            "Session Remarks",
         ]
 
         ws.append(headers)
 
-        header_fill = PatternFill("solid", fgColor="0F766E")
-        header_font = Font(color="FFFFFF", bold=True)
+        # ========================================================
+        # HEADER STYLE
+        # ========================================================
+        header_fill = PatternFill(
+            fill_type="solid",
+            fgColor="0F766E"
+        )
+
+        header_font = Font(
+            color="FFFFFF",
+            bold=True
+        )
 
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+                wrap_text=True
+            )
 
+        ws.row_dimensions[1].height = 40
+
+        # ========================================================
+        # HELPERS
+        # ========================================================
         def yes_no(value):
-            return "Yes" if value else "No"
+            if value is True:
+                return "Yes"
+            if value is False:
+                return "No"
+            return ""
 
+        def safe_text(value):
+            return "" if value is None else str(value)
+
+        def safe_date(value):
+            return value.strftime("%Y-%m-%d") if value else ""
+
+        def safe_datetime(value):
+            return value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+        # ========================================================
+        # EXPORT DATA
+        # ========================================================
         for obj in queryset:
+
+            enrollment = obj.registerid
+
+            # ----------------------------------------------------
+            # Enrollment defaults
+            # ----------------------------------------------------
+            enrollment_db_id = ""
+            enrollment_number = ""
+            woman_name = ""
+            father_name = ""
+            contact_number = ""
+            address = ""
+            education_level = ""
+            gravida = ""
+            ga_first_anc = ""
+            edd = ""
+            age_years = ""
+            transfer_in = ""
+            number_anc_visits = ""
+            enrollment_remarks = ""
+
+            # ----------------------------------------------------
+            # Cohort defaults
+            # ----------------------------------------------------
+            cohort_db_id = ""
+            cohort_name = ""
+            cohort_number = ""
+            cohort_status = ""
+            cohort_checklist = ""
+            cohort_target_size = ""
+            cohort_facility = ""
+            cohort_created_by = ""
+            cohort_created_at = ""
+            cohort_updated_by = ""
+            cohort_updated_at = ""
+            cohort_remarks = ""
+
+            if enrollment:
+
+                # =================================================
+                # ENROLLMENT DATA
+                # =================================================
+                enrollment_db_id = enrollment.pk
+
+                enrollment_number = (
+                    enrollment.enrollmentid
+                    if enrollment.enrollmentid is not None
+                    else ""
+                )
+
+                woman_name = safe_text(enrollment.name)
+                father_name = safe_text(enrollment.fathername)
+                contact_number = safe_text(enrollment.contactnumber)
+                address = safe_text(enrollment.address)
+                education_level = safe_text(enrollment.education_level)
+
+                gravida = (
+                    enrollment.gravida
+                    if enrollment.gravida is not None
+                    else ""
+                )
+
+                ga_first_anc = (
+                    enrollment.gafirstanc
+                    if enrollment.gafirstanc is not None
+                    else ""
+                )
+
+                edd = safe_date(enrollment.edd)
+
+                age_years = (
+                    enrollment.age_years
+                    if enrollment.age_years is not None
+                    else ""
+                )
+
+                transfer_in = yes_no(enrollment.transfer_in)
+
+                number_anc_visits = (
+                    enrollment.numerof_ancvisits
+                    if enrollment.numerof_ancvisits is not None
+                    else ""
+                )
+
+                enrollment_remarks = safe_text(enrollment.remarks)
+
+                # =================================================
+                # COHORT DATA
+                # =================================================
+                cohort = enrollment.cohortname
+
+                if cohort:
+                    cohort_db_id = cohort.pk
+                    cohort_name = safe_text(cohort.cohortname)
+
+                    cohort_number = (
+                        cohort.cohortnumber
+                        if cohort.cohortnumber is not None
+                        else ""
+                    )
+
+                    cohort_status = safe_text(
+                        cohort.get_cohortstatus_display()
+                    )
+
+                    cohort_checklist = safe_text(
+                        cohort.cohortchecklist
+                    )
+
+                    cohort_target_size = (
+                        cohort.target_size
+                        if cohort.target_size is not None
+                        else ""
+                    )
+
+                    cohort_facility = safe_text(
+                        cohort.facility
+                    )
+
+                    cohort_created_by = safe_text(
+                        cohort.created_by
+                    )
+
+                    cohort_created_at = safe_datetime(
+                        cohort.created_at
+                    )
+
+                    cohort_updated_by = safe_text(
+                        cohort.updated_by
+                    )
+
+                    cohort_updated_at = safe_datetime(
+                        cohort.updated_at
+                    )
+
+                    cohort_remarks = safe_text(
+                        cohort.remarks
+                    )
+
+            # ====================================================
+            # WRITE ROW
+            # ====================================================
             ws.append([
-                str(obj.registerid) if obj.registerid else "",
+
+                # Enrollment
+                enrollment_db_id,
+                enrollment_number,
+                woman_name,
+                father_name,
+                contact_number,
+                address,
+                education_level,
+                gravida,
+                ga_first_anc,
+                edd,
+                age_years,
+                transfer_in,
+                number_anc_visits,
+                enrollment_remarks,
+
+                # Cohort
+                cohort_db_id,
+                cohort_name,
+                cohort_number,
+                cohort_status,
+                cohort_checklist,
+                cohort_target_size,
+                cohort_facility,
+                cohort_created_by,
+                cohort_created_at,
+                cohort_updated_by,
+                cohort_updated_at,
+                cohort_remarks,
+
+                # Location
                 self.get_facility(obj),
                 self.get_province(obj),
-                obj.sessiontype,
-                obj.sessionround,
-                obj.sessiondate.strftime("%Y-%m-%d") if obj.sessiondate else "",
-                obj.attendance,
-                obj.presentga,
-                obj.bp,
+
+                # Session
+                safe_text(obj.sessiontype),
+                safe_text(obj.sessionround),
+                safe_date(obj.sessiondate),
+                safe_text(obj.attendance),
+
+                (
+                    obj.presentga
+                    if obj.presentga is not None
+                    else ""
+                ),
+
+                # Maternal
+                safe_text(obj.bp),
                 yes_no(obj.dhypertension),
                 yes_no(obj.rhypertensiontoMD),
-                obj.weight,
+
+                (
+                    obj.weight
+                    if obj.weight is not None
+                    else ""
+                ),
+
                 yes_no(obj.anemia),
                 yes_no(obj.ironfolate),
                 yes_no(obj.ironfolatepluswomen),
                 yes_no(obj.pcalcium),
                 yes_no(obj.acalcium),
-                obj.muac,
+
+                (
+                    obj.muac
+                    if obj.muac is not None
+                    else ""
+                ),
+
                 yes_no(obj.dmam),
                 yes_no(obj.rmam),
                 yes_no(obj.dsam),
                 yes_no(obj.rsam),
+
+                # Mental health
                 yes_no(obj.antedepressionscreening),
                 yes_no(obj.antedepressiondiagnosed),
                 yes_no(obj.rpsychosocialcounselor),
+
+                # Laboratory
                 yes_no(obj.urinexamcheck),
-                obj.urinexam,
+                safe_text(obj.urinexam),
                 yes_no(obj.rpositivepuriatomd),
                 yes_no(obj.coughmorethantwoweeks),
                 yes_no(obj.rcough),
                 yes_no(obj.ttvaccine),
+
+                # Danger signs / counseling
                 yes_no(obj.dangersign),
-                obj.typeofdangersign,
+                safe_text(obj.typeofdangersign),
                 yes_no(obj.birthplanningcounseling),
-                obj.remarks,
+
+                # Remarks
+                safe_text(obj.remarks),
             ])
 
+        # ========================================================
+        # CELL FORMATTING
+        # ========================================================
         for row in ws.iter_rows():
             for cell in row:
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
+                cell.alignment = Alignment(
+                    vertical="top",
+                    wrap_text=True
+                )
 
+        # ========================================================
+        # AUTO COLUMN WIDTH
+        # ========================================================
         for column_cells in ws.columns:
             max_length = 0
-            column_letter = get_column_letter(column_cells[0].column)
+            column_letter = get_column_letter(
+                column_cells[0].column
+            )
 
             for cell in column_cells:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
+                if cell.value is not None:
+                    max_length = max(
+                        max_length,
+                        len(str(cell.value))
+                    )
 
-            ws.column_dimensions[column_letter].width = min(max_length + 3, 35)
+            ws.column_dimensions[column_letter].width = min(
+                max_length + 3,
+                40
+            )
 
+        # ========================================================
+        # ANALYSIS-FRIENDLY SETTINGS
+        # ========================================================
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
 
+        # ========================================================
+        # DOWNLOAD
+        # ========================================================
         response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            )
         )
-        response["Content-Disposition"] = 'attachment; filename="ganc_third_session.xlsx"'
+
+        response["Content-Disposition"] = (
+            'attachment; '
+            'filename="ganc_third_session_full_export.xlsx"'
+        )
 
         wb.save(response)
         return response
 
-    export_ganc_third_session_excel.short_description = "Export selected GANC Third Session records to Excel"
+
+    export_ganc_third_session_excel.short_description = (
+        "Export selected GANC Third Session records to Excel"
+    )
 
 # ============================================================
 # GANC Fourth Session
@@ -1421,19 +2670,77 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
     danger_counseling_help.short_description = "Danger sign guidance"
 
     def export_ganc_fourth_session_excel(self, request, queryset):
+
+        # ========================================================
+        # LOAD RELATED ENROLLMENT + COHORT DATA EFFICIENTLY
+        # ========================================================
+        queryset = queryset.select_related(
+            "registerid",
+            "registerid__cohortname",
+            "registerid__cohortname__facility",
+            "registerid__cohortname__created_by",
+            "registerid__cohortname__updated_by",
+        )
+
         workbook = Workbook()
         worksheet = workbook.active
         worksheet.title = "GANC Fourth Session"
 
+        # ========================================================
+        # HEADERS
+        # ========================================================
         headers = [
-            "Register Name",
+
+            # ====================================================
+            # ENROLLMENT INFORMATION
+            # ====================================================
+            "Enrollment Database ID",
+            "Register Number",
+            "Woman Name",
+            "Father Name",
+            "Contact Number",
+            "Address",
+            "Education Level",
+            "Gravida",
+            "GA at First ANC",
+            "Expected Date of Delivery",
+            "Age (Years)",
+            "Transfer In",
+            "Individual ANC Visits",
+            "Enrollment Remarks",
+
+            # ====================================================
+            # COHORT INFORMATION
+            # ====================================================
+            "Cohort Database ID",
+            "Cohort Name",
+            "Cohort Number",
+            "Cohort Status",
+            "Cohort Checklist",
+            "Cohort Target Size",
+            "Cohort Facility",
+            "Cohort Created By",
+            "Cohort Created At",
+            "Cohort Updated By",
+            "Cohort Updated At",
+            "Cohort Remarks",
+
+            # ====================================================
+            # LOCATION
+            # ====================================================
             "Facility",
             "Province",
+
+            # ====================================================
+            # GANC FOURTH SESSION
+            # ====================================================
             "Session Type",
             "Session Round",
             "Session Date",
             "Attendance",
             "Present GA",
+
+            # Maternal Assessment
             "BP",
             "Diagnosed Hypertension",
             "Referred Hypertension to MD",
@@ -1448,26 +2755,39 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
             "Refer MAM to Nutrition Counsellor",
             "Diagnosed SAM",
             "Refer SAM to Higher Level",
+
+            # Mental Health
             "Antenatal Depression Screening",
             "Antenatal Depression Diagnosed",
             "Refer to Psychosocial Counselor",
+
+            # Laboratory / Screening
+            "Urine Exam Check",
             "Urine Exam / Protein Uria",
             "Referred Positive Protein Uria to MD",
             "Cough More Than Two Weeks",
             "Referred Cough to DOTS Room",
             "TT Vaccine",
+
+            # Danger Signs / Counseling
             "Danger Sign",
             "Type of Danger Sign",
             "Birth Planning Counseling",
-            "Remarks",
+
+            # Other
+            "Session Remarks",
         ]
 
         worksheet.append(headers)
 
+        # ========================================================
+        # HEADER STYLE
+        # ========================================================
         header_fill = PatternFill(
             fill_type="solid",
             fgColor="0F766E",
         )
+
         header_font = Font(
             color="FFFFFF",
             bold=True,
@@ -1482,6 +2802,11 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
                 wrap_text=True,
             )
 
+        worksheet.row_dimensions[1].height = 40
+
+        # ========================================================
+        # HELPER FUNCTIONS
+        # ========================================================
         def yes_no(value):
             if value is True:
                 return "Yes"
@@ -1489,48 +2814,352 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
                 return "No"
             return ""
 
+        def safe_text(value):
+            return "" if value is None else str(value)
+
+        def safe_date(value):
+            return value.strftime("%Y-%m-%d") if value else ""
+
+        def safe_datetime(value):
+            return value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+        # ========================================================
+        # EXPORT DATA
+        # ========================================================
         for obj in queryset:
+
+            enrollment = obj.registerid
+
+            # ----------------------------------------------------
+            # Enrollment defaults
+            # ----------------------------------------------------
+            enrollment_db_id = ""
+            enrollment_number = ""
+            woman_name = ""
+            father_name = ""
+            contact_number = ""
+            address = ""
+            education_level = ""
+            gravida = ""
+            ga_first_anc = ""
+            edd = ""
+            age_years = ""
+            transfer_in = ""
+            number_anc_visits = ""
+            enrollment_remarks = ""
+
+            # ----------------------------------------------------
+            # Cohort defaults
+            # ----------------------------------------------------
+            cohort_db_id = ""
+            cohort_name = ""
+            cohort_number = ""
+            cohort_status = ""
+            cohort_checklist = ""
+            cohort_target_size = ""
+            cohort_facility = ""
+            cohort_created_by = ""
+            cohort_created_at = ""
+            cohort_updated_by = ""
+            cohort_updated_at = ""
+            cohort_remarks = ""
+
+            if enrollment:
+
+                # =================================================
+                # ENROLLMENT DATA
+                # =================================================
+                enrollment_db_id = enrollment.pk
+
+                enrollment_number = (
+                    enrollment.enrollmentid
+                    if enrollment.enrollmentid is not None
+                    else ""
+                )
+
+                woman_name = safe_text(
+                    enrollment.name
+                )
+
+                father_name = safe_text(
+                    enrollment.fathername
+                )
+
+                contact_number = safe_text(
+                    enrollment.contactnumber
+                )
+
+                address = safe_text(
+                    enrollment.address
+                )
+
+                education_level = safe_text(
+                    enrollment.education_level
+                )
+
+                gravida = (
+                    enrollment.gravida
+                    if enrollment.gravida is not None
+                    else ""
+                )
+
+                ga_first_anc = (
+                    enrollment.gafirstanc
+                    if enrollment.gafirstanc is not None
+                    else ""
+                )
+
+                edd = safe_date(
+                    enrollment.edd
+                )
+
+                age_years = (
+                    enrollment.age_years
+                    if enrollment.age_years is not None
+                    else ""
+                )
+
+                transfer_in = yes_no(
+                    enrollment.transfer_in
+                )
+
+                number_anc_visits = (
+                    enrollment.numerof_ancvisits
+                    if enrollment.numerof_ancvisits is not None
+                    else ""
+                )
+
+                enrollment_remarks = safe_text(
+                    enrollment.remarks
+                )
+
+                # =================================================
+                # COHORT DATA
+                # =================================================
+                cohort = enrollment.cohortname
+
+                if cohort:
+
+                    cohort_db_id = cohort.pk
+
+                    cohort_name = safe_text(
+                        cohort.cohortname
+                    )
+
+                    cohort_number = (
+                        cohort.cohortnumber
+                        if cohort.cohortnumber is not None
+                        else ""
+                    )
+
+                    cohort_status = safe_text(
+                        cohort.get_cohortstatus_display()
+                    )
+
+                    cohort_checklist = safe_text(
+                        cohort.cohortchecklist
+                    )
+
+                    cohort_target_size = (
+                        cohort.target_size
+                        if cohort.target_size is not None
+                        else ""
+                    )
+
+                    cohort_facility = safe_text(
+                        cohort.facility
+                    )
+
+                    cohort_created_by = safe_text(
+                        cohort.created_by
+                    )
+
+                    cohort_created_at = safe_datetime(
+                        cohort.created_at
+                    )
+
+                    cohort_updated_by = safe_text(
+                        cohort.updated_by
+                    )
+
+                    cohort_updated_at = safe_datetime(
+                        cohort.updated_at
+                    )
+
+                    cohort_remarks = safe_text(
+                        cohort.remarks
+                    )
+
+            # ====================================================
+            # WRITE EXCEL ROW
+            # ====================================================
             worksheet.append([
-                str(obj.registerid) if obj.registerid else "",
+
+                # Enrollment
+                enrollment_db_id,
+                enrollment_number,
+                woman_name,
+                father_name,
+                contact_number,
+                address,
+                education_level,
+                gravida,
+                ga_first_anc,
+                edd,
+                age_years,
+                transfer_in,
+                number_anc_visits,
+                enrollment_remarks,
+
+                # Cohort
+                cohort_db_id,
+                cohort_name,
+                cohort_number,
+                cohort_status,
+                cohort_checklist,
+                cohort_target_size,
+                cohort_facility,
+                cohort_created_by,
+                cohort_created_at,
+                cohort_updated_by,
+                cohort_updated_at,
+                cohort_remarks,
+
+                # Location
                 self.get_facility(obj),
                 self.get_province(obj),
-                obj.sessiontype or "",
-                obj.sessionround or "",
+
+                # Session
+                safe_text(obj.sessiontype),
+                safe_text(obj.sessionround),
+                safe_date(obj.sessiondate),
+                safe_text(obj.attendance),
+
                 (
-                    obj.sessiondate.strftime("%Y-%m-%d")
-                    if obj.sessiondate else ""
+                    obj.presentga
+                    if obj.presentga is not None
+                    else ""
                 ),
-                obj.attendance or "",
-                obj.presentga,
-                obj.bp or "",
-                yes_no(obj.dhypertension),
-                yes_no(obj.rhypertensiontoMD),
-                obj.weight,
-                yes_no(obj.anemia),
-                yes_no(obj.ironfolate),
-                yes_no(obj.ironfolatepluswomen),
-                yes_no(obj.pcalcium),
-                yes_no(obj.acalcium),
-                obj.muac,
-                yes_no(obj.dmam),
-                yes_no(obj.rmam),
-                yes_no(obj.dsam),
-                yes_no(obj.rsam),
-                yes_no(obj.antedepressionscreening),
-                yes_no(obj.antedepressiondiagnosed),
-                yes_no(obj.rpsychosocialcounselor),
-                yes_no(obj.urinexamcheck),
-                obj.urinexam or "",
-                yes_no(obj.rpositivepuriatomd),
-                yes_no(obj.coughmorethantwoweeks),
-                yes_no(obj.rcough),
-                yes_no(obj.ttvaccine),
-                yes_no(obj.dangersign),
-                obj.typeofdangersign or "",
-                yes_no(obj.birthplanningcounseling),
-                obj.remarks or "",
+
+                # Maternal Assessment
+                safe_text(obj.bp),
+
+                yes_no(
+                    obj.dhypertension
+                ),
+
+                yes_no(
+                    obj.rhypertensiontoMD
+                ),
+
+                (
+                    obj.weight
+                    if obj.weight is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.anemia
+                ),
+
+                yes_no(
+                    obj.ironfolate
+                ),
+
+                yes_no(
+                    obj.ironfolatepluswomen
+                ),
+
+                yes_no(
+                    obj.pcalcium
+                ),
+
+                yes_no(
+                    obj.acalcium
+                ),
+
+                (
+                    obj.muac
+                    if obj.muac is not None
+                    else ""
+                ),
+
+                yes_no(
+                    obj.dmam
+                ),
+
+                yes_no(
+                    obj.rmam
+                ),
+
+                yes_no(
+                    obj.dsam
+                ),
+
+                yes_no(
+                    obj.rsam
+                ),
+
+                # Mental Health
+                yes_no(
+                    obj.antedepressionscreening
+                ),
+
+                yes_no(
+                    obj.antedepressiondiagnosed
+                ),
+
+                yes_no(
+                    obj.rpsychosocialcounselor
+                ),
+
+                # Laboratory / Screening
+                yes_no(
+                    obj.urinexamcheck
+                ),
+
+                safe_text(
+                    obj.urinexam
+                ),
+
+                yes_no(
+                    obj.rpositivepuriatomd
+                ),
+
+                yes_no(
+                    obj.coughmorethantwoweeks
+                ),
+
+                yes_no(
+                    obj.rcough
+                ),
+
+                yes_no(
+                    obj.ttvaccine
+                ),
+
+                # Danger Signs / Counseling
+                yes_no(
+                    obj.dangersign
+                ),
+
+                safe_text(
+                    obj.typeofdangersign
+                ),
+
+                yes_no(
+                    obj.birthplanningcounseling
+                ),
+
+                # Remarks
+                safe_text(
+                    obj.remarks
+                ),
             ])
 
+        # ========================================================
+        # CELL FORMATTING
+        # ========================================================
         for row in worksheet.iter_rows():
             for cell in row:
                 cell.alignment = Alignment(
@@ -1538,40 +3167,58 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
                     wrap_text=True,
                 )
 
+        # ========================================================
+        # AUTO COLUMN WIDTH
+        # ========================================================
         for column_cells in worksheet.columns:
+
             column_letter = get_column_letter(
                 column_cells[0].column
             )
+
             max_length = 0
 
             for cell in column_cells:
+
                 if cell.value is not None:
+
                     max_length = max(
                         max_length,
                         len(str(cell.value)),
                     )
 
-            worksheet.column_dimensions[column_letter].width = min(
+            worksheet.column_dimensions[
+                column_letter
+            ].width = min(
                 max_length + 3,
                 40,
             )
 
+        # ========================================================
+        # ANALYSIS-FRIENDLY SETTINGS
+        # ========================================================
         worksheet.freeze_panes = "A2"
         worksheet.auto_filter.ref = worksheet.dimensions
-        worksheet.row_dimensions[1].height = 35
 
+        # ========================================================
+        # RESPONSE
+        # ========================================================
         response = HttpResponse(
             content_type=(
                 "application/vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"
             )
         )
+
         response["Content-Disposition"] = (
-            'attachment; filename="ganc_fourth_session.xlsx"'
+            'attachment; '
+            'filename="ganc_fourth_session_full_export.xlsx"'
         )
 
         workbook.save(response)
+
         return response
+
 
     export_ganc_fourth_session_excel.short_description = (
         "Export selected GANC Fourth Session records to Excel"
@@ -1584,7 +3231,6 @@ class GancfouthsessionAdmin(BaseSessionAdmin):
 class GancDeliveryRegisterChoiceField(forms.ModelChoiceField):
     """
     Displays enrollment records as:
-
     Register ID | Woman Name | Father Name | Cohort
     """
 
