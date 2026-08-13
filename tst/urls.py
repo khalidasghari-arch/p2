@@ -21,6 +21,8 @@ urlpatterns = [
     # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
     path("api/qqm/", include("qqm.api.urls")),
     path("api/skilllab/dashboard/", include("skill_lab.api.urls")),
+    path("ganc-dashboard/", include("gancgpnc.dashboard_urls"),
+),
 ]
 
 if settings.DEBUG:

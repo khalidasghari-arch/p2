@@ -1,0 +1,234 @@
+.ganc-dashboard {
+    max-width: 1650px;
+    margin: 0 auto;
+    padding: 18px;
+}
+
+.ganc-dashboard-header {
+    margin-bottom: 22px;
+}
+
+.ganc-dashboard-header h1 {
+    margin-bottom: 5px;
+}
+
+.ganc-dashboard-subtitle {
+    color: #6b7280;
+    margin-top: 0;
+}
+
+.ganc-filter-panel {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 24px;
+}
+
+.ganc-filter-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+}
+
+.ganc-filter-grid label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.ganc-filter-grid select {
+    width: 100%;
+    min-height: 38px;
+}
+
+.ganc-filter-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.ganc-kpi-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(155px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+.ganc-kpi-card {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 9px;
+    padding: 16px;
+}
+
+.ganc-kpi-label {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 5px;
+}
+
+.ganc-kpi-value {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.ganc-kpi-note {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.ganc-retention-card {
+    border-left: 4px solid #0f766e;
+}
+
+.ganc-success-card {
+    border-left: 4px solid #15803d;
+}
+
+.ganc-risk-card {
+    border-left: 4px solid #d97706;
+}
+
+.ganc-danger-card {
+    border-left: 4px solid #b91c1c;
+}
+
+.ganc-section {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.ganc-section h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.ganc-two-column {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.ganc-continuum-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(125px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.ganc-stage {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    text-align: center;
+    padding: 14px 8px;
+    background: #f9fafb;
+}
+
+.ganc-stage-title {
+    font-weight: 600;
+}
+
+.ganc-stage-count {
+    font-size: 25px;
+    font-weight: 700;
+    margin: 7px 0;
+}
+
+.ganc-stage-percent {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.ganc-followup-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.ganc-followup-card {
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.ganc-followup-title {
+    font-size: 13px;
+    color: #9a3412;
+}
+
+.ganc-followup-value {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 5px;
+}
+
+.ganc-table-wrapper {
+    overflow-x: auto;
+}
+
+.ganc-table {
+    width: 100%;
+    border-collapse: collapse;
+    white-space: nowrap;
+}
+
+.ganc-table th,
+.ganc-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+}
+
+.ganc-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+}
+
+.ganc-table tbody tr:hover {
+    background: #f9fafb;
+}
+
+.ganc-chart-wrap {
+    width: 100%;
+    height: 340px;
+    margin-top: 15px;
+}
+
+#gancContinuumChart,
+#gancBreastfeedingChart {
+    width: 100%;
+    height: 100%;
+}
+
+@media (max-width: 900px) {
+
+    .ganc-two-column {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+
+    .ganc-dashboard {
+        padding: 10px;
+    }
+
+    .ganc-section {
+        padding: 14px;
+    }
+
+    .ganc-kpi-value {
+        font-size: 22px;
+    }
+}
