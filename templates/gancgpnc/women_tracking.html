@@ -1,0 +1,679 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+
+<style>
+
+    .wt-container {
+        padding: 15px;
+    }
+
+    .wt-title {
+        margin-bottom: 20px;
+    }
+
+    .wt-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .wt-card {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 7px;
+        padding: 15px;
+    }
+
+    .wt-card-label {
+        color: #666;
+        margin-bottom: 5px;
+    }
+
+    .wt-card-value {
+        font-size: 25px;
+        font-weight: bold;
+    }
+
+    .wt-filter-box {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 7px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .wt-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+    }
+
+    .wt-filter-grid label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .wt-filter-grid select,
+    .wt-filter-grid input {
+        width: 100%;
+        padding: 7px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .wt-filter-actions {
+        margin-top: 12px;
+    }
+
+    .wt-button {
+        background: #417690;
+        color: white !important;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .wt-reset {
+        margin-left: 8px;
+        text-decoration: none;
+    }
+
+    .wt-table-wrapper {
+        overflow-x: auto;
+    }
+
+    .wt-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+
+    .wt-table th {
+        background: #417690;
+        color: white;
+        padding: 9px;
+        white-space: nowrap;
+        text-align: left;
+    }
+
+    .wt-table td {
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+        white-space: nowrap;
+    }
+
+    .wt-yes {
+        color: green;
+        font-weight: bold;
+    }
+
+    .wt-no {
+        color: #b91c1c;
+        font-weight: bold;
+    }
+
+    .wt-status-completed {
+        color: green;
+        font-weight: bold;
+    }
+
+    .wt-status-progress {
+        color: #b7791f;
+        font-weight: bold;
+    }
+
+    .wt-status-followup {
+        color: #b91c1c;
+        font-weight: bold;
+    }
+
+</style>
+
+
+<div class="wt-container">
+
+    <div class="wt-title">
+
+        <h1>
+            Women Continuum Tracking
+        </h1>
+
+        <p>
+            Individual woman-level tracking from enrollment
+            through ANC, delivery and PNC.
+        </p>
+
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- KPI CARDS -->
+    <!-- ================================================== -->
+
+    <div class="wt-kpis">
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                Women Tracked
+            </div>
+            <div class="wt-card-value">
+                {{ summary.total }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                Completed Continuum
+            </div>
+            <div class="wt-card-value">
+                {{ summary.completed }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                In Progress
+            </div>
+            <div class="wt-card-value">
+                {{ summary.in_progress }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                Follow-up Required
+            </div>
+            <div class="wt-card-value">
+                {{ summary.followup_required }}
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- MISSING STAGE CARDS -->
+    <!-- ================================================== -->
+
+    <div class="wt-kpis">
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                Missing ANC 1
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_anc1 }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                ANC 1 → ANC 2 Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_anc2 }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                ANC 2 → ANC 3 Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_anc3 }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                ANC 3 → ANC 4 Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_anc4 }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                ANC 4 → Delivery Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_delivery }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                Delivery → PNC 1 Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_pnc1 }}
+            </div>
+        </div>
+
+
+        <div class="wt-card">
+            <div class="wt-card-label">
+                PNC 1 → PNC 2 Gap
+            </div>
+            <div class="wt-card-value">
+                {{ summary.missing_pnc2 }}
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- FILTERS -->
+    <!-- ================================================== -->
+
+    <div class="wt-filter-box">
+
+        <form method="get">
+
+            <div class="wt-filter-grid">
+
+                <div>
+
+                    <label>
+                        Cohort
+                    </label>
+
+                    <select name="cohort">
+
+                        <option value="">
+                            All Cohorts
+                        </option>
+
+                        {% for cohort in cohorts %}
+
+                            <option
+                                value="{{ cohort.id }}"
+                                {% if selected_cohort == cohort.id|stringformat:"s" %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ cohort.cohortname }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Tracking Status
+                    </label>
+
+                    <select name="tracking_status">
+
+                        <option value="">
+                            All Statuses
+                        </option>
+
+                        <option
+                            value="COMPLETED"
+                            {% if selected_tracking_status == "COMPLETED" %}
+                                selected
+                            {% endif %}
+                        >
+                            Completed
+                        </option>
+
+                        <option
+                            value="IN PROGRESS"
+                            {% if selected_tracking_status == "IN PROGRESS" %}
+                                selected
+                            {% endif %}
+                        >
+                            In Progress
+                        </option>
+
+                        <option
+                            value="FOLLOW-UP REQUIRED"
+                            {% if selected_tracking_status == "FOLLOW-UP REQUIRED" %}
+                                selected
+                            {% endif %}
+                        >
+                            Follow-up Required
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Next Expected Stage
+                    </label>
+
+                    <select name="next_stage">
+
+                        <option value="">
+                            All Stages
+                        </option>
+
+                        <option value="ANC FIRST">
+                            ANC First
+                        </option>
+
+                        <option value="ANC SECOND">
+                            ANC Second
+                        </option>
+
+                        <option value="ANC THIRD">
+                            ANC Third
+                        </option>
+
+                        <option value="ANC FOURTH">
+                            ANC Fourth
+                        </option>
+
+                        <option value="DELIVERY">
+                            Delivery
+                        </option>
+
+                        <option value="PNC FIRST">
+                            PNC First
+                        </option>
+
+                        <option value="PNC SECOND">
+                            PNC Second
+                        </option>
+
+                        <option value="COMPLETED">
+                            Completed
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div>
+
+                    <label>
+                        Search Woman
+                    </label>
+
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ search_value }}"
+                        placeholder="Register, name, father name..."
+                    >
+
+                </div>
+
+            </div>
+
+
+            <div class="wt-filter-actions">
+
+                <button
+                    type="submit"
+                    class="wt-button"
+                >
+                    Apply Filters
+                </button>
+
+                <a
+                    href="{% url 'ganc_dashboard:women_tracking' %}"
+                    class="wt-reset"
+                >
+                    Reset
+                </a>
+
+            </div>
+
+        </form>
+
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- WOMEN TRACKING TABLE -->
+    <!-- ================================================== -->
+
+    <div class="wt-table-wrapper">
+
+        <table class="wt-table">
+
+            <thead>
+
+                <tr>
+
+                    <th>Register</th>
+
+                    <th>Woman</th>
+
+                    <th>Father Name</th>
+
+                    <th>Cohort</th>
+
+                    <th>Province</th>
+
+                    <th>Facility</th>
+
+                    <th>ANC1</th>
+
+                    <th>ANC2</th>
+
+                    <th>ANC3</th>
+
+                    <th>ANC4</th>
+
+                    <th>Delivery</th>
+
+                    <th>PNC1</th>
+
+                    <th>PNC2</th>
+
+                    <th>Last Stage</th>
+
+                    <th>Next Stage</th>
+
+                    <th>Status</th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for woman in women %}
+
+                <tr>
+
+                    <td>
+                        {{ woman.register_number }}
+                    </td>
+
+                    <td>
+                        {{ woman.woman_name }}
+                    </td>
+
+                    <td>
+                        {{ woman.father_name }}
+                    </td>
+
+                    <td>
+                        {{ woman.cohort }}
+                    </td>
+
+                    <td>
+                        {{ woman.province }}
+                    </td>
+
+                    <td>
+                        {{ woman.facility }}
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.anc1 %}
+
+                            <span class="wt-yes">
+                                ✓
+                            </span>
+
+                        {% else %}
+
+                            <span class="wt-no">
+                                —
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.anc2 %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.anc3 %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.anc4 %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.delivery %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.pnc1 %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.pnc2 %}
+                            <span class="wt-yes">✓</span>
+                        {% else %}
+                            <span class="wt-no">—</span>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+                        {{ woman.last_stage }}
+                    </td>
+
+
+                    <td>
+                        {{ woman.next_stage }}
+                    </td>
+
+
+                    <td>
+
+                        {% if woman.tracking_status == "COMPLETED" %}
+
+                            <span class="wt-status-completed">
+                                COMPLETED
+                            </span>
+
+                        {% elif woman.tracking_status == "IN PROGRESS" %}
+
+                            <span class="wt-status-progress">
+                                IN PROGRESS
+                            </span>
+
+                        {% else %}
+
+                            <span class="wt-status-followup">
+                                FOLLOW-UP REQUIRED
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+                </tr>
+
+                {% empty %}
+
+                <tr>
+
+                    <td colspan="16">
+
+                        No women found for the selected filters.
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}
