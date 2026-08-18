@@ -16,34 +16,17 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from django import forms
+from django.urls import reverse
 
 # ============================================================
 # CUSTOM ADMIN MODEL ORDER
 # GANC / PNC CLINICAL WORKFLOW
 # ============================================================
 
-from django.contrib import admin
-
-# Keep a reference to Django's original get_app_list method
 _original_get_app_list = admin.AdminSite.get_app_list
 
+
 def custom_get_app_list(self, request, app_label=None):
-    """
-    Custom ordering for models inside Django Admin.
-
-    GANC/PNC workflow:
-        1. Cohort
-        2. Enrollment
-        3. ANC First Session
-        4. ANC Second Session
-        5. ANC Third Session
-        6. ANC Fourth Session
-        7. Delivery
-        8. PNC First Session
-        9. PNC Second Session
-
-    Other applications/models keep their normal ordering.
-    """
 
     app_list = _original_get_app_list(
         self,
@@ -51,12 +34,12 @@ def custom_get_app_list(self, request, app_label=None):
         app_label,
     )
 
-    # --------------------------------------------------------
-    # Desired GANC/PNC ordering
-    # Use model class names, not verbose names.
-    # --------------------------------------------------------
+    # ========================================================
+    # GANC / PNC MODEL ORDER
+    # ========================================================
 
     ganc_model_order = {
+        "GancDashboard": 0,
         "Gancohort": 1,
         "Gancenrollment": 2,
         "Gancfirstsession": 3,
@@ -68,13 +51,40 @@ def custom_get_app_list(self, request, app_label=None):
         "GroupPncsecondSession": 9,
     }
 
-    # --------------------------------------------------------
-    # Find GANC/PNC application
-    # --------------------------------------------------------
-
     for app in app_list:
 
         if app.get("app_label") == "gancgpnc":
+
+            # =================================================
+            # ADD DASHBOARD LINK
+            # =================================================
+
+            dashboard_exists = any(
+                model.get("object_name") == "GancDashboard"
+                for model in app["models"]
+            )
+
+            if not dashboard_exists:
+
+                app["models"].append({
+                    "name": "DASHBOARD",
+                    "object_name": "GancDashboard",
+                    "perms": {
+                        "add": False,
+                        "change": False,
+                        "delete": False,
+                        "view": True,
+                    },
+                    "admin_url": reverse(
+                        "ganc_dashboard:dashboard"
+                    ),
+                    "add_url": None,
+                    "view_only": True,
+                })
+
+            # =================================================
+            # SORT MENU
+            # =================================================
 
             app["models"].sort(
                 key=lambda model: ganc_model_order.get(
@@ -85,7 +95,6 @@ def custom_get_app_list(self, request, app_label=None):
 
     return app_list
 
-# Apply custom ordering
 admin.AdminSite.get_app_list = custom_get_app_list
 
 # ============================================================
