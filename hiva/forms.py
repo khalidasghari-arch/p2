@@ -23,6 +23,7 @@ AFGHAN_YEAR_CHOICES = [
 ]
 
 AFGHAN_PY_CHOICES = [
+    ("BL", "BL"),
     ("PY1-Q1", "PY1-Q1"),
     ("PY1-Q2", "PY1-Q2"),
     ("PY1-Q3", "PY1-Q3"),
