@@ -9104,3 +9104,437 @@ admin.site.register(Participationtype)
 admin.site.register(Participantposition)
 admin.site.register(Participanteducation)
 admin.site.register(Position)
+
+# Append this entire block to the END of your existing admin.py.
+# ProvinceRestrictedAdminMixin and user_province are already defined there.
+# This class is independent of AimPPHDashboardAdmin and does not modify it.
+from .models import AimPEEDashboard
+from django.core.exceptions import PermissionDenied, SuspiciousOperation
+from django.db.models import Avg
+
+@admin.register(AimPEEDashboard)
+class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/aimpee/dashboard.html"
+    actions = None
+
+    indicator_definitions = (
+        ('anc_total_seen', '1. Number of pregnant women seen in ANC'),
+        ('anc_bp_measured', '2. Number of ANC women with blood pressure measured'),
+        ('preeclampsia_diagnosed', '3. Number of ANC women diagnosed with Pre-Eclampsia (BP >140/90 + proteinuria)'),
+        ('severe_pree_or_eclampsia', '4. Number of patients with Severe Pre-Eclampsia or Eclampsia WITH BP > 160 Systolic OR 110 diastolic'),
+        ('severe_pree_antihypertensive_within_1hr', '5. Number of patients with Severe Pre-eclampsia or Eclampsia WITH BP > 160 Systolic OR 110 diastolic who received an antihypertensive medication within one hour of the diagnosis'),
+        ('opd_pree_seen_by_md', '6. Number of outpatients diagnosed in OPD with Pre-Eclampsia by MD(AAC member must check that the patient with high BP is seen by the MD in OPD)'),
+        ('opd_pree_twice_weekly_followup', '7. Number of outpatients seen in ANC/OPD ward with Pre-Eclampsia who returned to ANC/OPD ward twice a week'),
+        ('opd_pree_weekly_lab_testing', '8. Number of outpatients seen in ANC/OPD ward with Pre-Eclampsia who received weekly laboratory testing'),
+        ('opd_pree_weekly_lab_testing_percent', '9. Percentage of outpatients seen in ANC/OPD with Pre-Eclampsia who received weekly laboratory testing'),
+        ('pree_admitted_from_anc', '10. Number of Patients with Pre-E diagnosed in ANC clinic who required admision (Admitted patients)'),
+        ('spe_admissions_before_delivery', '11. Number of patients admitted to HFs with SEVERE PRE-ECLAMPSIA (SPE) before delivery, birth (including referrals in)'),
+        ('eclampsia_admissions_before_delivery', '12. Number of patients admitted to a HFs with  Eclampsia before delivery, birth (including referrals in)'),
+        ('magnesium_sulfate_within_1hr', '13. Number of patients WITH SEVERE PRE-ECLAMPSIA or Eclampsia who received Magnesium Sulfate within one hour of the diagnosis'),
+        ('chronic_htn_superimposed_pree', '14. Number of patients with chronic hypertension* with superimposed pre-eclampsia'),
+        ('gestational_hypertension', '15. Number of patients with Gestational hypertension*'),
+        ('spe_delivered_within_24hrs', '16. Number of Severe Pre-eclampsia patients who delivered within 24 hours of admission'),
+        ('eclampsia_delivered_within_12hrs', '17. Number of Eclampsia patients who delivered within 12 hours of admission'),
+        ('post_delivery_followup_3days', '18. Number of patients with SPE or eclampsia who had a follow up visit within 3 days after the delivery discharge'),
+        ('postpartum_pree_eclampsia', '19. Number of patients with SPE or eclampsia diagnosed during the post-partum period'),
+        ('renal_failure', '20. Renal Failure (LESS THAN 30 ml/hr for 4 hours despite fluid challenge)'),
+        ('pulmonary_edema', '21. Pulmonary edema'),
+        ('eclamptic_seizure', '22. Eclamptic seizure'),
+        ('stroke', '23. Stroke (Cerebral Hemorrhage or Blood clot in brain)'),
+        ('thrombocytopenia', '24. Thrombocytopenia (non-HELLP)'),
+        ('hellp_syndrome', '25. HELLP syndrome'),
+        ('pres', '26. PRES (Posterior Reversible Encephalopathy Syndrome)'),
+        ('intrauterine_fetal_death', '27. Intrauterine fetal death'),
+        ('placental_abruption', '28. Placental abruption'),
+        ('eclamptic_coma', '29. Eclamptic coma'),
+        ('total_complications', '30. Total complications due to SPE and Eclampsia'),
+        ('maternal_death', '31. Maternal deaths due to SPE or Eclampsia'),
+    )
+    percentage_field = "opd_pree_weekly_lab_testing_percent"
+    rate_definitions = (
+        ("bp_coverage", "ANC BP measurement (%)", "anc_bp_measured", "anc_total_seen"),
+        ("antihypertensive_rate", "Antihypertensive within 1 hour (%)", "severe_pree_antihypertensive_within_1hr", "severe_pree_or_eclampsia"),
+        ("spe_delivery_rate", "SPE delivery within 24 hours (%)", "spe_delivered_within_24hrs", "spe_admissions_before_delivery"),
+        ("eclampsia_delivery_rate", "Eclampsia delivery within 12 hours (%)", "eclampsia_delivered_within_12hrs", "eclampsia_admissions_before_delivery"),
+    )
+    methodology_note = (
+        "Counts are summed from facility-month records, including draft and submitted records, "
+        "as in the supplied AIM-PPH dashboard. Rates use the ratio of summed counts, not the average "
+        "of record percentages. A zero denominator is shown as N/A. Indicator 9 is the unweighted "
+        "mean of the stored laboratory-testing percentages; it is not pooled coverage. Its "
+        "denominator is not defined in the supplied model or form. Stored complications totals "
+        "are preserved; complication categories may overlap. No combined SPE/eclampsia patient "
+        "total, magnesium-sulfate coverage, postpartum coverage, or death rate is inferred. "
+        "PRE-I/PRE-P compares totals within the selected filters and may cover different numbers "
+        "of reporting months. Missing periods are N/A, not zero. Changes require context review "
+        "and do not establish improvement or causation."
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    def _progress_filter(self, queryset, progress_type):
+        """
+        Supports common PRE-I / PRE-P spelling variations.
+        """
+        if progress_type == "PRE-I":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-I")
+                | Q(bl_progress__iexact="PRE I")
+                | Q(bl_progress__iexact="PREI")
+                | Q(bl_progress__iexact="PRE_I")
+            )
+
+        if progress_type == "PRE-P":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-P")
+                | Q(bl_progress__iexact="PRE P")
+                | Q(bl_progress__iexact="PREP")
+                | Q(bl_progress__iexact="PRE_P")
+            )
+
+        return queryset.none()
+
+    def province_filter_kwargs(self, request):
+        return {"aimfacilityname__districtfk__provincefk": user_province(request)}
+
+    def _base_queryset(self, request):
+        # Use the existing mixin so staff without a province receive no records.
+        return self.get_queryset(request).select_related(
+            "aimfacilityname", "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+    def _apply_filters(self, request, queryset):
+        names = ("province", "facility", "gre_year", "gre_month",
+                 "shamsiyear", "shamsimonth", "bl_progress", "period")
+        filters = {name: request.GET.get(name, "").strip() for name in names}
+        paths = {
+            "province": "aimfacilityname__districtfk__provincefk_id",
+            "facility": "aimfacilityname_id",
+        }
+        for name, value in filters.items():
+            if not value:
+                continue
+            if name in paths:
+                if not value.isdecimal() or len(value) > 18 or int(value) <= 0:
+                    raise SuspiciousOperation("Invalid dashboard filter ID")
+                queryset = queryset.filter(**{paths[name]: int(value)})
+            elif name == "bl_progress":
+                canonical = value.upper().replace("_", "-").replace(" ", "-")
+                canonical = {"PREI": "PRE-I", "PREP": "PRE-P"}.get(canonical, canonical)
+                if canonical in ("PRE-I", "PRE-P"):
+                    queryset = self._progress_filter(queryset, canonical)
+                else:
+                    queryset = queryset.filter(bl_progress=value)
+            else:
+                queryset = queryset.filter(**{name: value})
+        return queryset, filters
+
+    def _annotations(self):
+        # Never SUM the stored Decimal percentage.
+        return {
+            "sum_" + field: Avg(field) if field == self.percentage_field else Sum(field)
+            for field, label in self.indicator_definitions
+        }
+
+    def _normalize(self, row):
+        for field, label in self.indicator_definitions:
+            value = row.get("sum_" + field)
+            if field == self.percentage_field:
+                row[field] = round(float(value), 2) if value is not None else None
+            else:
+                row[field] = int(value or 0)
+        for key, label, numerator, denominator in self.rate_definitions:
+            row[key] = (round(row[numerator] * 100 / row[denominator], 2)
+                        if row[denominator] > 0 else None)
+        return row
+
+    def _totals(self, queryset):
+        return self._normalize(queryset.aggregate(**self._annotations()))
+
+    def _group(self, queryset, fields, aliases=None):
+        aliases = aliases or {}
+        return [self._normalize(row) for row in queryset.values(*fields, **aliases).annotate(
+            records=Count("id"), facilities=Count("aimfacilityname_id", distinct=True),
+            **self._annotations(),
+        ).order_by(*fields, *aliases)]
+
+    def _display(self, value):
+        if value is None:
+            return "N/A"
+        if isinstance(value, (float, Decimal)):
+            return round(float(value), 2)
+        return value
+
+    def _label(self, field, label):
+        if field == self.percentage_field:
+            return label + " — mean of stored percentages (%)"
+        return label
+
+    def _table(self, key, title, columns, rows, note=""):
+        return {
+            "key": key, "title": title, "note": note,
+            "headers": [label for field, label in columns],
+            "rows": [[self._display(row.get(field)) for field, label in columns] for row in rows],
+        }
+
+    def _comparison(self, queryset):
+        aliases = {
+            "province": F("aimfacilityname__districtfk__provincefk__name"),
+            "facility": F("aimfacilityname__name"),
+        }
+        maps = []
+        for progress in ("PRE-I", "PRE-P"):
+            rows = self._group(self._progress_filter(queryset, progress),
+                               ["aimfacilityname_id"], aliases)
+            maps.append({r["aimfacilityname_id"]: r for r in rows})
+        rows = []
+        for facility_id in sorted(set(maps[0]) | set(maps[1])):
+            before, after = maps[0].get(facility_id), maps[1].get(facility_id)
+            info = before or after
+            for field, label in self.indicator_definitions:
+                pre_i = before[field] if before else None
+                pre_p = after[field] if after else None
+                complete = pre_i is not None and pre_p is not None
+                change = round(pre_p - pre_i, 2) if complete else None
+                relative = ("N/A" if not complete else
+                            "New" if pre_i == 0 and pre_p != 0 else
+                            "0.00%" if pre_i == 0 else
+                            f"{(pre_p - pre_i) / pre_i * 100:.2f}%")
+                rows.append({
+                    "province": info["province"], "facility": info["facility"],
+                    "indicator": self._label(field, label), "pre_i": pre_i, "pre_p": pre_p,
+                    "pre_i_records": before["records"] if before else 0,
+                    "pre_p_records": after["records"] if after else 0,
+                    "absolute_change": change, "percent_change_display": relative,
+                    "direction": "Context review",
+                    "improvement_status": ("Insufficient data" if not complete else
+                                           "No change" if change == 0 else "Review"),
+                    "notes": ("Indicator 9 absolute change is in percentage points. " if field == self.percentage_field else "")
+                             + "Compare reporting months, patient volume, and source records before interpretation.",
+                })
+        return sorted(rows, key=lambda r: (r["province"] or "", r["facility"] or ""))
+
+    def _quality_rows(self, queryset):
+        output = []
+        for obj in queryset.iterator(chunk_size=1000):
+            issues = []
+            for field, label in self.indicator_definitions:
+                value = getattr(obj, field)
+                if value is not None and value < 0:
+                    issues.append(f"Negative value: {field}")
+            percentage = getattr(obj, self.percentage_field)
+            if percentage is not None and not 0 <= percentage <= 100:
+                issues.append("Stored laboratory-testing percentage outside 0–100")
+            for key, label, numerator, denominator in self.rate_definitions:
+                if getattr(obj, numerator) > getattr(obj, denominator):
+                    issues.append(f"Review numerator greater than denominator: {label}")
+            if issues:
+                facility = obj.aimfacilityname
+                district = facility.districtfk
+                output.append({
+                    "id": obj.pk, "province": district.provincefk.name,
+                    "district": district.name, "facility": facility.name,
+                    "hfcode": facility.hfcode, "period": obj.period,
+                    "bl_progress": obj.bl_progress, "issues": "; ".join(issues),
+                })
+        return output
+
+    def _chart(self, key, title, rows, label_field, series, kind="bar", percent=False, horizontal=False):
+        return {
+            "key": key, "title": title, "kind": kind, "percent": percent,
+            "horizontal": horizontal, "labels": [r.get(label_field) or "Unknown" for r in rows],
+            "series": [{"label": label, "data": [r.get(field) for r in rows]}
+                       for field, label in series],
+        }
+
+    def _build_dashboard_data(self, request):
+        base_qs = self._base_queryset(request)
+        queryset, filters = self._apply_filters(request, base_qs)
+        # Facility choices cascade from the selected province, within user scope.
+        # _apply_filters has already validated the province ID.
+        facility_qs = base_qs
+        if filters["province"]:
+            facility_qs = facility_qs.filter(
+                aimfacilityname__districtfk__provincefk_id=int(filters["province"])
+            )
+        options = {
+            "province_options": [{"province_id": pid, "province": name} for pid, name in
+                base_qs.values_list("aimfacilityname__districtfk__provincefk_id",
+                                    "aimfacilityname__districtfk__provincefk__name").distinct().order_by(
+                                        "aimfacilityname__districtfk__provincefk__name")],
+            "facility_options": [{"facility_id": fid, "facility": name} for fid, name in
+                facility_qs.values_list("aimfacilityname_id", "aimfacilityname__name").distinct().order_by(
+                    "aimfacilityname__name")],
+        }
+        for field in ("gre_year", "gre_month", "shamsiyear", "shamsimonth", "bl_progress", "period"):
+            options[field + "_options"] = list(base_qs.exclude(**{field: ""}).exclude(
+                **{field + "__isnull": True}).values_list(field, flat=True).distinct().order_by(field))
+        totals = self._totals(queryset)
+        kpis = {
+            **totals, "records": queryset.count(),
+            "facilities": queryset.values("aimfacilityname_id").distinct().count(),
+            "provinces": queryset.values("aimfacilityname__districtfk__provincefk_id").distinct().count(),
+        }
+        cards = [
+            ("records", "Records"), ("facilities", "Facilities"), ("provinces", "Provinces"),
+            ("anc_total_seen", "Pregnant women seen in ANC"),
+            ("anc_bp_measured", "ANC women with BP measured"), ("bp_coverage", "ANC BP measurement (%)"),
+            ("preeclampsia_diagnosed", "Pre-eclampsia diagnosed in ANC"),
+            ("severe_pree_or_eclampsia", "Severe Pre-E / eclampsia with high BP"),
+            ("severe_pree_antihypertensive_within_1hr", "Antihypertensive within 1 hour"),
+            ("antihypertensive_rate", "Antihypertensive within 1 hour (%)"),
+            ("magnesium_sulfate_within_1hr", "Magnesium sulfate within 1 hour"),
+            ("spe_admissions_before_delivery", "SPE admissions before delivery"),
+            ("eclampsia_admissions_before_delivery", "Eclampsia admissions before delivery"),
+            ("total_complications", "Reported total complications"),
+            ("maternal_death", "Maternal deaths due to SPE / eclampsia"),
+            (self.percentage_field, "Lab testing: mean stored percentage (%)"),
+        ]
+        progress_rows = self._group(queryset, ["bl_progress"])
+        province_rows = self._group(queryset, ["aimfacilityname__districtfk__provincefk_id"],
+                                   {"province": F("aimfacilityname__districtfk__provincefk__name")})
+        facility_rows = self._group(queryset, ["aimfacilityname_id"], {
+            "province": F("aimfacilityname__districtfk__provincefk__name"),
+            "district": F("aimfacilityname__districtfk__name"),
+            "facility": F("aimfacilityname__name"), "hfcode": F("aimfacilityname__hfcode"),
+        })
+        monthly_rows = self._group(queryset, ["gre_year", "gre_month", "period"])
+        for row in monthly_rows:
+            row["month_label"] = f"{row['gre_year']}-{row['gre_month']} / {row['period']}"
+        comparison_rows = self._comparison(queryset)
+        quality_rows = self._quality_rows(queryset)
+        indicators = [(field, self._label(field, label)) for field, label in self.indicator_definitions]
+        summary_columns = [("records", "Records"), ("facilities", "Facilities")] + indicators + [
+            (key, label) for key, label, numerator, denominator in self.rate_definitions]
+        tables = [self._table("comparison", "Facility-level PRE-I vs PRE-P indicator comparison", [
+            ("province", "Province"), ("facility", "Facility"), ("indicator", "Indicator"),
+            ("pre_i_records", "PRE-I records"), ("pre_p_records", "PRE-P records"),
+            ("pre_i", "PRE-I"), ("pre_p", "PRE-P"), ("absolute_change", "Absolute change"),
+            ("percent_change_display", "Percent change"), ("direction", "Direction"),
+            ("improvement_status", "Status"), ("notes", "Notes for verification"),
+        ], comparison_rows, "PRE_I = PRE_Intervention; PRE_P = POST_Intervention. The selected filters also apply here. A missing side is N/A."),
+            self._table("progress", "Baseline / progress summary", [("bl_progress", "Baseline / progress")] + summary_columns, progress_rows),
+            self._table("province", "Province summary", [("province", "Province")] + summary_columns, province_rows),
+            self._table("monthly", "Monthly trend", [("gre_year", "Gregorian year"), ("gre_month", "Gregorian month"), ("period", "Period")] + summary_columns, monthly_rows),
+        ]
+        distributions = []
+        for key, title, start, stop in (
+            ("screening", "ANC / OPD screening and follow-up", 0, 8),
+            ("care", "Admissions, treatment and follow-up", 9, 19),
+            ("complications", "Complication categories", 19, 29),
+        ):
+            dist = [{"category": label, "value": totals[field]} for field, label in self.indicator_definitions[start:stop]]
+            distributions.append((key, title, dist))
+            tables.append(self._table(key, title, [("category", "Indicator"), ("value", "Count")], dist))
+        tables.append(self._table("quality", "Data quality review", [
+            ("id", "Record ID"), ("province", "Province"), ("district", "District"),
+            ("facility", "Facility"), ("hfcode", "HF code"), ("period", "Period"),
+            ("bl_progress", "Baseline / progress"), ("issues", "Issue"),
+        ], quality_rows, "These are review flags, not automatic corrections. No flags does not establish that all data are correct."))
+        tables.append(self._table("facility", "Facility summary", [
+            ("province", "Province"), ("district", "District"), ("facility", "Facility"), ("hfcode", "HF code"),
+        ] + summary_columns, facility_rows))
+        rate_series = [(key, label) for key, label, numerator, denominator in self.rate_definitions[:2]]
+        count_series = [("anc_total_seen", "ANC seen"), ("severe_pree_or_eclampsia", "Severe Pre-E / eclampsia"),
+                        ("magnesium_sulfate_within_1hr", "Magnesium sulfate within 1 hour")]
+        charts = [
+            self._chart("progress_rates", "Baseline / progress rates", progress_rows, "bl_progress", rate_series, percent=True),
+            self._chart("monthly_trend", "Monthly clinical activity", monthly_rows, "month_label", count_series, kind="line"),
+            self._chart("province_counts", "Province clinical activity", province_rows, "province", count_series),
+            self._chart("facility_bp", "ANC BP measurement by facility — top 10", sorted(
+                [r for r in facility_rows if r["bp_coverage"] is not None], key=lambda r: r["bp_coverage"], reverse=True)[:10],
+                "facility", [("bp_coverage", "BP measurement (%)")], percent=True, horizontal=True),
+        ]
+        for key, title, dist in distributions:
+            charts.append(self._chart(key, title, dist if kpis["records"] else [], "category", [("value", "Count")], horizontal=True))
+        compare_chart = []
+        period_totals = []
+        for phase in ("PRE-I", "PRE-P"):
+            phase_qs = self._progress_filter(queryset, phase)
+            period_totals.append(self._totals(phase_qs) if phase_qs.exists() else None)
+        for field, label in count_series:
+            compare_chart.append({"indicator": label, "pre_i": period_totals[0][field] if period_totals[0] else None,
+                                  "pre_p": period_totals[1][field] if period_totals[1] else None})
+        charts.append(self._chart("comparison", "PRE-I vs PRE-P — selected count indicators", compare_chart if any(period_totals) else [],
+                                  "indicator", [("pre_i", "PRE-I"), ("pre_p", "PRE-P")], horizontal=True))
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+        return {
+            **options, "filters": filters, "export_query": export_query.urlencode(),
+            "kpis": kpis, "cards": [{"label": label, "value": self._display(kpis[key])} for key, label in cards],
+            "tables": tables, "charts": charts, "chart_data": charts,
+            "methodology_note": self.methodology_note,
+        }
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        data = self._build_dashboard_data(request)
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+        context = {
+            **self.admin_site.each_context(request), **(extra_context or {}), **data,
+            "title": "AIM-PEE Dashboard", "opts": self.model._meta,
+        }
+        return TemplateResponse(request, self.change_list_template, context)
+
+    def _export_dashboard_excel(self, data):
+        workbook = Workbook()
+        summary = workbook.active
+        summary.title = "Summary"
+        summary.append(["AIM-PEE Dashboard", "Value"])
+        for card in data["cards"]:
+            summary.append([card["label"], card["value"]])
+        for table in data["tables"]:
+            sheet = workbook.create_sheet(table["key"].title()[:31])
+            sheet.append(table["headers"])
+            for row in table["rows"]:
+                sheet.append(row)
+        notes = workbook.create_sheet("Methodology_Notes")
+        notes.append(["Topic", "Explanation"])
+        notes.append(["Methodology", data["methodology_note"]])
+        for key, label, numerator, denominator in self.rate_definitions:
+            notes.append([label, f"100 × SUM({numerator}) / SUM({denominator}); denominator <= 0: N/A"])
+        notes.append(["Indicator 9", "AVG(opd_pree_weekly_lab_testing_percent); unweighted mean of stored percentages, not pooled coverage"])
+        for key, value in data["filters"].items():
+            notes.append(["Filter: " + key, value or "All"])
+        for table in data["tables"]:
+            if table["note"]:
+                notes.append([table["title"], table["note"]])
+        for sheet in workbook.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for row in sheet:
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cell.value = ILLEGAL_CHARACTERS_RE.sub("", cell.value)
+                        # Treat record labels as text, including strings beginning with '='.
+                        cell.data_type = "s"
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor="1F4E78")
+            for column in sheet.columns:
+                width = max(len(str(cell.value or "")) for cell in column)
+                sheet.column_dimensions[get_column_letter(column[0].column)].width = min(max(width + 2, 14), 55)
+        filename = "AIM_PEE_Dashboard_" + timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S") + ".xlsx"
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        workbook.save(response)
+        return response

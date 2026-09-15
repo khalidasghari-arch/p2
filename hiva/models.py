@@ -1339,6 +1339,12 @@ class aimpee(models.Model):
     def __str__(self):
         return f"AIM-PEE Indicators #{self.id}"
     
+class AimPEEDashboard(aimpee):
+    class Meta:
+        proxy = True
+        verbose_name = "AIM-PEE DASHBOARD"
+        verbose_name_plural = "AIM-PEE DASHBOARD"
+        
 class aimpph(models.Model):
     shamsimonth = models.CharField(verbose_name="Afghanistan Month")
     shamsiyear = models.CharField(verbose_name="Afghanistan Year")

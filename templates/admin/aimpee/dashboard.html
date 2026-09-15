@@ -1,0 +1,636 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+
+<style>
+    :root {
+        --pee-blue: #1f4e78;
+        --pee-blue-2: #1565c0;
+        --pee-green: #2e7d32;
+        --pee-orange: #ef6c00;
+        --pee-red: #c62828;
+        --pee-purple: #6a1b9a;
+        --pee-gray: #607d8b;
+        --pee-light-blue: #f4f8fb;
+        --pee-border: #d9e2f3;
+        --pee-text: #263238;
+        --pee-muted: #607d8b;
+    }
+
+    .pee-dashboard {
+        font-family: Arial, sans-serif;
+        color: var(--pee-text);
+    }
+
+    .pee-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .pee-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--pee-blue);
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .pee-subtitle {
+        color: #555;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .pee-card,
+    .pee-section {
+        background: #ffffff;
+        border: 1px solid var(--pee-border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
+    }
+
+    .pee-section h2 {
+        margin: 0 0 12px 0;
+        color: var(--pee-blue);
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .pee-section h3 {
+        margin: 0 0 6px 0;
+        color: var(--pee-blue);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .pee-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(110px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .pee-filter-grid label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .pee-filter-grid input,
+    .pee-filter-grid select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+        background: #ffffff;
+        min-height: 36px;
+        box-sizing: border-box;
+    }
+
+    .pee-filter-grid input:focus,
+    .pee-filter-grid select:focus,
+    .pee-search:focus {
+        outline: none;
+        border-color: var(--pee-blue);
+        box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
+    }
+
+    .pee-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        background: var(--pee-blue);
+        color: #ffffff !important;
+        border-radius: 7px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    .pee-btn:hover {
+        background: #173b5b;
+        color: #ffffff !important;
+    }
+
+    .pee-btn-secondary {
+        background: var(--pee-gray);
+    }
+
+    .pee-btn-secondary:hover {
+        background: #455a64;
+    }
+
+    .pee-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(115px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .pee-kpi {
+        background: linear-gradient(180deg, #ffffff, var(--pee-light-blue));
+        border: 1px solid var(--pee-border);
+        border-radius: 12px;
+        padding: 14px 10px;
+        text-align: center;
+        min-height: 86px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .pee-kpi-value {
+        font-size: 25px;
+        font-weight: 800;
+        color: var(--pee-blue);
+        line-height: 1.1;
+    }
+
+    .pee-kpi-label {
+        font-size: 12px;
+        color: #555;
+        margin-top: 6px;
+        line-height: 1.3;
+    }
+
+    .pee-note {
+        padding: 12px 14px;
+        background: #fff8e1;
+        border-left: 5px solid #f9a825;
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .pee-info-note {
+        padding: 12px 14px;
+        background: #e3f2fd;
+        border-left: 5px solid var(--pee-blue-2);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .pee-warning-note {
+        padding: 12px 14px;
+        background: #ffebee;
+        border-left: 5px solid var(--pee-red);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 12px;
+    }
+
+    .chart-card {
+        background: #ffffff;
+        border: 1px solid var(--pee-border);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
+    }
+
+    .chart-card p {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.4;
+    }
+
+    .chart-box {
+        position: relative;
+        height: 330px;
+        width: 100%;
+    }
+
+    .chart-box-large {
+        height: 390px;
+    }
+
+    .chart-empty {
+        display: none;
+        height: 160px;
+        border: 1px dashed #ccd6e0;
+        border-radius: 10px;
+        align-items: center;
+        justify-content: center;
+        color: #607d8b;
+        font-size: 13px;
+        text-align: center;
+        padding: 12px;
+    }
+
+    table.pee-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .pee-table th {
+        background: var(--pee-blue);
+        color: #ffffff;
+        padding: 8px;
+        border: 1px solid var(--pee-border);
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .pee-table td {
+        padding: 7px;
+        border: 1px solid var(--pee-border);
+        vertical-align: top;
+        line-height: 1.4;
+    }
+
+    .pee-table tr:nth-child(even) {
+        background: #f7fbff;
+    }
+
+    .pee-table tr:hover {
+        background: #eef6ff;
+    }
+
+    .pee-comparison-table th {
+        background: #1f4e78;
+        color: #ffffff;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .pee-comparison-table td:nth-child(3) {
+        min-width: 380px;
+    }
+
+    .pee-comparison-table td:nth-child(10),
+    .pee-comparison-table td:nth-child(11) {
+        min-width: 260px;
+    }
+
+    .pee-comparison-table tr:nth-child(even) {
+        background: #c7ecf7;
+    }
+
+    .pee-comparison-table tr:nth-child(odd) {
+        background: #ffffff;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+        max-height: 620px;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        color: #ffffff;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .badge-green {
+        background: var(--pee-green);
+    }
+
+    .badge-blue {
+        background: var(--pee-blue-2);
+    }
+
+    .badge-orange {
+        background: var(--pee-orange);
+    }
+
+    .badge-gray {
+        background: var(--pee-gray);
+    }
+
+    .badge-red {
+        background: var(--pee-red);
+    }
+
+    .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    .small-muted {
+        color: var(--pee-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .pee-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .pee-search {
+        min-width: 260px;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+    }
+
+    .pee-footer-note {
+        margin-top: 12px;
+        color: #607d8b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 1400px) {
+        .pee-filter-grid,
+        .pee-kpi-grid {
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
+        }
+
+        .chart-grid,
+        .two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .pee-header {
+            flex-direction: column;
+        }
+
+        .pee-filter-grid,
+        .pee-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .pee-title {
+            font-size: 23px;
+        }
+
+        .chart-box {
+            height: 300px;
+        }
+
+        .pee-search {
+            width: 100%;
+            min-width: 100%;
+        }
+    }
+</style>
+
+<div class="pee-dashboard">
+
+    <div class="pee-header">
+        <div>
+            <h1 class="pee-title">AIM-PEE Dashboard</h1>
+            <div class="pee-subtitle">
+                Dashboard for AIM pre-eclampsia and eclampsia screening, treatment, admissions, complications, progress comparison, and data quality.
+            </div>
+        </div>
+
+        <div>
+            <a class="pee-btn" href="?{{ export_query }}">Export Excel</a>
+        </div>
+    </div>
+
+    <div class="pee-card">
+        <form method="get" id="aimpee-filter-form">
+            <div class="pee-filter-grid">
+
+                <div>
+                    <label>Province</label>
+                    <select name="province" id="aimpee-province-filter">
+                        <option value="">All</option>
+                        {% for p in province_options %}
+                            <option value="{{ p.province_id }}" {% if filters.province|stringformat:"s" == p.province_id|stringformat:"s" %}selected{% endif %}>
+                                {{ p.province }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Facility</label>
+                    <select name="facility" id="aimpee-facility-filter">
+                        <option value="">All</option>
+                        {% for f in facility_options %}
+                            <option value="{{ f.facility_id }}" {% if filters.facility|stringformat:"s" == f.facility_id|stringformat:"s" %}selected{% endif %}>
+                                {{ f.facility }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Gregorian Year</label>
+                    <select name="gre_year">
+                        <option value="">All</option>
+                        {% for y in gre_year_options %}
+                            <option value="{{ y }}" {% if filters.gre_year|stringformat:"s" == y|stringformat:"s" %}selected{% endif %}>
+                                {{ y }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Gregorian Month</label>
+                    <select name="gre_month">
+                        <option value="">All</option>
+                        {% for m in gre_month_options %}
+                            <option value="{{ m }}" {% if filters.gre_month|stringformat:"s" == m|stringformat:"s" %}selected{% endif %}>
+                                {{ m }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Shamsi Year</label>
+                    <select name="shamsiyear">
+                        <option value="">All</option>
+                        {% for y in shamsiyear_options %}
+                            <option value="{{ y }}" {% if filters.shamsiyear|stringformat:"s" == y|stringformat:"s" %}selected{% endif %}>
+                                {{ y }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Shamsi Month</label>
+                    <select name="shamsimonth">
+                        <option value="">All</option>
+                        {% for m in shamsimonth_options %}
+                            <option value="{{ m }}" {% if filters.shamsimonth|stringformat:"s" == m|stringformat:"s" %}selected{% endif %}>
+                                {{ m }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label>Baseline / Progress</label>
+                    <select name="bl_progress">
+                        <option value="">All</option>
+                        {% for p in bl_progress_options %}
+                            <option value="{{ p }}" {% if filters.bl_progress|stringformat:"s" == p|stringformat:"s" %}selected{% endif %}>
+                                {{ p }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="aimpee-period-filter">Period</label>
+                    <select name="period" id="aimpee-period-filter">
+                        <option value="">All</option>
+                        {% for p in period_options %}
+                            <option value="{{ p }}" {% if filters.period|stringformat:"s" == p|stringformat:"s" %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+            </div>
+
+            <div style="margin-top:14px;">
+                <button type="submit" class="pee-btn">Apply filters</button>
+                <a href="?" class="pee-btn pee-btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="pee-kpi-grid">
+        {% for card in cards %}
+        <div class="pee-kpi"><div class="pee-kpi-value">{{ card.value }}</div><div class="pee-kpi-label">{{ card.label }}</div></div>
+        {% endfor %}
+    </div>
+    <div class="pee-note"><strong>Methodology note:</strong> {{ methodology_note }}</div>
+    {{ chart_data|json_script:"aimpee-chart-data" }}
+    <div class="pee-section">
+        <h2>Clinical dashboard charts</h2>
+        <div class="pee-info-note">PRE_I = PRE_Intervention; PRE_P = POST_Intervention. All views use the selected filters. N/A means no denominator or no comparison-period data.</div>
+        <div class="chart-grid">
+        {% for chart in charts %}
+            <div class="chart-card">
+                <h3>{{ chart.title }}</h3>
+                <div class="chart-box chart-box-large">
+                    <canvas id="aimpee-{{ chart.key }}" role="img" aria-label="{{ chart.title }}"></canvas>
+                    <div class="chart-empty" id="aimpee-{{ chart.key }}-empty">No chart data available.</div>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% for table in tables %}
+    <div class="pee-section">
+        <div class="pee-toolbar">
+            <h2>{{ table.title }}</h2>
+            <input class="pee-search" type="search" aria-label="Search {{ table.title }}" data-table="aimpee-table-{{ table.key }}" placeholder="Search this table...">
+        </div>
+        {% if table.note %}<div class="pee-info-note">{{ table.note }}</div>{% endif %}
+        <div class="table-scroll">
+            <table class="pee-table{% if table.key == 'comparison' %} pee-comparison-table{% endif %}" id="aimpee-table-{{ table.key }}">
+                <thead><tr>{% for header in table.headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in table.rows %}
+                    <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+                {% empty %}
+                    <tr><td colspan="{{ table.headers|length }}">{% if table.key == 'quality' %}No issues detected by the implemented checks.{% else %}No records found for the selected filters.{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="pee-footer-note">Dashboard calculations are read-only. Verify findings against facility records before using them in reports or success stories.</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    "use strict";
+    const filterForm = document.getElementById("aimpee-filter-form");
+    const provinceFilter = document.getElementById("aimpee-province-filter");
+    const facilityFilter = document.getElementById("aimpee-facility-filter");
+    provinceFilter.addEventListener("change", function () {
+        // Clear the previous facility before refreshing the server-scoped choices.
+        // The GET form retains all the other selected filters, including Period.
+        facilityFilter.value = "";
+        if (typeof filterForm.requestSubmit === "function") {
+            filterForm.requestSubmit();
+        } else {
+            filterForm.submit();
+        }
+    });
+    document.querySelectorAll(".pee-search[data-table]").forEach(function (input) {
+        input.addEventListener("input", function () {
+            const query = input.value.toLocaleLowerCase().trim();
+            document.querySelectorAll("#" + input.dataset.table + " tbody tr").forEach(function (row) {
+                row.hidden = !row.textContent.toLocaleLowerCase().includes(query);
+            });
+        });
+    });
+    const data = JSON.parse(document.getElementById("aimpee-chart-data").textContent);
+    const colors = ["#42a5f5", "#c62828", "#2e7d32", "#7b1fa2"];
+    data.forEach(function (chart) {
+        const canvas = document.getElementById("aimpee-" + chart.key);
+        const empty = document.getElementById("aimpee-" + chart.key + "-empty");
+        const hasValues = chart.series.some(function (series) { return series.data.some(function (v) { return v !== null; }); });
+        if (typeof Chart === "undefined" || !chart.labels.length || !hasValues) {
+            canvas.style.display = "none";
+            empty.style.display = "flex";
+            if (typeof Chart === "undefined") { empty.textContent = "Charts could not load. Data remain available in the tables below."; }
+            return;
+        }
+        new Chart(canvas, {
+            type: chart.kind,
+            data: {
+                labels: chart.labels,
+                datasets: chart.series.map(function (series, i) {
+                    return {label: series.label, data: series.data,
+                            backgroundColor: colors[i % colors.length], borderColor: colors[i % colors.length],
+                            borderWidth: 2, tension: 0.2, fill: false, spanGaps: false};
+                })
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: chart.horizontal ? "y" : "x",
+                plugins: {legend: {position: "bottom"}, tooltip: {callbacks: {
+                    label: function (context) {
+                        return context.dataset.label + ": " + (context.raw === null ? "N/A" : Number(context.raw).toLocaleString() + (chart.percent ? "%" : ""));
+                    }
+                }}},
+                scales: chart.horizontal ? {x: {beginAtZero: true}, y: {grid: {display: false}}} :
+                                           {y: {beginAtZero: true}, x: {grid: {display: false}}}
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}
