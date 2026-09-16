@@ -1979,13 +1979,16 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         # ============================================================
         # Filter options
         # ============================================================
+        # Each dropdown uses the base scope plus selections to its left.
+        # Later selections must not hide alternatives in earlier dropdowns.
+        options_qs = base_qs
         province_options = [
             {
                 "province_id": row["aimfacilityname__districtfk__provincefk_id"],
                 "province": row["aimfacilityname__districtfk__provincefk__name"] or "",
             }
             for row in (
-                base_qs
+                options_qs
                 .exclude(aimfacilityname__districtfk__provincefk_id__isnull=True)
                 .values(
                     "aimfacilityname__districtfk__provincefk_id",
@@ -1996,13 +1999,19 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
         ]
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["province"]:
+            options_qs = options_qs.filter(
+                **{"aimfacilityname__districtfk__provincefk_id": filters["province"]}
+            )
+
         facility_options = [
             {
                 "facility_id": row["aimfacilityname_id"],
                 "facility": row["aimfacilityname__name"] or "",
             }
             for row in (
-                base_qs
+                options_qs
                 .exclude(aimfacilityname_id__isnull=True)
                 .values("aimfacilityname_id", "aimfacilityname__name")
                 .distinct()
@@ -2010,48 +2019,84 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
         ]
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["facility"]:
+            options_qs = options_qs.filter(
+                **{"aimfacilityname_id": filters["facility"]}
+            )
+
         gre_year_options = list(
-            base_qs.values_list("gre_year", flat=True)
+            options_qs.values_list("gre_year", flat=True)
             .exclude(gre_year__isnull=True)
             .exclude(gre_year="")
             .distinct()
             .order_by("gre_year")
         )
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["gre_year"]:
+            options_qs = options_qs.filter(
+                **{"gre_year": filters["gre_year"]}
+            )
+
         gre_month_options = list(
-            base_qs.values_list("gre_month", flat=True)
+            options_qs.values_list("gre_month", flat=True)
             .exclude(gre_month__isnull=True)
             .exclude(gre_month="")
             .distinct()
             .order_by("gre_month")
         )
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["gre_month"]:
+            options_qs = options_qs.filter(
+                **{"gre_month": filters["gre_month"]}
+            )
+
         shamsiyear_options = list(
-            base_qs.values_list("shamsiyear", flat=True)
+            options_qs.values_list("shamsiyear", flat=True)
             .exclude(shamsiyear__isnull=True)
             .exclude(shamsiyear="")
             .distinct()
             .order_by("shamsiyear")
         )
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["shamsiyear"]:
+            options_qs = options_qs.filter(
+                **{"shamsiyear": filters["shamsiyear"]}
+            )
+
         shamsimonth_options = list(
-            base_qs.values_list("shamsimonth", flat=True)
+            options_qs.values_list("shamsimonth", flat=True)
             .exclude(shamsimonth__isnull=True)
             .exclude(shamsimonth="")
             .distinct()
             .order_by("shamsimonth")
         )
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["shamsimonth"]:
+            options_qs = options_qs.filter(
+                **{"shamsimonth": filters["shamsimonth"]}
+            )
+
         bl_progress_options = list(
-            base_qs.values_list("bl_progress", flat=True)
+            options_qs.values_list("bl_progress", flat=True)
             .exclude(bl_progress__isnull=True)
             .exclude(bl_progress="")
             .distinct()
             .order_by("bl_progress")
         )
 
+        # Narrow only after collecting this dropdown's available choices.
+        if filters["bl_progress"]:
+            options_qs = options_qs.filter(
+                **{"bl_progress": filters["bl_progress"]}
+            )
+
         period_options = list(
-            base_qs.values_list("period", flat=True)
+            options_qs.values_list("period", flat=True)
             .exclude(period__isnull=True)
             .exclude(period="")
             .distinct()
@@ -2814,6 +2859,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response
+
     
 # ============================================================
 # WHO Childbirth Checklist Monthly

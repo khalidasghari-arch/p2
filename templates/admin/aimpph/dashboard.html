@@ -421,7 +421,7 @@
     </div>
 
     <div class="pph-card">
-        <form method="get">
+        <form method="get" id="aimpph-filter-form">
             <div class="pph-filter-grid">
 
                 <div>
@@ -1147,6 +1147,30 @@
     </div>
 
 </div>
+
+<script>
+(function () {
+    "use strict";
+    const form = document.getElementById("aimpph-filter-form");
+    const order = ["province", "facility", "gre_year", "gre_month",
+                   "shamsiyear", "shamsimonth", "bl_progress", "period"];
+    order.forEach(function (name, index) {
+        const select = form.elements.namedItem(name);
+        select.addEventListener("change", function () {
+            // Preserve earlier choices, clear every dependent later choice.
+            order.slice(index + 1).forEach(function (laterName) {
+                form.elements.namedItem(laterName).value = "";
+            });
+            // Reload the GET page with server-filtered, database-backed choices.
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
+    });
+})();
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
