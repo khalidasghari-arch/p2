@@ -1601,6 +1601,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         shamsiyear = request.GET.get("shamsiyear", "").strip()
         shamsimonth = request.GET.get("shamsimonth", "").strip()
         bl_progress = request.GET.get("bl_progress", "").strip()
+        period = request.GET.get("period", "").strip()
 
         if province_id:
             queryset = queryset.filter(
@@ -1625,6 +1626,9 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         if bl_progress:
             queryset = queryset.filter(bl_progress=bl_progress)
 
+        if period:
+            queryset = queryset.filter(period=period)
+
         filters = {
             "province": province_id,
             "facility": facility_id,
@@ -1633,6 +1637,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "shamsiyear": shamsiyear,
             "shamsimonth": shamsimonth,
             "bl_progress": bl_progress,
+            "period": period,
         }
 
         return queryset, filters
@@ -2043,6 +2048,14 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .exclude(bl_progress="")
             .distinct()
             .order_by("bl_progress")
+        )
+
+        period_options = list(
+            base_qs.values_list("period", flat=True)
+            .exclude(period__isnull=True)
+            .exclude(period="")
+            .distinct()
+            .order_by("period")
         )
 
         # ============================================================
@@ -2484,6 +2497,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "shamsiyear_options": shamsiyear_options,
             "shamsimonth_options": shamsimonth_options,
             "bl_progress_options": bl_progress_options,
+            "period_options": period_options,
             "kpis": kpis,
             "progress_rows": progress_rows,
             "indicator_comparison_rows": indicator_comparison_rows,
