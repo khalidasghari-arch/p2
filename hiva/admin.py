@@ -31,6 +31,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from .forms import AimpeeAdminForm, AimpphAdminForm
+from decimal import Decimal, ROUND_HALF_EVEN
 from .models import (
     HQIPAssessmentHeader,
     HQIPAssessment,
@@ -60,7 +61,7 @@ from .models import (
     Position,
     WhoChildbirthChecklistMonthly,
     QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, 
-    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,
+    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,SafeSurgeryDashboard,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -9598,3 +9599,398 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         workbook.save(response)
         return response
+    
+@admin.register(SafeSurgeryDashboard)
+class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/safesurgeryclinical/dashboard.html"
+    actions = None
+    count_definitions = (
+        ('total_cs', 'Total Number of Cesarean Section'),
+        ('total_deliv', 'Total Number of Deliveries'),
+        ('who_ssc_completed', 'Number of WHO Surgical Safety Checklists completed'),
+        ('safe_tracker_complete', 'Number of Safe Surgery Tracker with all fields completed'),
+        ('pph_cs_num', 'Number of Post-Partum Hemorrhage cases during or after CS'),
+        ('qbl_cs_num', 'Number of C-Section cases with QBL performed & recorded'),
+        ('postop_fever_num', 'Number of CS with post-operation fever (>38℃) requiring antibiotics'),
+        ('bladder_injury_num', 'Number of cases of injury to bladder due to CS'),
+        ('bowel_injury_num', 'Number of injury to bowel due to CS'),
+        ('hyst_num', 'Number of hysterectomy during or after CS'),
+        ('vag_clean_num', 'Number of vaginal cleansing before CS'),
+        ('foley_after_anes_num', 'Number of Foley catheter applied after induction of anesthesia'),
+        ('abx_proph_num', 'Number of CS with IV prophylactic antibiotic provided prior to CS'),
+        ('skin_prep_num', 'Number of CS with incision skin preparation performed'),
+        ('mat_death_pph_cs', 'Number of maternal deaths due to PPH related to CS'),
+        ('mat_death_other_cs', 'Number of maternal deaths due to other causes related to CS'),
+        ('mat_death_total', 'Total number of maternal deaths related or not to CS'),
+    )
+    rate_definitions = (
+        ('cs_rate', 'Cesarean Section Rate (%)', 'total_cs', 'total_deliv'),
+        ('who_ssc_rate', 'Surgical Safety Checklist completion rate (%)', 'who_ssc_completed', 'total_cs'),
+        ('safe_tracker_rate', 'Safe Surgery Tracker completion rate (%)', 'safe_tracker_complete', 'total_cs'),
+        ('pph_cs_rate', 'Cesarean PPH Rate (>500 ml) (%)', 'pph_cs_num', 'total_cs'),
+        ('qbl_cs_rate', 'QBL performance rate during C-sections (%)', 'qbl_cs_num', 'total_cs'),
+        ('postop_fever_rate', 'Post operation fever (>38℃) rate requiring antibiotics (%)', 'postop_fever_num', 'total_cs'),
+        ('bladder_injury_rate', 'Injury to bladder rate due to CS (%)', 'bladder_injury_num', 'total_cs'),
+        ('bowel_injury_rate', 'Injury to bowel rate due to CS (%)', 'bowel_injury_num', 'total_cs'),
+        ('hyst_rate', 'Hysterectomy rate during or after CS (%)', 'hyst_num', 'total_cs'),
+        ('vag_clean_rate', 'Vaginal cleansing rate (%)', 'vag_clean_num', 'total_cs'),
+        ('foley_after_anes_rate', 'CS rate with Foley catheter after anesthesia induction (%)', 'foley_after_anes_num', 'total_cs'),
+        ('abx_proph_rate', 'Antibiotic prophylaxis rate (15–60 minutes prior to incision) – Cefazolin or other cephalosporin according to availability (%)', 'abx_proph_num', 'total_cs'),
+        ('skin_prep_rate', 'Rate of incision site skin preparation (%)', 'skin_prep_num', 'total_cs'),
+    )
+    filter_definitions = (
+        ("province", "Province", "aimfacilityname__districtfk__provincefk_id"),
+        ("facility", "Facility", "aimfacilityname_id"),
+        ("gre_year", "Gregorian Year", "gre_year"),
+        ("gre_month", "Gregorian Month", "gre_month"),
+        ("shamsiyear", "Shamsi Year", "shamsiyear"),
+        ("shamsimonth", "Shamsi Month", "shamsimonth"),
+        ("bl_progress", "Baseline / Progress", "bl_progress"),
+        ("period", "Period", "period"),
+    )
+    methodology_note = (
+        "Dashboard counts sum recorded values for the selected facility-month reports; "
+        "draft, submitted and approved records are included. Rates follow the existing "
+        "Safe Surgery admin formulas: C-section count / deliveries; each other recorded "
+        "process or outcome count / C-sections, multiplied by 100. Stored percentages "
+        "are not averaged or overwritten. Rates are N/A when either count is missing "
+        "in any selected report, or the combined denominator is zero or negative. "
+        "Count totals sum available values; an entirely missing count is N/A and "
+        "partial reporting is flagged. Defaults stored as zero cannot be distinguished "
+        "from confirmed zeros. Total maternal deaths includes deaths related or unrelated "
+        "to C-sections and is not reconstructed from the two CS-specific categories. "
+        "Outcome categories may overlap. PRE-I/PRE-P comparisons require comparable "
+        "reporting durations and patient volumes; differences do not establish causation. "
+        "Clinical labels are inherited reporting definitions, not treatment instructions."
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    def _progress_filter(self, queryset, progress_type):
+        """
+        Supports common PRE-I / PRE-P spelling variations.
+        """
+        if progress_type == "PRE-I":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-I")
+                | Q(bl_progress__iexact="PRE I")
+                | Q(bl_progress__iexact="PREI")
+                | Q(bl_progress__iexact="PRE_I")
+            )
+
+        if progress_type == "PRE-P":
+            return queryset.filter(
+                Q(bl_progress__iexact="PRE-P")
+                | Q(bl_progress__iexact="PRE P")
+                | Q(bl_progress__iexact="PREP")
+                | Q(bl_progress__iexact="PRE_P")
+            )
+
+        return queryset.none()
+
+    def province_filter_kwargs(self, request):
+        return {"aimfacilityname__districtfk__provincefk": user_province(request)}
+
+    def _base_queryset(self, request):
+        # Use the existing mixin so staff without a province receive no records.
+        return self.get_queryset(request).select_related(
+            "aimfacilityname", "aimfacilityname__districtfk",
+            "aimfacilityname__districtfk__provincefk",
+        )
+
+    def _display(self, value):
+        if value is None:
+            return "N/A"
+        if isinstance(value, (float, Decimal)):
+            return round(float(value), 2)
+        return value
+
+    def _table(self, key, title, columns, rows, note=""):
+        return {
+            "key": key, "title": title, "note": note,
+            "headers": [label for field, label in columns],
+            "rows": [[self._display(row.get(field)) for field, label in columns] for row in rows],
+        }
+
+    def _chart(self, key, title, rows, label_field, series, kind="bar", percent=False, horizontal=False):
+        return {
+            "key": key, "title": title, "kind": kind, "percent": percent,
+            "horizontal": horizontal, "labels": [r.get(label_field) or "Unknown" for r in rows],
+            "series": [{"label": label, "data": [r.get(field) for r in rows]}
+                       for field, label in series],
+        }
+
+    def _filters_and_options(self, request, base_qs):
+        # Collect each dropdown BEFORE applying its own selection; later choices
+        # never hide alternatives in earlier dropdowns. All options come from data.
+        queryset = base_qs
+        filters, dropdowns = {}, []
+        for name, label, path in self.filter_definitions:
+            value = request.GET.get(name, "").strip()
+            filters[name] = value
+            if name in ("province", "facility"):
+                if value and (not value.isdecimal() or len(value) > 18 or int(value) <= 0):
+                    raise SuspiciousOperation("Invalid dashboard filter ID")
+                label_path = ("aimfacilityname__districtfk__provincefk__name"
+                              if name == "province" else "aimfacilityname__name")
+                choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
+                           queryset.exclude(**{path + "__isnull": True}).order_by(label_path, path)
+                           .values_list(path, label_path).distinct()]
+            else:
+                choices = [{"value": item, "label": item} for item in
+                           queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
+                           .order_by(path).values_list(path, flat=True).distinct()]
+            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices})
+            if value:
+                queryset = queryset.filter(**{path: int(value) if name in ("province", "facility") else value})
+        return queryset, filters, dropdowns
+
+    def _annotations(self):
+        annotations = {"records": Count("pk")}
+        for field, label in self.count_definitions:
+            annotations["sum_" + field] = Sum(field)
+            annotations["present_" + field] = Count(field)
+        return annotations
+
+    def _rate(self, numerator, denominator):
+        if numerator is None or denominator is None or denominator <= 0 or numerator < 0:
+            return None
+        return float((Decimal(numerator) * 100 / Decimal(denominator)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_EVEN))
+
+    def _normalize(self, row):
+        for field, label in self.count_definitions:
+            value = row.get("sum_" + field)
+            row[field] = int(value) if value is not None else None
+        for key, label, numerator, denominator in self.rate_definitions:
+            complete = (row["records"] > 0 and row["present_" + numerator] == row["records"]
+                        and row["present_" + denominator] == row["records"])
+            row[key] = self._rate(row[numerator], row[denominator]) if complete else None
+        return row
+
+    def _totals(self, queryset):
+        return self._normalize(queryset.aggregate(**self._annotations()))
+
+    def _group(self, queryset, fields, aliases=None):
+        aliases = aliases or {}
+        return [self._normalize(row) for row in queryset.values(*fields, **aliases).annotate(
+            facilities=Count("aimfacilityname_id", distinct=True), **self._annotations(),
+        ).order_by(*fields, *aliases)]
+
+    def _comparison(self, queryset):
+        aliases = {"province": F("aimfacilityname__districtfk__provincefk__name"),
+                   "facility": F("aimfacilityname__name")}
+        maps = []
+        for phase in ("PRE-I", "PRE-P"):
+            maps.append({r["aimfacilityname_id"]: r for r in self._group(
+                self._progress_filter(queryset, phase), ["aimfacilityname_id"], aliases)})
+        definitions = list(self.count_definitions) + [(key, label) for key, label, num, den in self.rate_definitions]
+        rate_fields = {key for key, label, num, den in self.rate_definitions}
+        output = []
+        for facility_id in sorted(set(maps[0]) | set(maps[1])):
+            before, after = maps[0].get(facility_id), maps[1].get(facility_id)
+            info = before or after
+            for field, label in definitions:
+                left = before[field] if before else None
+                right = after[field] if after else None
+                valid = left is not None and right is not None
+                change = round(right - left, 2) if valid else None
+                relative = ("N/A" if not valid else "New" if left == 0 and right != 0 else
+                            "0.00%" if left == 0 else f"{(right - left) / left * 100:.2f}%")
+                output.append({"province": info["province"], "facility": info["facility"],
+                    "indicator": label, "pre_i_records": before["records"] if before else 0,
+                    "pre_p_records": after["records"] if after else 0,
+                    "pre_i": left, "pre_p": right, "absolute_change": change,
+                    "unit": "percentage points" if field in rate_fields else "count",
+                    "relative_change": relative,
+                    "status": "Insufficient data" if not valid else "No change" if change == 0 else "Review",
+                    "notes": "Check reporting duration, missing counts, case mix and source documents before interpretation."})
+        return sorted(output, key=lambda row: (row["province"] or "", row["facility"] or ""))
+
+    def _quality_rows(self, queryset):
+        rows = []
+        for obj in queryset.iterator(chunk_size=1000):
+            issues = []
+            for field, label in self.count_definitions:
+                value = getattr(obj, field)
+                if value is None:
+                    issues.append("Missing count: " + field)
+                elif value < 0:
+                    issues.append("Negative count: " + field)
+            for key, label, numerator, denominator in self.rate_definitions:
+                num, den = getattr(obj, numerator), getattr(obj, denominator)
+                stored = getattr(obj, key)
+                if num is not None and den is not None and num > den:
+                    issues.append("Numerator exceeds denominator: " + key)
+                if stored is not None and (stored < 0 or stored > 100):
+                    issues.append("Stored percentage outside 0–100: " + key)
+                expected = self._rate(num, den)
+                if expected is not None and (stored is None or abs(Decimal(str(expected)) - stored) > Decimal("0.01")):
+                    issues.append("Stored percentage differs from count calculation: " + key)
+            if issues:
+                facility = obj.aimfacilityname
+                rows.append({"id": obj.pk, "province": facility.districtfk.provincefk.name,
+                    "facility": facility.name, "hfcode": facility.hfcode,
+                    "period": obj.period, "gre_year": obj.gre_year, "gre_month": obj.gre_month,
+                    "bl_progress": obj.bl_progress, "issues": "; ".join(issues)})
+        return rows
+
+    def _build_dashboard_data(self, request):
+        queryset, filters, dropdowns = self._filters_and_options(request, self._base_queryset(request))
+        totals = self._totals(queryset)
+        kpis = {**totals, "facilities": queryset.values("aimfacilityname_id").distinct().count(),
+                "provinces": queryset.values("aimfacilityname__districtfk__provincefk_id").distinct().count()}
+        card_definitions = (
+            ("records", "Records"), ("facilities", "Facilities"), ("provinces", "Provinces"),
+            ("total_deliv", "Total deliveries"), ("total_cs", "C-sections"), ("cs_rate", "C-section rate (%)"),
+            ("who_ssc_rate", "WHO checklist completion (%)"), ("safe_tracker_rate", "Tracker completion (%)"),
+            ("qbl_cs_rate", "QBL recorded (%)"), ("abx_proph_rate", "Recorded antibiotic prophylaxis (%)"),
+            ("pph_cs_rate", "PPH during / after CS (%)"), ("postop_fever_rate", "Postoperative fever (%)"),
+            ("hyst_rate", "Hysterectomy during / after CS (%)"),
+            ("mat_death_pph_cs", "Maternal deaths: PPH related to CS"),
+            ("mat_death_other_cs", "Maternal deaths: other CS-related causes"),
+            ("mat_death_total", "Total maternal deaths: related or unrelated to CS"),
+        )
+        progress = self._group(queryset, ["bl_progress"])
+        provinces = self._group(queryset, ["aimfacilityname__districtfk__provincefk_id"],
+                                {"province": F("aimfacilityname__districtfk__provincefk__name")})
+        facilities = self._group(queryset, ["aimfacilityname_id"], {
+            "province": F("aimfacilityname__districtfk__provincefk__name"),
+            "district": F("aimfacilityname__districtfk__name"), "facility": F("aimfacilityname__name"),
+            "hfcode": F("aimfacilityname__hfcode")})
+        monthly = self._group(queryset, ["gre_year", "gre_month", "period"])
+        for row in monthly:
+            row["month_label"] = f"{row['gre_year']}-{row['gre_month']} / {row['period']}"
+        comparison = self._comparison(queryset)
+        quality = self._quality_rows(queryset)
+        count_labels = dict(self.count_definitions)
+        rate_labels = {key: label for key, label, num, den in self.rate_definitions}
+        process_keys = ["who_ssc_rate", "safe_tracker_rate", "qbl_cs_rate", "vag_clean_rate",
+                        "foley_after_anes_rate", "abx_proph_rate", "skin_prep_rate"]
+        outcome_keys = ["pph_cs_num", "postop_fever_num", "bladder_injury_num", "bowel_injury_num", "hyst_num"]
+        death_keys = ["mat_death_pph_cs", "mat_death_other_cs", "mat_death_total"]
+        process_rows = [{"category": rate_labels[key], "value": totals[key]} for key in process_keys]
+        outcome_rows = [{"category": count_labels[key], "value": totals[key]} for key in outcome_keys]
+        death_rows = [{"category": count_labels[key], "value": totals[key]} for key in death_keys]
+        summary_columns = [("records", "Records"), ("facilities", "Facilities")] + list(self.count_definitions) + list(rate_labels.items())
+        tables = [self._table("comparison", "Facility-level PRE-I vs PRE-P comparison", [
+            ("province", "Province"), ("facility", "Facility"), ("indicator", "Indicator"),
+            ("pre_i_records", "PRE-I records"), ("pre_p_records", "PRE-P records"),
+            ("pre_i", "PRE-I"), ("pre_p", "PRE-P"), ("absolute_change", "Absolute change"),
+            ("unit", "Change unit"), ("relative_change", "Relative change"), ("status", "Status"),
+            ("notes", "Notes")], comparison, "Missing periods are N/A. Rate changes are in percentage points. All filters apply to this comparison."),
+            self._table("progress", "Baseline / progress summary", [("bl_progress", "Baseline / Progress")] + summary_columns, progress),
+            self._table("province", "Province summary", [("province", "Province")] + summary_columns, provinces),
+            self._table("monthly", "Monthly trend", [("gre_year", "Gregorian Year"), ("gre_month", "Gregorian Month"), ("period", "Period")] + summary_columns, monthly),
+            self._table("processes", "Recorded safety processes", [("category", "Indicator"), ("value", "Calculated percentage")], process_rows),
+            self._table("outcomes", "Reported surgical outcomes", [("category", "Indicator"), ("value", "Count")], outcome_rows, "Categories can overlap; do not add them as unique patients."),
+            self._table("deaths", "Reported maternal deaths", [("category", "Indicator"), ("value", "Count")], death_rows, "Total deaths has a broader definition. It is not the sum of the two CS-related categories, and no mortality rate is inferred."),
+            self._table("quality", "Data quality review", [("id", "Record ID"), ("province", "Province"), ("facility", "Facility"),
+                ("hfcode", "HF code"), ("gre_year", "Gregorian Year"), ("gre_month", "Gregorian Month"),
+                ("period", "Period"), ("bl_progress", "Baseline / Progress"), ("issues", "Issues")], quality,
+                "Flags do not change records. No flags does not establish complete or clinically valid reporting."),
+            self._table("facility", "Facility summary", [("province", "Province"), ("district", "District"),
+                ("facility", "Facility"), ("hfcode", "HF code")] + summary_columns, facilities),
+        ]
+        volume_series = [("total_deliv", "Deliveries"), ("total_cs", "C-sections")]
+        charts = [
+            self._chart("progress", "Safety process rates by baseline / progress", progress, "bl_progress",
+                        [(key, rate_labels[key]) for key in ("who_ssc_rate", "safe_tracker_rate", "qbl_cs_rate")], percent=True),
+            self._chart("monthly", "Monthly delivery and C-section activity", monthly, "month_label", volume_series, kind="line"),
+            self._chart("province", "Delivery and C-section activity by province", provinces, "province", volume_series),
+            self._chart("facility", "WHO checklist completion — lowest 10 reported rates", sorted(
+                [r for r in facilities if r["who_ssc_rate"] is not None], key=lambda r: r["who_ssc_rate"])[:10],
+                "facility", [("who_ssc_rate", "Checklist completion (%)")], percent=True, horizontal=True),
+            self._chart("processes", "Recorded safety processes (%)", process_rows if totals["records"] else [],
+                        "category", [("value", "Calculated percentage")], percent=True, horizontal=True),
+            self._chart("outcomes", "Reported surgical outcomes — overlapping categories", outcome_rows if totals["records"] else [],
+                        "category", [("value", "Count")], horizontal=True),
+            self._chart("deaths", "Maternal deaths — categories have different scope", death_rows if totals["records"] else [],
+                        "category", [("value", "Count")], horizontal=True),
+        ]
+        phases = []
+        for phase in ("PRE-I", "PRE-P"):
+            phase_qs = self._progress_filter(queryset, phase)
+            phases.append(self._totals(phase_qs) if phase_qs.exists() else None)
+        comparison_chart = [{"indicator": count_labels[field],
+            "pre_i": phases[0][field] if phases[0] else None, "pre_p": phases[1][field] if phases[1] else None}
+            for field in ("total_cs", "who_ssc_completed", "qbl_cs_num")]
+        charts.append(self._chart("comparison", "PRE-I vs PRE-P — selected count indicators",
+            comparison_chart if any(phases) else [], "indicator", [("pre_i", "PRE-I"), ("pre_p", "PRE-P")], horizontal=True))
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+        return {"filters": filters, "dropdowns": dropdowns, "export_query": export_query.urlencode(),
+            "kpis": kpis, "cards": [{"label": label, "value": self._display(kpis[key])} for key, label in card_definitions],
+            "tables": tables, "charts": charts, "chart_data": charts, "methodology_note": self.methodology_note}
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        data = self._build_dashboard_data(request)
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+        context = {
+            **self.admin_site.each_context(request), **(extra_context or {}), **data,
+            "title": "Safe Surgery Dashboard", "opts": self.model._meta,
+        }
+        return TemplateResponse(request, self.change_list_template, context)
+
+    def _export_dashboard_excel(self, data):
+        workbook = Workbook()
+        summary = workbook.active
+        summary.title = "Summary"
+        summary.append(["Safe Surgery Dashboard", "Value"])
+        for card in data["cards"]:
+            summary.append([card["label"], card["value"]])
+        for table in data["tables"]:
+            sheet = workbook.create_sheet(table["key"].title()[:31])
+            sheet.append(table["headers"])
+            for row in table["rows"]:
+                sheet.append(row)
+        notes = workbook.create_sheet("Methodology_Notes")
+        notes.append(["Topic", "Explanation"])
+        notes.append(["Methodology", data["methodology_note"]])
+        for key, label, numerator, denominator in self.rate_definitions:
+            notes.append([label, f"100 × SUM({numerator}) / SUM({denominator}); denominator <= 0: N/A"])
+        for key, value in data["filters"].items():
+            notes.append(["Filter: " + key, value or "All"])
+        for table in data["tables"]:
+            if table["note"]:
+                notes.append([table["title"], table["note"]])
+        for sheet in workbook.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for row in sheet:
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cell.value = ILLEGAL_CHARACTERS_RE.sub("", cell.value)
+                        # Treat record labels as text, including strings beginning with '='.
+                        cell.data_type = "s"
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor="1F4E78")
+            for column in sheet.columns:
+                width = max(len(str(cell.value or "")) for cell in column)
+                sheet.column_dimensions[get_column_letter(column[0].column)].width = min(max(width + 2, 14), 55)
+        filename = "Safe_Surgery_Dashboard_" + timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S") + ".xlsx"
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        workbook.save(response)
+        return response
+

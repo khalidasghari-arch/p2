@@ -1,0 +1,548 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+
+<style>
+    :root {
+        --ss-blue: #1f4e78;
+        --ss-blue-2: #1565c0;
+        --ss-green: #2e7d32;
+        --ss-orange: #ef6c00;
+        --ss-red: #c62828;
+        --ss-purple: #6a1b9a;
+        --ss-gray: #607d8b;
+        --ss-light-blue: #f4f8fb;
+        --ss-border: #d9e2f3;
+        --ss-text: #263238;
+        --ss-muted: #607d8b;
+    }
+
+    .ss-dashboard {
+        font-family: Arial, sans-serif;
+        color: var(--ss-text);
+    }
+
+    .ss-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .ss-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--ss-blue);
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .ss-subtitle {
+        color: #555;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .ss-card,
+    .ss-section {
+        background: #ffffff;
+        border: 1px solid var(--ss-border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
+    }
+
+    .ss-section h2 {
+        margin: 0 0 12px 0;
+        color: var(--ss-blue);
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .ss-section h3 {
+        margin: 0 0 6px 0;
+        color: var(--ss-blue);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .ss-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(110px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .ss-filter-grid label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .ss-filter-grid input,
+    .ss-filter-grid select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+        background: #ffffff;
+        min-height: 36px;
+        box-sizing: border-box;
+    }
+
+    .ss-filter-grid input:focus,
+    .ss-filter-grid select:focus,
+    .ss-search:focus {
+        outline: none;
+        border-color: var(--ss-blue);
+        box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
+    }
+
+    .ss-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        background: var(--ss-blue);
+        color: #ffffff !important;
+        border-radius: 7px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    .ss-btn:hover {
+        background: #173b5b;
+        color: #ffffff !important;
+    }
+
+    .ss-btn-secondary {
+        background: var(--ss-gray);
+    }
+
+    .ss-btn-secondary:hover {
+        background: #455a64;
+    }
+
+    .ss-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(115px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .ss-kpi {
+        background: linear-gradient(180deg, #ffffff, var(--ss-light-blue));
+        border: 1px solid var(--ss-border);
+        border-radius: 12px;
+        padding: 14px 10px;
+        text-align: center;
+        min-height: 86px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .ss-kpi-value {
+        font-size: 25px;
+        font-weight: 800;
+        color: var(--ss-blue);
+        line-height: 1.1;
+    }
+
+    .ss-kpi-label {
+        font-size: 12px;
+        color: #555;
+        margin-top: 6px;
+        line-height: 1.3;
+    }
+
+    .ss-note {
+        padding: 12px 14px;
+        background: #fff8e1;
+        border-left: 5px solid #f9a825;
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .ss-info-note {
+        padding: 12px 14px;
+        background: #e3f2fd;
+        border-left: 5px solid var(--ss-blue-2);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .ss-warning-note {
+        padding: 12px 14px;
+        background: #ffebee;
+        border-left: 5px solid var(--ss-red);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 12px;
+    }
+
+    .chart-card {
+        background: #ffffff;
+        border: 1px solid var(--ss-border);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
+    }
+
+    .chart-card p {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.4;
+    }
+
+    .chart-box {
+        position: relative;
+        height: 330px;
+        width: 100%;
+    }
+
+    .chart-box-large {
+        height: 390px;
+    }
+
+    .chart-empty {
+        display: none;
+        height: 160px;
+        border: 1px dashed #ccd6e0;
+        border-radius: 10px;
+        align-items: center;
+        justify-content: center;
+        color: #607d8b;
+        font-size: 13px;
+        text-align: center;
+        padding: 12px;
+    }
+
+    table.ss-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .ss-table th {
+        background: var(--ss-blue);
+        color: #ffffff;
+        padding: 8px;
+        border: 1px solid var(--ss-border);
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .ss-table td {
+        padding: 7px;
+        border: 1px solid var(--ss-border);
+        vertical-align: top;
+        line-height: 1.4;
+    }
+
+    .ss-table tr:nth-child(even) {
+        background: #f7fbff;
+    }
+
+    .ss-table tr:hover {
+        background: #eef6ff;
+    }
+
+    .ss-comparison-table th {
+        background: #1f4e78;
+        color: #ffffff;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .ss-comparison-table td:nth-child(3) {
+        min-width: 380px;
+    }
+
+    .ss-comparison-table td:nth-child(10),
+    .ss-comparison-table td:nth-child(11) {
+        min-width: 260px;
+    }
+
+    .ss-comparison-table tr:nth-child(even) {
+        background: #c7ecf7;
+    }
+
+    .ss-comparison-table tr:nth-child(odd) {
+        background: #ffffff;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+        max-height: 620px;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        color: #ffffff;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .badge-green {
+        background: var(--ss-green);
+    }
+
+    .badge-blue {
+        background: var(--ss-blue-2);
+    }
+
+    .badge-orange {
+        background: var(--ss-orange);
+    }
+
+    .badge-gray {
+        background: var(--ss-gray);
+    }
+
+    .badge-red {
+        background: var(--ss-red);
+    }
+
+    .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    .small-muted {
+        color: var(--ss-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .ss-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .ss-search {
+        min-width: 260px;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+    }
+
+    .ss-footer-note {
+        margin-top: 12px;
+        color: #607d8b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 1400px) {
+        .ss-filter-grid,
+        .ss-kpi-grid {
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
+        }
+
+        .chart-grid,
+        .two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .ss-header {
+            flex-direction: column;
+        }
+
+        .ss-filter-grid,
+        .ss-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .ss-title {
+            font-size: 23px;
+        }
+
+        .chart-box {
+            height: 300px;
+        }
+
+        .ss-search {
+            width: 100%;
+            min-width: 100%;
+        }
+    }
+</style>
+
+<div class="ss-dashboard">
+
+    <div class="ss-header">
+        <div>
+            <h1 class="ss-title">Safe Surgery Dashboard</h1>
+            <div class="ss-subtitle">
+                Dashboard for C-section activity, recorded surgical safety processes, outcomes, progress comparison, and data quality.
+            </div>
+        </div>
+
+        <div>
+            <a class="ss-btn" href="?{{ export_query }}">Export Excel</a>
+        </div>
+    </div>
+
+    <div class="ss-card">
+        <form method="get" id="safesurgeryclinical-filter-form">
+            <div class="ss-filter-grid">
+                {% for dropdown in dropdowns %}
+                <div>
+                    <label for="ss-filter-{{ dropdown.name }}">{{ dropdown.label }}</label>
+                    <select id="ss-filter-{{ dropdown.name }}" name="{{ dropdown.name }}">
+                        <option value="">All</option>
+                        {% for option in dropdown.choices %}
+                        <option value="{{ option.value }}" {% if dropdown.value == option.value %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div style="margin-top:14px;">
+                <button type="submit" class="ss-btn">Apply filters</button>
+                <a href="?" class="ss-btn ss-btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="ss-kpi-grid">
+        {% for card in cards %}
+        <div class="ss-kpi"><div class="ss-kpi-value">{{ card.value }}</div><div class="ss-kpi-label">{{ card.label }}</div></div>
+        {% endfor %}
+    </div>
+    <div class="ss-note"><strong>Methodology note:</strong> {{ methodology_note }}</div>
+    {{ chart_data|json_script:"safesurgeryclinical-chart-data" }}
+    <div class="ss-section">
+        <h2>Safe Surgery dashboard charts</h2>
+        <div class="ss-info-note">PRE_I = PRE_Intervention; PRE_P = POST_Intervention. All views use the selected filters. N/A means no denominator or no comparison-period data.</div>
+        <div class="chart-grid">
+        {% for chart in charts %}
+            <div class="chart-card">
+                <h3>{{ chart.title }}</h3>
+                <div class="chart-box chart-box-large">
+                    <canvas id="safesurgeryclinical-{{ chart.key }}" role="img" aria-label="{{ chart.title }}"></canvas>
+                    <div class="chart-empty" id="safesurgeryclinical-{{ chart.key }}-empty">No chart data available.</div>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% for table in tables %}
+    <div class="ss-section">
+        <div class="ss-toolbar">
+            <h2>{{ table.title }}</h2>
+            <input class="ss-search" type="search" aria-label="Search {{ table.title }}" data-table="safesurgeryclinical-table-{{ table.key }}" placeholder="Search this table...">
+        </div>
+        {% if table.note %}<div class="ss-info-note">{{ table.note }}</div>{% endif %}
+        <div class="table-scroll">
+            <table class="ss-table{% if table.key == 'comparison' %} ss-comparison-table{% endif %}" id="safesurgeryclinical-table-{{ table.key }}">
+                <thead><tr>{% for header in table.headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in table.rows %}
+                    <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+                {% empty %}
+                    <tr><td colspan="{{ table.headers|length }}">{% if table.key == 'quality' %}No issues detected by the implemented checks.{% else %}No records found for the selected filters.{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="ss-footer-note">Dashboard calculations are read-only. Verify findings against facility records before using them in reports or success stories.</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    "use strict";
+    const filterForm = document.getElementById("safesurgeryclinical-filter-form");
+    const order = ["province", "facility", "gre_year", "gre_month", "shamsiyear", "shamsimonth", "bl_progress", "period"];
+    order.forEach(function (name, index) {
+        filterForm.elements.namedItem(name).addEventListener("change", function () {
+            order.slice(index + 1).forEach(function (later) { filterForm.elements.namedItem(later).value = ""; });
+            if (typeof filterForm.requestSubmit === "function") { filterForm.requestSubmit(); }
+            else { filterForm.submit(); }
+        });
+    });
+    document.querySelectorAll(".ss-search[data-table]").forEach(function (input) {
+        input.addEventListener("input", function () {
+            const query = input.value.toLocaleLowerCase().trim();
+            document.querySelectorAll("#" + input.dataset.table + " tbody tr").forEach(function (row) {
+                row.hidden = !row.textContent.toLocaleLowerCase().includes(query);
+            });
+        });
+    });
+    const data = JSON.parse(document.getElementById("safesurgeryclinical-chart-data").textContent);
+    const colors = ["#42a5f5", "#c62828", "#2e7d32", "#7b1fa2"];
+    data.forEach(function (chart) {
+        const canvas = document.getElementById("safesurgeryclinical-" + chart.key);
+        const empty = document.getElementById("safesurgeryclinical-" + chart.key + "-empty");
+        const hasValues = chart.series.some(function (series) { return series.data.some(function (v) { return v !== null; }); });
+        if (typeof Chart === "undefined" || !chart.labels.length || !hasValues) {
+            canvas.style.display = "none";
+            empty.style.display = "flex";
+            if (typeof Chart === "undefined") { empty.textContent = "Charts could not load. Data remain available in the tables below."; }
+            return;
+        }
+        new Chart(canvas, {
+            type: chart.kind,
+            data: {
+                labels: chart.labels,
+                datasets: chart.series.map(function (series, i) {
+                    return {label: series.label, data: series.data,
+                            backgroundColor: colors[i % colors.length], borderColor: colors[i % colors.length],
+                            borderWidth: 2, tension: 0.2, fill: false, spanGaps: false};
+                })
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: chart.horizontal ? "y" : "x",
+                plugins: {legend: {position: "bottom"}, tooltip: {callbacks: {
+                    label: function (context) {
+                        return context.dataset.label + ": " + (context.raw === null ? "N/A" : Number(context.raw).toLocaleString() + (chart.percent ? "%" : ""));
+                    }
+                }}},
+                scales: chart.horizontal ? {x: {beginAtZero: true}, y: {grid: {display: false}}} :
+                                           {y: {beginAtZero: true}, x: {grid: {display: false}}}
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

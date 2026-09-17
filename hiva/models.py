@@ -2010,7 +2010,13 @@ class safesurgeryclinical(models.Model):
 
     def __str__(self):
         return f"SAFE SURGERY #{self.pk or ''}"
-
+    
+class SafeSurgeryDashboard(safesurgeryclinical):
+    class Meta:
+        proxy = True
+        verbose_name = "SAFE SURGERY DASHBOARD"
+        verbose_name_plural = "SAFE SURGERY DASHBOARD"
+        
 # ============================================================
 # LOOKUP TABLES (Reference Data)
 # ============================================================
@@ -2074,4 +2080,5 @@ class GregorianYear(models.Model):
 
     def __str__(self):
         return self.year
+    
 
