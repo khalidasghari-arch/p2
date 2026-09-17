@@ -9617,10 +9617,10 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     actions = None
     count_definitions = (
         ('total_cs', 'Total Number of Cesarean Section'),
-        ('total_deliv', 'Total Number of Deliveries'),
+        ('total_deliv', 'Total Number of Deliveries (Normal + C-section + Assisted)'),
         ('who_ssc_completed', 'Number of WHO Surgical Safety Checklists completed'),
         ('safe_tracker_complete', 'Number of Safe Surgery Tracker with all fields completed'),
-        ('pph_cs_num', 'Number of Post-Partum Hemorrhage cases during or after CS'),
+        ('pph_cs_num', 'Number of Post-Partum Hemorrhage cases during or after CS =>1000ml'),
         ('qbl_cs_num', 'Number of C-Section cases with QBL performed & recorded'),
         ('postop_fever_num', 'Number of CS with post-operation fever (>38℃) requiring antibiotics'),
         ('bladder_injury_num', 'Number of cases of injury to bladder due to CS'),
@@ -9638,7 +9638,7 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ('cs_rate', 'Cesarean Section Rate (%)', 'total_cs', 'total_deliv'),
         ('who_ssc_rate', 'Surgical Safety Checklist completion rate (%)', 'who_ssc_completed', 'total_cs'),
         ('safe_tracker_rate', 'Safe Surgery Tracker completion rate (%)', 'safe_tracker_complete', 'total_cs'),
-        ('pph_cs_rate', 'Cesarean PPH Rate (>500 ml) (%)', 'pph_cs_num', 'total_cs'),
+        ('pph_cs_rate', 'Cesarean PPH Rate (=>1000 ml) (%)', 'pph_cs_num', 'total_cs'),
         ('qbl_cs_rate', 'QBL performance rate during C-sections (%)', 'qbl_cs_num', 'total_cs'),
         ('postop_fever_rate', 'Post operation fever (>38℃) rate requiring antibiotics (%)', 'postop_fever_num', 'total_cs'),
         ('bladder_injury_rate', 'Injury to bladder rate due to CS (%)', 'bladder_injury_num', 'total_cs'),
