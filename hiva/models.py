@@ -1811,6 +1811,12 @@ class WhoChildbirthChecklistMonthly(models.Model):
         if errors:
             from django.core.exceptions import ValidationError
             raise ValidationError(errors)
+        
+class WhoChildbirthChecklistDashboard(WhoChildbirthChecklistMonthly):
+    class Meta:
+        proxy = True
+        verbose_name = "WHO CHILDBIRTH CHECKLIST DASHBOARD"
+        verbose_name_plural = "WHO CHILDBIRTH CHECKLIST DASHBOARD"
 
 class safesurgeryclinical(models.Model):
 

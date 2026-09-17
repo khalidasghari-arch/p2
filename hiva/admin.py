@@ -61,7 +61,7 @@ from .models import (
     Position,
     WhoChildbirthChecklistMonthly,
     QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, 
-    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,SafeSurgeryDashboard,
+    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,SafeSurgeryDashboard,WhoChildbirthChecklistDashboard,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -97,6 +97,17 @@ from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 import unicodedata
 from django.db import router, transaction
+from django.core.exceptions import PermissionDenied, SuspiciousOperation
+from django.db.models import Sum, Count, F, Q, Value, CharField
+from django.db.models.functions import Cast, Coalesce, NullIf
+from django.template.response import TemplateResponse
+from django.http import HttpResponse
+from django.utils import timezone
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from decimal import Decimal
 
 # ============================================================
 # Admin Branding
@@ -9989,6 +10000,411 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 width = max(len(str(cell.value or "")) for cell in column)
                 sheet.column_dimensions[get_column_letter(column[0].column)].width = min(max(width + 2, 14), 55)
         filename = "Safe_Surgery_Dashboard_" + timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S") + ".xlsx"
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        workbook.save(response)
+        return response
+
+@admin.register(WhoChildbirthChecklistDashboard)
+class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/whochildbirthchecklistmonthly/dashboard.html"
+    actions = None
+    count_definitions = (
+        ('total_deliveries', 'Total Deliveries'),
+        ('files_selected', 'Out of total deliveries in this month, select RANDOMLY up to 20 patient files and record number of files selected'),
+        ('sec1_complete', 'Number of section 1 of the WHO childbirth Checklists completely filled out'),
+        ('cervix_ge4_admission', 'Number of patient files selected with pregnant women presenting cervix ≥4 cms at admission'),
+        ('partograph_started_ge4', 'Number of partographs started at cervix ≥4 cms at admission'),
+        ('sec2_complete', 'Number of section 2 of the WHO childbirth Checklists completely filled out'),
+        ('newborn_supplies_5_available', 'Number of deliveries with the 5 essential supplies available at bedside for newborn'),
+        ('sec3_complete', 'Number of section 3 of the WHO childbirth Checklists completely filled out'),
+        ('bf_s2s_first_hour', 'Number of deliveries which started breastfeeding and skin-to-skin contact during first hour (if mother and baby are well).'),
+        ('sec4_complete', 'Number of section 4 of the WHO childbirth Checklists completely filled out'),
+        ('abx_need_checked_newborn', 'Number of deliveries for which the need for antibiotic for newborn was checked before discharge'),
+        ('all4_sections_complete', 'Number of patient files with the 4 sections of the WHO childbirth Checklists completely filled out'),
+    )
+    rate_definitions = (
+        ('sec1_completeness_ratio', 'Section 1 completeness (%)', 'sec1_complete', 'files_selected'),
+        ('sec2_completeness_ratio', 'Section 2 completeness (%)', 'sec2_complete', 'files_selected'),
+        ('sec3_completeness_ratio', 'Section 3 completeness (%)', 'sec3_complete', 'files_selected'),
+        ('sec4_completeness_ratio', 'Section 4 completeness (%)', 'sec4_complete', 'files_selected'),
+        ('partograph_use_ge4_rate', 'Partograph use at cervix ≥4 cm (%)', 'partograph_started_ge4', 'cervix_ge4_admission'),
+        ('newborn_supplies_5_ratio', 'Five newborn supplies available (%)', 'newborn_supplies_5_available', 'total_deliveries'),
+        ('bf_s2s_first_hour_ratio', 'Breastfeeding and skin-to-skin in first hour (%)', 'bf_s2s_first_hour', 'total_deliveries'),
+        ('abx_need_checked_ratio', 'Newborn antibiotic need checked (%)', 'abx_need_checked_newborn', 'total_deliveries'),
+        ('all4_sections_completeness_ratio', 'All four sections complete (%)', 'all4_sections_complete', 'files_selected'),
+    )
+    filter_definitions = (
+        ('province', 'Province', 'facility_name__districtfk__provincefk_id'),
+        ('facility', 'Facility', 'facility_name_id'),
+        ('gre_year', 'Gregorian Year', '_dash_gre_year'),
+        ('gre_month', 'Gregorian Month', '_dash_gre_month'),
+        ('shamsiyear', 'Shamsi Year', '_dash_shamsi_year'),
+        ('shamsimonth', 'Shamsi Month', '_dash_shamsi_month'),
+        ('bl_progress', 'Baseline / Progress', '_dash_bl_progress'),
+        ('period', 'Period', '_dash_period'),
+    )
+    methodology_note = (
+        'Counts are summed across selected facility-month reports. Checklist sections 1–4 and full-checklist '
+        'completeness use selected files as the denominator. Partograph use uses selected admissions recorded '
+        'with cervix ≥4 cm. Newborn supplies, breastfeeding with skin-to-skin, and antibiotic-need checks use '
+        'total deliveries, exactly as in the model properties. Rates are ratios of combined counts, not '
+        'averages of facility percentages. Zero denominators and no data show N/A. The limit of 20 selected '
+        'files applies to each monthly report, not the aggregate. Default zeros cannot be distinguished from '
+        'confirmed zeros. Checklist completion measures documentation, not proof of care delivery. The '
+        'breastfeeding indicator retains the model’s all-deliveries denominator even though its numerator '
+        'describes well mothers and babies. Lookup labels take precedence over legacy text; legacy values '
+        'remain available when the corresponding lookup is absent or blank. No calendar conversion or source- '
+        'data changes are performed. Clinical wording is inherited from the reporting model, not new '
+        'treatment guidance. PRE-I/PRE-P comparisons require comparable reporting periods and populations.'
+    )
+
+    reporting_fields = (
+        ("gre_year", "gre_year_fk", "year"),
+        ("gre_month", "gre_month_fk", "name"),
+        ("shamsi_year", "shamsi_year_fk", "year"),
+        ("shamsi_month", "shamsi_month_fk", "name"),
+        ("bl_progress", "bl_progress_fk", "name"),
+        ("period", "period_fk", "name"),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_staff
+
+    def get_model_perms(self, request):
+        if self.has_view_permission(request):
+            return {"view": True}
+        return {}
+
+    def _progress_filter(self, queryset, progress_type):
+        variants = {
+            "PRE-I": ("PRE-I", "PRE_I", "PRE I", "PREI", "PRE_Intervention", "PRE-Intervention", "PRE Intervention"),
+            "PRE-P": ("PRE-P", "PRE_P", "PRE P", "PREP", "POST_Intervention", "POST-Intervention", "POST Intervention"),
+        }.get(progress_type)
+        if not variants:
+            return queryset.none()
+        predicate = Q()
+        for value in variants:
+            predicate |= Q(_dash_bl_progress__iexact=value)
+        return queryset.filter(predicate)
+
+    def province_filter_kwargs(self, request):
+        return {"facility_name__districtfk__provincefk": user_province(request)}
+
+    def _base_queryset(self, request):
+        queryset = self.get_queryset(request).select_related(
+            "facility_name", "facility_name__districtfk", "facility_name__districtfk__provincefk",
+            *[fk for legacy, fk, label in self.reporting_fields],
+        ).order_by()
+        # Cast year lookups to text. Use populated FK labels, then legacy text.
+        return queryset.annotate(**{
+            "_dash_" + legacy: Coalesce(
+                NullIf(Cast(F(fk + "__" + label), CharField()), Value("")),
+                NullIf(F(legacy), Value("")), Value(""), output_field=CharField(),
+            ) for legacy, fk, label in self.reporting_fields
+        })
+
+    def _display(self, value):
+        if value is None:
+            return "N/A"
+        if isinstance(value, (float, Decimal)):
+            return round(float(value), 2)
+        return value
+
+    def _table(self, key, title, columns, rows, note=""):
+        return {
+            "key": key, "title": title, "note": note,
+            "headers": [label for field, label in columns],
+            "rows": [[self._display(row.get(field)) for field, label in columns] for row in rows],
+        }
+
+    def _chart(self, key, title, rows, label_field, series, kind="bar", percent=False, horizontal=False):
+        return {
+            "key": key, "title": title, "kind": kind, "percent": percent,
+            "horizontal": horizontal, "labels": [r.get(label_field) or "Unknown" for r in rows],
+            "series": [{"label": label, "data": [r.get(field) for r in rows]}
+                       for field, label in series],
+        }
+
+    def _filters_and_options(self, request, base_qs):
+        # Collect each dropdown BEFORE applying its own selection; later choices
+        # never hide alternatives in earlier dropdowns. All options come from data.
+        queryset = base_qs
+        filters, dropdowns = {}, []
+        for name, label, path in self.filter_definitions:
+            value = request.GET.get(name, "").strip()
+            filters[name] = value
+            if name in ("province", "facility"):
+                if value and (not value.isdecimal() or len(value) > 18 or int(value) <= 0):
+                    raise SuspiciousOperation("Invalid dashboard filter ID")
+                label_path = ("facility_name__districtfk__provincefk__name"
+                              if name == "province" else "facility_name__name")
+                choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
+                           queryset.exclude(**{path + "__isnull": True}).order_by(label_path, path)
+                           .values_list(path, label_path).distinct()]
+            else:
+                choices = [{"value": item, "label": item} for item in
+                           queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
+                           .order_by(path).values_list(path, flat=True).distinct()]
+            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices})
+            if value:
+                queryset = queryset.filter(**{path: int(value) if name in ("province", "facility") else value})
+        return queryset, filters, dropdowns
+
+    def _annotations(self):
+        annotations = {"records": Count("pk")}
+        for field, label in self.count_definitions:
+            annotations["sum_" + field] = Sum(field)
+            annotations["present_" + field] = Count(field)
+        return annotations
+
+    def _rate(self, numerator, denominator):
+        if numerator is None or denominator is None or denominator <= 0 or numerator < 0:
+            return None
+        # Match the model's _ratio arithmetic for positive denominators.
+        return round((numerator / denominator) * 100.0, 2)
+
+    def _normalize(self, row):
+        for field, label in self.count_definitions:
+            value = row.get("sum_" + field)
+            row[field] = int(value) if value is not None else None
+        for key, label, numerator, denominator in self.rate_definitions:
+            complete = (row["records"] > 0 and row["present_" + numerator] == row["records"]
+                        and row["present_" + denominator] == row["records"])
+            row[key] = self._rate(row[numerator], row[denominator]) if complete else None
+        return row
+
+    def _totals(self, queryset):
+        return self._normalize(queryset.aggregate(**self._annotations()))
+
+    def _group(self, queryset, fields, aliases=None):
+        aliases = aliases or {}
+        return [self._normalize(row) for row in queryset.values(*fields, **aliases).annotate(
+            facilities=Count("facility_name_id", distinct=True), **self._annotations(),
+        ).order_by(*fields, *aliases)]
+
+    def _comparison(self, queryset):
+        aliases = {"province": F("facility_name__districtfk__provincefk__name"),
+                   "facility": F("facility_name__name")}
+        maps = []
+        for phase in ("PRE-I", "PRE-P"):
+            maps.append({r["facility_name_id"]: r for r in self._group(
+                self._progress_filter(queryset, phase), ["facility_name_id"], aliases)})
+        definitions = list(self.count_definitions) + [(key, label) for key, label, num, den in self.rate_definitions]
+        rate_fields = {key for key, label, num, den in self.rate_definitions}
+        output = []
+        for facility_id in sorted(set(maps[0]) | set(maps[1])):
+            before, after = maps[0].get(facility_id), maps[1].get(facility_id)
+            info = before or after
+            for field, label in definitions:
+                left = before[field] if before else None
+                right = after[field] if after else None
+                valid = left is not None and right is not None
+                change = round(right - left, 2) if valid else None
+                relative = ("N/A" if not valid else "New" if left == 0 and right != 0 else
+                            "0.00%" if left == 0 else f"{(right - left) / left * 100:.2f}%")
+                output.append({"province": info["province"], "facility": info["facility"],
+                    "indicator": label, "pre_i_records": before["records"] if before else 0,
+                    "pre_p_records": after["records"] if after else 0,
+                    "pre_i": left, "pre_p": right, "absolute_change": change,
+                    "unit": "percentage points" if field in rate_fields else "count",
+                    "relative_change": relative,
+                    "status": "Insufficient data" if not valid else "No change" if change == 0 else "Review",
+                    "notes": "Check reporting duration, missing counts, case mix and source documents before interpretation."})
+        return sorted(output, key=lambda row: (row["province"] or "", row["facility"] or ""))
+
+    def _quality_rows(self, queryset):
+        output = []
+        sections = ("sec1_complete", "sec2_complete", "sec3_complete", "sec4_complete")
+        for obj in queryset.iterator(chunk_size=1000):
+            issues = []
+            for field, label in self.count_definitions:
+                value = getattr(obj, field)
+                if value is None or value < 0:
+                    issues.append("Missing or negative count: " + field)
+            if obj.files_selected > 20:
+                issues.append("More than 20 files selected in this monthly report")
+            if obj.files_selected > obj.total_deliveries:
+                issues.append("Selected files exceed total deliveries: review source records")
+            if obj.cervix_ge4_admission > obj.files_selected:
+                issues.append("Eligible partograph admissions exceed selected files")
+            for key, label, numerator, denominator in self.rate_definitions:
+                if getattr(obj, numerator) > getattr(obj, denominator):
+                    issues.append("Numerator exceeds denominator: " + key)
+            if any(obj.all4_sections_complete > getattr(obj, field) for field in sections):
+                issues.append("All-four completion exceeds an individual section count")
+            for legacy, fk, label in self.reporting_fields:
+                lookup = getattr(obj, fk)
+                if lookup is not None:
+                    current = str(getattr(lookup, label))
+                    previous = getattr(obj, legacy) or ""
+                    if current and previous and current != previous:
+                        issues.append("Lookup/text mismatch for " + legacy + "; dashboard uses lookup")
+            if issues:
+                facility = obj.facility_name
+                output.append({"id": obj.pk, "province": facility.districtfk.provincefk.name,
+                    "facility": facility.name, "hfcode": facility.hfcode,
+                    "period": obj._dash_period, "gre_year": obj._dash_gre_year,
+                    "gre_month": obj._dash_gre_month, "bl_progress": obj._dash_bl_progress,
+                    "issues": "; ".join(issues)})
+        return output
+
+    def _build_dashboard_data(self, request):
+        queryset, filters, dropdowns = self._filters_and_options(request, self._base_queryset(request))
+        totals = self._totals(queryset)
+        kpis = {**totals, "facilities": queryset.values("facility_name_id").distinct().count(),
+                "provinces": queryset.values("facility_name__districtfk__provincefk_id").distinct().count()}
+        card_definitions = (
+            ("records", "Monthly reports"), ("facilities", "Facilities"), ("provinces", "Provinces"),
+            ("total_deliveries", "Total deliveries"), ("files_selected", "Selected files"),
+            ("all4_sections_complete", "Files with all four sections complete"),
+            ("sec1_completeness_ratio", "Section 1 completeness (%)"),
+            ("sec2_completeness_ratio", "Section 2 completeness (%)"),
+            ("sec3_completeness_ratio", "Section 3 completeness (%)"),
+            ("sec4_completeness_ratio", "Section 4 completeness (%)"),
+            ("all4_sections_completeness_ratio", "All four sections complete (%)"),
+            ("cervix_ge4_admission", "Selected admissions with cervix ≥4 cm"),
+            ("partograph_use_ge4_rate", "Partograph use at cervix ≥4 cm (%)"),
+            ("newborn_supplies_5_ratio", "Five newborn supplies available (%)"),
+            ("bf_s2s_first_hour_ratio", "Breastfeeding + skin-to-skin in first hour (%)"),
+            ("abx_need_checked_ratio", "Newborn antibiotic need checked (%)"),
+        )
+        progress = self._group(queryset, [], {"baseline": F("_dash_bl_progress")})
+        provinces = self._group(queryset, ["facility_name__districtfk__provincefk_id"],
+                                {"province": F("facility_name__districtfk__provincefk__name")})
+        facilities = self._group(queryset, ["facility_name_id"], {
+            "province": F("facility_name__districtfk__provincefk__name"),
+            "district": F("facility_name__districtfk__name"), "facility": F("facility_name__name"),
+            "hfcode": F("facility_name__hfcode")})
+        monthly = self._group(queryset, ["_dash_gre_year", "_dash_gre_month", "_dash_period"])
+        for row in monthly:
+            row["month_label"] = f"{row['_dash_gre_year']}-{row['_dash_gre_month']} / {row['_dash_period']}"
+        comparison = self._comparison(queryset)
+        quality = self._quality_rows(queryset)
+        rate_labels = {key: label for key, label, num, den in self.rate_definitions}
+        section_keys = ["sec1_completeness_ratio", "sec2_completeness_ratio", "sec3_completeness_ratio",
+                        "sec4_completeness_ratio", "all4_sections_completeness_ratio"]
+        care_keys = ["newborn_supplies_5_ratio", "bf_s2s_first_hour_ratio", "abx_need_checked_ratio"]
+        section_rows = [{"category": rate_labels[key], "value": totals[key]} for key in section_keys]
+        care_rows = [{"category": rate_labels[key], "value": totals[key]} for key in care_keys]
+        partograph_rows = [{"category": label, "value": totals[key]} for key, label in (
+            ("cervix_ge4_admission", "Selected admissions with cervix ≥4 cm"),
+            ("partograph_started_ge4", "Partographs started at cervix ≥4 cm"))]
+        summary_columns = [("records", "Monthly reports"), ("facilities", "Facilities")] + list(self.count_definitions) + list(rate_labels.items())
+        tables = [self._table("comparison", "Facility-level PRE-I vs PRE-P comparison", [
+            ("province", "Province"), ("facility", "Facility"), ("indicator", "Indicator"),
+            ("pre_i_records", "PRE-I reports"), ("pre_p_records", "PRE-P reports"),
+            ("pre_i", "PRE-I"), ("pre_p", "PRE-P"), ("absolute_change", "Absolute change"),
+            ("unit", "Change unit"), ("relative_change", "Relative change"), ("status", "Status"),
+            ("notes", "Notes")], comparison, "Missing periods are N/A. Rate differences are percentage points. All filters apply."),
+            self._table("progress", "Baseline / progress summary", [("baseline", "Baseline / Progress")] + summary_columns, progress),
+            self._table("province", "Province summary", [("province", "Province")] + summary_columns, provinces),
+            self._table("monthly", "Monthly trend", [("_dash_gre_year", "Gregorian Year"), ("_dash_gre_month", "Gregorian Month"), ("_dash_period", "Period")] + summary_columns, monthly,
+                "Labels use lookup values with legacy fallback. Text months are sorted as stored; no calendar conversion is inferred."),
+            self._table("sections", "Checklist section completeness", [("category", "Indicator"), ("value", "Percentage of selected files")], section_rows,
+                "All-four completion is its own count divided by selected files, not an average of section percentages."),
+            self._table("newborn", "Delivery-based newborn care indicators", [("category", "Indicator"), ("value", "Percentage of total deliveries")], care_rows,
+                "The denominator is total deliveries, including for the recorded breastfeeding + skin-to-skin measure, as defined in the model."),
+            self._table("partograph", "Partograph eligible admissions and recorded use", [("category", "Indicator"), ("value", "Count")], partograph_rows,
+                "These are selected-file counts. The recorded cervix ≥4 cm threshold is inherited from the model."),
+            self._table("quality", "Data quality review", [("id", "Record ID"), ("province", "Province"), ("facility", "Facility"),
+                ("hfcode", "HF code"), ("gre_year", "Gregorian Year"), ("gre_month", "Gregorian Month"),
+                ("period", "Period"), ("bl_progress", "Baseline / Progress"), ("issues", "Issues")], quality,
+                "Review flags do not change stored records. The sample limit applies separately to each report."),
+            self._table("facility", "Facility summary", [("province", "Province"), ("district", "District"),
+                ("facility", "Facility"), ("hfcode", "HF code")] + summary_columns, facilities),
+        ]
+        count_series = [("files_selected", "Selected files"), ("all4_sections_complete", "All four sections complete")]
+        charts = [
+            self._chart("progress", "Section and full-checklist completeness by baseline / progress", progress, "baseline",
+                        [(key, rate_labels[key]) for key in section_keys], percent=True),
+            self._chart("monthly", "Monthly file sample and complete checklists", monthly, "month_label", count_series, kind="line"),
+            self._chart("province", "Full-checklist completeness by province", provinces, "province",
+                        [("all4_sections_completeness_ratio", "All four sections complete (%)")], percent=True),
+            self._chart("facility", "Full-checklist completeness — lowest 10 reported rates", sorted(
+                [r for r in facilities if r["all4_sections_completeness_ratio"] is not None], key=lambda r: r["all4_sections_completeness_ratio"])[:10],
+                "facility", [("all4_sections_completeness_ratio", "All four sections complete (%)")], percent=True, horizontal=True),
+            self._chart("sections", "Checklist section completeness (%)", section_rows if totals["records"] else [],
+                        "category", [("value", "Percentage of selected files")], percent=True, horizontal=True),
+            self._chart("newborn", "Delivery-based newborn care indicators (%)", care_rows if totals["records"] else [],
+                        "category", [("value", "Percentage of total deliveries")], percent=True, horizontal=True),
+            self._chart("partograph", "Partograph eligible admissions and recorded use", partograph_rows if totals["records"] else [],
+                        "category", [("value", "Selected-file count")], horizontal=True),
+        ]
+        phases = []
+        for phase in ("PRE-I", "PRE-P"):
+            phase_qs = self._progress_filter(queryset, phase)
+            phases.append(self._totals(phase_qs) if phase_qs.exists() else None)
+        comparison_chart = [{"indicator": label, "pre_i": phases[0][field] if phases[0] else None,
+            "pre_p": phases[1][field] if phases[1] else None} for field, label in count_series]
+        charts.append(self._chart("comparison", "PRE-I vs PRE-P — selected files and full checklists",
+            comparison_chart if any(phases) else [], "indicator", [("pre_i", "PRE-I"), ("pre_p", "PRE-P")], horizontal=True))
+        export_query = request.GET.copy()
+        export_query["export"] = "1"
+        return {"filters": filters, "dropdowns": dropdowns, "export_query": export_query.urlencode(),
+            "kpis": kpis, "cards": [{"label": label, "value": self._display(kpis[key])} for key, label in card_definitions],
+            "tables": tables, "charts": charts, "chart_data": charts, "methodology_note": self.methodology_note}
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        data = self._build_dashboard_data(request)
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+        context = {
+            **self.admin_site.each_context(request), **(extra_context or {}), **data,
+            "title": "WHO Childbirth Checklist Dashboard", "opts": self.model._meta,
+        }
+        return TemplateResponse(request, self.change_list_template, context)
+
+    def _export_dashboard_excel(self, data):
+        workbook = Workbook()
+        summary = workbook.active
+        summary.title = "Summary"
+        summary.append(["WHO Childbirth Checklist Dashboard", "Value"])
+        for card in data["cards"]:
+            summary.append([card["label"], card["value"]])
+        for table in data["tables"]:
+            sheet = workbook.create_sheet(table["key"].title()[:31])
+            sheet.append(table["headers"])
+            for row in table["rows"]:
+                sheet.append(row)
+        notes = workbook.create_sheet("Methodology_Notes")
+        notes.append(["Topic", "Explanation"])
+        notes.append(["Methodology", data["methodology_note"]])
+        for key, label, numerator, denominator in self.rate_definitions:
+            notes.append([label, f"100 × SUM({numerator}) / SUM({denominator}); denominator <= 0: N/A"])
+        for key, value in data["filters"].items():
+            notes.append(["Filter: " + key, value or "All"])
+        for table in data["tables"]:
+            if table["note"]:
+                notes.append([table["title"], table["note"]])
+        for sheet in workbook.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for row in sheet:
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cell.value = ILLEGAL_CHARACTERS_RE.sub("", cell.value)
+                        # Treat record labels as text, including strings beginning with '='.
+                        cell.data_type = "s"
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor="1F4E78")
+            for column in sheet.columns:
+                width = max(len(str(cell.value or "")) for cell in column)
+                sheet.column_dimensions[get_column_letter(column[0].column)].width = min(max(width + 2, 14), 55)
+        filename = "WHO_Childbirth_Dashboard_" + timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S") + ".xlsx"
         response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         workbook.save(response)
