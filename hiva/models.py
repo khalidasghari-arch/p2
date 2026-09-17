@@ -1835,7 +1835,7 @@ class safesurgeryclinical(models.Model):
         null=True, blank=True
     )
     total_deliv = models.BigIntegerField(default=0,
-        verbose_name="Total Number of Deliveries",
+        verbose_name="Total Number of Deliveries (Normal + C-section + Assisted)",
         null=True, blank=True
     )
     cs_rate = models.DecimalField(default=0,
@@ -1871,11 +1871,11 @@ class safesurgeryclinical(models.Model):
 
     # PPH during/after CS
     pph_cs_num = models.BigIntegerField(default=0,
-        verbose_name="Number of Post-Partum Hemorrhage cases during or after CS",
+        verbose_name="Number of Post-Partum Hemorrhage cases during or after CS =>1000ml",
         null=True, blank=True
     )
     pph_cs_rate = models.DecimalField(default=0,
-        verbose_name="Cesarean PPH Rate (>500 ml)",
+        verbose_name="Cesarean PPH Rate (=>1000 ml) (%)",
         max_digits=5, decimal_places=2,
         null=True, blank=True,
         help_text="Percentage (%)"
