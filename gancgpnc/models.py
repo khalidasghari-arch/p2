@@ -53,7 +53,7 @@ class Gancenrollment(models.Model):
     address = models.CharField(max_length=255, verbose_name="Address")
     education_level = models.CharField(max_length=255, verbose_name="Education Level", blank=True, null=True)
     gravida = models.PositiveIntegerField(verbose_name="Gravida", blank=True, null=True)
-    gafirstanc = models.PositiveIntegerField(verbose_name="G-Age",
+    gafirstanc = models.PositiveIntegerField(verbose_name="Gestational Age (weeks) at first ANC", 
         validators=[
             MinValueValidator(20),
             MaxValueValidator(24)
@@ -62,7 +62,7 @@ class Gancenrollment(models.Model):
     age_years = models.PositiveIntegerField(verbose_name="Age (Year)", blank=True, null=True)
     transfer_in = models.BooleanField(default=True, verbose_name="Transfer In", blank=True, null=True)
     numerof_ancvisits = models.PositiveSmallIntegerField(default=0, blank=True, null=True,verbose_name="Individual-ANC-Visits")
-    remarks = models.TextField(blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True, verbose_name="Remarks/Comments")
 
     class Meta:
         verbose_name = "ENROLLMENT"
@@ -86,6 +86,7 @@ class Gancfirstsession(models.Model):
 
     URIN_EXAM = [
     ("NO/+", "NO/+"),
+    ("NO","NO"),
     ("+","+"),
     ("++","++"),
     ("+++","+++"),]
@@ -95,30 +96,30 @@ class Gancfirstsession(models.Model):
     sessionround = models.CharField(max_length=255, choices=SESSION_ROUND, default="FIRST-SESSION", verbose_name="Session-Round")
     sessiondate = models.DateField()
     attendance = models.CharField(max_length=255, choices=INDIVIDUAL_ATTENDANCE, default="GROUP",verbose_name="Attendance (Group/Individual/Absent)")
-    presentga = models.PositiveIntegerField(verbose_name="Present_GA")
+    presentga = models.PositiveIntegerField(verbose_name="Present_Gestational Age (Weeks)")
     bp = models.CharField(max_length=255)
-    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD (Y/N)")
-    weight = models.PositiveIntegerField(verbose_name="Weight")
-    anemia = models.BooleanField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.BooleanField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
-    pcalcium = models.BooleanField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.BooleanField(verbose_name="absorbed calcium in the last month(Y/N)")
-    muac = models.DecimalField(max_digits=4, decimal_places=1,verbose_name="MUAC")
-    dmam = models.BooleanField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.BooleanField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.BooleanField(verbose_name="Refer SAM to higher level (Y/N)")
-    clabexm = models.BooleanField(verbose_name="Completing Laboratory Exam (Y/N)")
+    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension")
+    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD")
+    weight = models.PositiveIntegerField(verbose_name="Weight(kg)")
+    anemia = models.BooleanField(verbose_name="Anemia")
+    ironfolate = models.BooleanField(verbose_name="Iron Folate (routine Dose)")
+    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman")
+    pcalcium = models.BooleanField(verbose_name="Prescribe Calcium")
+    acalcium = models.BooleanField(verbose_name="Absorbed calcium in the last month")
+    muac = models.DecimalField(max_digits=4, decimal_places=1,verbose_name="MUAC(cm)")
+    dmam = models.BooleanField(verbose_name="Diagnosed with MAM")
+    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor")
+    dsam = models.BooleanField(verbose_name="Diagnosed with SAM")
+    rsam = models.BooleanField(verbose_name="Refer SAM to higher level")
+    clabexm = models.BooleanField(verbose_name="Completing Laboratory Exam")
     hemoglobin = models.DecimalField(max_digits=4, decimal_places=1,verbose_name="Hemoglobin")
-    urinexamcheck = models.BooleanField(blank=True, null=True, verbose_name="Urine Exam Check (Y/N)")
+    urinexamcheck = models.BooleanField(blank=True, null=True, verbose_name="Urine Exam Check")
     urinexam = models.CharField(max_length=255, choices=URIN_EXAM,default="NO/+", verbose_name="Urine exam/Protein Uria (NO/+,++,+++)")
-    rpositivepuriatomd = models.BooleanField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
-    coughmorethantwoweeks= models.BooleanField(verbose_name="cough for more than two weeks(Y/N)")
+    rpositivepuriatomd = models.BooleanField(verbose_name="Referred  Positive Protin Uria to MD")
+    coughmorethantwoweeks= models.BooleanField(verbose_name="cough for more than two weeks")
     rcough = models.BooleanField(verbose_name="Referred cough for more than two week to DOTS Room")
-    ttvaccine = models.BooleanField(verbose_name="TT vaccine (Y/N)")
-    dangersign = models.BooleanField(verbose_name="Danger signs during pregnancy (Y/N) ")
+    ttvaccine = models.BooleanField(verbose_name="TT vaccine")
+    dangersign = models.BooleanField(verbose_name="Danger signs during pregnancy")
     typeofdangersign = models.CharField(max_length=255, verbose_name="Type of Danger sign")
     remarks = models.TextField(blank=True, null=True)
 
@@ -147,6 +148,7 @@ class Gancsecondsession(models.Model):
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("NO", "NO"),
         ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
@@ -181,29 +183,29 @@ class Gancsecondsession(models.Model):
         verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
-    presentga = models.PositiveIntegerField(verbose_name="Present_GA")
+    presentga = models.PositiveIntegerField(verbose_name="Present_Gestational Age (weeks)")
     bp = models.CharField(max_length=255)
-    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD (Y/N)")
-    weight = models.PositiveIntegerField(verbose_name="Weight")
-    anemia = models.BooleanField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.BooleanField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
-    pcalcium = models.BooleanField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.BooleanField(verbose_name="absorbed calcium in the last month(Y/N)")
-    mebendazole = models.BooleanField(verbose_name="Mebendazole (Y/N)")
+    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension")
+    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD")
+    weight = models.PositiveIntegerField(verbose_name="Weight (kg)")
+    anemia = models.BooleanField(verbose_name="Anemia")
+    ironfolate = models.BooleanField(verbose_name="Iron Folate (routine Dose)")
+    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman")
+    pcalcium = models.BooleanField(verbose_name="Prescribe-Calcium")
+    acalcium = models.BooleanField(verbose_name="Absorbed calcium in the last month(Y/N)")
+    mebendazole = models.BooleanField(verbose_name="Mebendazole")
     muac = models.DecimalField(
         max_digits=4,
         decimal_places=1,
-        verbose_name="MUAC"
+        verbose_name="MUAC(cm)"
     )
-    dmam = models.BooleanField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.BooleanField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.BooleanField(verbose_name="Refer SAM to higher level (Y/N)")
+    dmam = models.BooleanField(verbose_name="Diagnosed with MAM")
+    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor")
+    dsam = models.BooleanField(verbose_name="Diagnosed with SAM")
+    rsam = models.BooleanField(verbose_name="Refer SAM to higher level")
 
     urinexamcheck = models.BooleanField(blank=True, null=True,
-        verbose_name="Urine Exam Check (Y/N)"
+        verbose_name="Urine Exam Check"
     )
 
     urinexam = models.CharField(
@@ -213,11 +215,11 @@ class Gancsecondsession(models.Model):
         verbose_name="Urine exam/Protein Uria (NO/+,++,+++)"
     )
 
-    rpositivepuriatomd = models.BooleanField(verbose_name="Referred  Positive Protin Uria to MD (Y/N)")
-    coughmorethantwoweeks = models.BooleanField(verbose_name="cough for more than two weeks(Y/N)")
+    rpositivepuriatomd = models.BooleanField(verbose_name="Referred  Positive Protin Uria to MD")
+    coughmorethantwoweeks = models.BooleanField(verbose_name="Cough for more than two weeks")
     rcough = models.BooleanField(verbose_name="Referred cough for more than two week to DOTS Room")
-    ttvaccine = models.BooleanField(verbose_name="TT vaccine (Y/N)")
-    dangersign = models.BooleanField(verbose_name="Danger signs during pregnancy (Y/N)")
+    ttvaccine = models.BooleanField(verbose_name="TT vaccine")
+    dangersign = models.BooleanField(verbose_name="Danger signs during pregnancy")
     typeofdangersign = models.CharField(
         max_length=255,
         verbose_name="Type of Danger sign",
@@ -252,6 +254,7 @@ class Gancthirdsession(models.Model):
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("NO", "NO"),
         ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
@@ -286,46 +289,46 @@ class Gancthirdsession(models.Model):
         verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
-    presentga = models.PositiveIntegerField(verbose_name="Present_GA")
+    presentga = models.PositiveIntegerField(verbose_name="Present Gestational Age (weeks)")
     bp = models.CharField(max_length=255)
 
-    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension (Y/N)")
-    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD (Y/N)")
+    dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension")
+    rhypertensiontoMD = models.BooleanField(verbose_name="Referred  hypertension to MD")
 
-    weight = models.PositiveIntegerField(verbose_name="Weight")
+    weight = models.PositiveIntegerField(verbose_name="Weight(kg)")
 
-    anemia = models.BooleanField(verbose_name="Anemia (Y/N)")
-    ironfolate = models.BooleanField(verbose_name="Iron Folate/routine Dose(Y/N)")
-    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman(Y/N)")
+    anemia = models.BooleanField(verbose_name="Anemia")
+    ironfolate = models.BooleanField(verbose_name="Iron Folate (routine Dose)")
+    ironfolatepluswomen = models.BooleanField(verbose_name="Iron folate (30+) for anemic woman")
 
-    pcalcium = models.BooleanField(verbose_name="Prescribe-Calcium(Y/N)")
-    acalcium = models.BooleanField(verbose_name="absorbed calcium in the last month(Y/N)")
+    pcalcium = models.BooleanField(verbose_name="Prescribe-Calcium")
+    acalcium = models.BooleanField(verbose_name="Absorbed calcium in the last month")
 
     muac = models.DecimalField(
         max_digits=4,
         decimal_places=1,
-        verbose_name="MUAC"
+        verbose_name="MUAC(cm)"
     )
 
-    dmam = models.BooleanField(verbose_name="Diagnosed with MAM (Y/N)")
-    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor (Y/N))")
-    dsam = models.BooleanField(verbose_name="Diagnosed with SAM (Y/N)")
-    rsam = models.BooleanField(verbose_name="Refer SAM to higher level (Y/N)")
+    dmam = models.BooleanField(verbose_name="Diagnosed with MAM")
+    rmam = models.BooleanField(verbose_name="Refer MAM to Nutrition Counsellor")
+    dsam = models.BooleanField(verbose_name="Diagnosed with SAM")
+    rsam = models.BooleanField(verbose_name="Refer SAM to higher level")
 
     antedepressionscreening = models.BooleanField(
-        verbose_name="Antenatal Depression Screening (Y/N)"
+        verbose_name="Antenatal Depression Screening"
     )
 
     antedepressiondiagnosed = models.BooleanField(
-        verbose_name="Antenatal Depression Diagnosed (Y/N)"
+        verbose_name="Antenatal Depression Diagnosed"
     )
 
     rpsychosocialcounselor = models.BooleanField(
-        verbose_name="Refer to the psychosocial counselor (Y/N)"
+        verbose_name="Refer to the psychosocial counselor"
     )
 
     urinexamcheck = models.BooleanField(blank=True, null=True,
-        verbose_name="Urine Exam Check (Y/N)"
+        verbose_name="Urine Exam Check"
     )
 
     urinexam = models.CharField(
@@ -336,21 +339,21 @@ class Gancthirdsession(models.Model):
     )
 
     rpositivepuriatomd = models.BooleanField(
-        verbose_name="Referred  Positive Protin Uria to MD (Y/N)"
+        verbose_name="Referred  Positive Protin Uria to MD"
     )
 
     coughmorethantwoweeks = models.BooleanField(
-        verbose_name="cough for more than two weeks(Y/N)"
+        verbose_name="Cough for more than two weeks"
     )
 
     rcough = models.BooleanField(
         verbose_name="Referred cough for more than two week to DOTS Room"
     )
 
-    ttvaccine = models.BooleanField(verbose_name="TT vaccine (Y/N)")
+    ttvaccine = models.BooleanField(verbose_name="TT vaccine")
 
     dangersign = models.BooleanField(
-        verbose_name="Danger signs during pregnancy (Y/N) "
+        verbose_name="Danger signs during pregnancy"
     )
 
     typeofdangersign = models.CharField(
@@ -361,7 +364,7 @@ class Gancthirdsession(models.Model):
     )
 
     birthplanningcounseling = models.BooleanField(
-        verbose_name="Birth Planning Counseling (Y/N) "
+        verbose_name="Birth Planning Counseling"
     )
 
     remarks = models.TextField(blank=True, null=True)
@@ -391,6 +394,7 @@ class Gancfouthsession(models.Model):
 
     URIN_EXAM = [
         ("NO/+", "NO/+"),
+        ("NO", "NO"),
         ("+", "+"),
         ("++", "++"),
         ("+++", "+++"),
@@ -425,74 +429,74 @@ class Gancfouthsession(models.Model):
         verbose_name="Attendance (Group/Individual/Absent/Dropout)"
     )
 
-    presentga = models.PositiveIntegerField(verbose_name="Present_GA")
+    presentga = models.PositiveIntegerField(verbose_name="Present Gestational Age (weeks)")
 
     bp = models.CharField(max_length=255)
 
     dhypertension = models.BooleanField(
-        verbose_name="Diagnosed with hypertension (Y/N)"
+        verbose_name="Diagnosed with hypertension"
     )
 
     rhypertensiontoMD = models.BooleanField(
-        verbose_name="Referred hypertension to MD (Y/N)"
+        verbose_name="Referred hypertension to MD"
     )
 
-    weight = models.PositiveIntegerField(verbose_name="Weight")
+    weight = models.PositiveIntegerField(verbose_name="Weight(kg)")
 
-    anemia = models.BooleanField(verbose_name="Anemia (Y/N)")
+    anemia = models.BooleanField(verbose_name="Anemia")
 
     ironfolate = models.BooleanField(
-        verbose_name="Iron Folate/Routine Dose (Y/N)"
+        verbose_name="Iron Folate (Routine Dose)"
     )
 
     ironfolatepluswomen = models.BooleanField(
-        verbose_name="Iron Folate (30+) for Anemic Woman (Y/N)"
+        verbose_name="Iron Folate (30+) for Anemic Woman"
     )
 
     pcalcium = models.BooleanField(
-        verbose_name="Prescribe Calcium (Y/N)"
+        verbose_name="Prescribe Calcium"
     )
 
     acalcium = models.BooleanField(
-        verbose_name="Absorbed Calcium in the Last Month (Y/N)"
+        verbose_name="Absorbed Calcium in the Last Month"
     )
 
     muac = models.DecimalField(
         max_digits=4,
         decimal_places=1,
-        verbose_name="MUAC"
+        verbose_name="MUAC(cm)"
     )
 
     dmam = models.BooleanField(
-        verbose_name="Diagnosed with MAM (Y/N)"
+        verbose_name="Diagnosed with MAM"
     )
 
     rmam = models.BooleanField(
-        verbose_name="Refer MAM to Nutrition Counsellor (Y/N)"
+        verbose_name="Refer MAM to Nutrition Counsellor"
     )
 
     dsam = models.BooleanField(
-        verbose_name="Diagnosed with SAM (Y/N)"
+        verbose_name="Diagnosed with SAM"
     )
 
     rsam = models.BooleanField(
-        verbose_name="Refer SAM to Higher Level (Y/N)"
+        verbose_name="Refer SAM to Higher Level"
     )
 
     antedepressionscreening = models.BooleanField(
-        verbose_name="Antenatal Depression Screening (Y/N)"
+        verbose_name="Antenatal Depression Screening"
     )
 
     antedepressiondiagnosed = models.BooleanField(
-        verbose_name="Antenatal Depression Diagnosed (Y/N)"
+        verbose_name="Antenatal Depression Diagnosed"
     )
 
     rpsychosocialcounselor = models.BooleanField(
-        verbose_name="Refer to the Psychosocial Counselor (Y/N)"
+        verbose_name="Refer to the Psychosocial Counselor"
     )
 
     urinexamcheck = models.BooleanField(blank=True, null=True,
-        verbose_name="Urine Exam Check (Y/N)"
+        verbose_name="Urine Exam Check"
     )
 
     urinexam = models.CharField(
@@ -503,23 +507,23 @@ class Gancfouthsession(models.Model):
     )
 
     rpositivepuriatomd = models.BooleanField(
-        verbose_name="Referred Positive Protein Uria to MD (Y/N)"
+        verbose_name="Referred Positive Protein Uria to MD"
     )
 
     coughmorethantwoweeks = models.BooleanField(
-        verbose_name="Cough for More Than Two Weeks (Y/N)"
+        verbose_name="Cough for More Than Two Weeks"
     )
 
     rcough = models.BooleanField(
-        verbose_name="Referred Cough to DOTS Room (Y/N)"
+        verbose_name="Referred Cough to DOTS Room"
     )
 
     ttvaccine = models.BooleanField(
-        verbose_name="TT Vaccine (Y/N)"
+        verbose_name="TT Vaccine"
     )
 
     dangersign = models.BooleanField(
-        verbose_name="Danger Signs During Pregnancy (Y/N)"
+        verbose_name="Danger Signs During Pregnancy"
     )
 
     typeofdangersign = models.CharField(
@@ -530,7 +534,7 @@ class Gancfouthsession(models.Model):
     )
 
     birthplanningcounseling = models.BooleanField(
-        verbose_name="Birth Planning Counseling (Y/N)"
+        verbose_name="Birth Planning Counseling"
     )
 
     remarks = models.TextField(
