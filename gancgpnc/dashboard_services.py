@@ -14,6 +14,7 @@ from .models import (
     Gancdelivery,
     GroupPncfirstSession,
     GroupPncsecondSession,
+    DeliveryComplication,
 )
 
 
@@ -1274,10 +1275,19 @@ def get_delivery_summary(enrollments):
         )
     )
 
-    maternal_complication = (
-        nonempty_unique_count(
-            deliveries,
-            "types_of_complication",
+    maternal_complication = unique_register_count(
+        deliveries.filter(
+            complications__in=(
+                DeliveryComplication.objects.exclude(
+                    code="no_complication"
+                )
+            )
+        )
+    )
+
+    complication_unclassified = unique_register_count(
+        deliveries.filter(
+            complications__isnull=True
         )
     )
 
@@ -1433,6 +1443,10 @@ def get_delivery_summary(enrollments):
 
         "maternal_complication": (
             maternal_complication
+        ),
+
+        "complication_unclassified": (
+            complication_unclassified
         ),
 
         "maternal_complication_pct": percentage(

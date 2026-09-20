@@ -544,7 +544,20 @@ class Gancfouthsession(models.Model):
 
     def __str__(self):
         return self.sessiontype
+    
+class DeliveryComplication(models.Model):
+    code = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=120)
+    sort_order = models.PositiveSmallIntegerField(default=100)
 
+    class Meta:
+        ordering = ("sort_order", "name")
+        verbose_name = "Delivery complication"
+        verbose_name_plural = "Delivery complications"
+
+    def __str__(self):
+        return self.name
+    
 class Gancdelivery(models.Model):
     registerid = models.ForeignKey(Gancenrollment, on_delete=models.CASCADE, verbose_name="Register Name")
     
@@ -593,6 +606,16 @@ class Gancdelivery(models.Model):
         blank=True,
         null=True,
         verbose_name="Types of Complication"
+    )
+
+    complications = models.ManyToManyField(
+        DeliveryComplication,
+        related_name="deliveries",
+        blank=True,
+        verbose_name="Complications during labor and delivery",
+        help_text=("Select one or more complications. "
+            "Select No Complication alone when none occurred."
+        ),
     )
 
     how_complication_was_managed = models.TextField(

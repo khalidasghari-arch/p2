@@ -793,6 +793,13 @@ GANC/PNC Continuum Dashboard
                 <div class="ganc-kpi-value">
                     {{ delivery_summary.maternal_complication }}
                 </div>
+                    {% if delivery_summary.complication_unclassified %}
+                    <div class="ganc-kpi-note">
+                        {{ delivery_summary.complication_unclassified }}
+                        enrollment(s) have delivery records awaiting
+                        complication classification.
+                    </div>
+                {% endif %}
             </div>
 
             <div class="ganc-kpi-card ganc-danger-card">

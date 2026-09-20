@@ -3270,8 +3270,51 @@ class GancDeliveryAdminForm(forms.ModelForm):
         model = Gancdelivery
         fields = "__all__"
 
+    class Media:
+        js = (
+            "gancgpnc/js/delivery_complications.js",
+        )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        if "complications" in self.fields:
+            field = self.fields["complications"]
+
+            no_complication_id = (
+                field.queryset
+                .filter(code="no_complication")
+                .values_list("pk", flat=True)
+                .first()
+            )
+
+            field.widget = forms.CheckboxSelectMultiple(
+                choices=field.choices,
+                attrs={
+                    "data-no-complication-id": (
+                        str(no_complication_id)
+                        if no_complication_id is not None
+                        else ""
+                    ),
+                },
+            )
+
+            field.required = True
+
+            field.help_text = (
+                "Select one or more complications. "
+                "Selecting No Complication clears and disables "
+                "the other choices. Uncheck it to enable them."
+            )
+
+        if "types_of_complication" in self.fields:
+            self.fields["types_of_complication"].label = (
+                "Complication details / legacy text"
+            )
+            self.fields["types_of_complication"].help_text = (
+                "Optional details and historical text. "
+                "Dashboard counts use the selections above."
+            )
 
         if "registerid" in self.fields:
             original_field = self.fields["registerid"]
@@ -3286,7 +3329,21 @@ class GancDeliveryAdminForm(forms.ModelForm):
                 ),
             )
 
+    def clean_complications(self):
+        selected = self.cleaned_data["complications"]
 
+        codes = set(
+            selected.values_list("code", flat=True)
+        )
+
+        if "no_complication" in codes and len(codes) > 1:
+            raise forms.ValidationError(
+                "Select No Complication alone, or select "
+                "the complications that occurred."
+            )
+
+        return selected
+    
 # ============================================================
 # GANC DELIVERY ADMIN
 # ============================================================
@@ -3423,6 +3480,8 @@ class GancdeliveryAdmin(BaseSessionAdmin):
 
                 "complication_help",
 
+                "complications",
+
                 "types_of_complication",
 
                 "how_complication_was_managed",
@@ -3548,8 +3607,10 @@ class GancdeliveryAdmin(BaseSessionAdmin):
 
     def complication_help(self, obj=None):
         return (
-            "If a maternal complication occurred, record the "
-            "type of complication and how it was managed."
+            "Select one or more complications, or select "
+            "No Complication alone. Use the text field for "
+            "additional details. Dashboard counts use the "
+            "selections, not the text."
         )
 
     complication_help.short_description = (
@@ -3620,7 +3681,8 @@ class GancdeliveryAdmin(BaseSessionAdmin):
             "Immediate Uterotonic for AMTSL",
 
             # Maternal outcome
-            "Types of Complication",
+            "Selected Complications",
+            "Complication Details / Legacy Text",
             "How Complication Was Managed",
             "Maternal Death",
 
@@ -3778,6 +3840,11 @@ class GancdeliveryAdmin(BaseSessionAdmin):
                 ),
 
                 # Maternal complications
+                "; ".join(
+                    item.name
+                    for item in obj.complications.all()
+                ),
+
                 safe_text(
                     obj.types_of_complication
                 ),
@@ -4287,7 +4354,7 @@ class GroupPncfirstSessionAdmin(BaseSessionAdmin):
         def safe_text(value):
             return "" if value is None else str(value)
 
-        for obj in queryset:
+        for obj in queryset.prefetch_related("complications"):
 
             enrollment = obj.registerid
 
