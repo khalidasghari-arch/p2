@@ -1572,6 +1572,12 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # Main view
     # ============================================================
     def changelist_view(self, request, extra_context=None):
+        if request.GET.get("filter_options") == "1":
+            if not self.has_view_permission(request):
+                raise PermissionDenied
+            base_qs = self._base_queryset(request)
+            _, filters = self._apply_filters(request, base_qs)
+            return JsonResponse(self._filter_options(base_qs, filters))
         data = self._build_dashboard_data(request)
 
         if request.GET.get("export") == "1":
@@ -1608,10 +1614,18 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def _apply_filters(self, request, queryset):
         province_id = request.GET.get("province", "").strip()
         facility_id = request.GET.get("facility", "").strip()
-        gre_year = request.GET.get("gre_year", "").strip()
-        gre_month = request.GET.get("gre_month", "").strip()
-        shamsiyear = request.GET.get("shamsiyear", "").strip()
-        shamsimonth = request.GET.get("shamsimonth", "").strip()
+        gre_year = list(dict.fromkeys(
+            value.strip() for value in request.GET.getlist("gre_year") if value.strip()
+        ))
+        gre_month = list(dict.fromkeys(
+            value.strip() for value in request.GET.getlist("gre_month") if value.strip()
+        ))
+        shamsiyear = list(dict.fromkeys(
+            value.strip() for value in request.GET.getlist("shamsiyear") if value.strip()
+        ))
+        shamsimonth = list(dict.fromkeys(
+            value.strip() for value in request.GET.getlist("shamsimonth") if value.strip()
+        ))
         bl_progress = request.GET.get("bl_progress", "").strip()
         period = request.GET.get("period", "").strip()
 
@@ -1624,16 +1638,16 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             queryset = queryset.filter(aimfacilityname_id=facility_id)
 
         if gre_year:
-            queryset = queryset.filter(gre_year=gre_year)
+            queryset = queryset.filter(gre_year__in=gre_year)
 
         if gre_month:
-            queryset = queryset.filter(gre_month=gre_month)
+            queryset = queryset.filter(gre_month__in=gre_month)
 
         if shamsiyear:
-            queryset = queryset.filter(shamsiyear=shamsiyear)
+            queryset = queryset.filter(shamsiyear__in=shamsiyear)
 
         if shamsimonth:
-            queryset = queryset.filter(shamsimonth=shamsimonth)
+            queryset = queryset.filter(shamsimonth__in=shamsimonth)
 
         if bl_progress:
             queryset = queryset.filter(bl_progress=bl_progress)
@@ -1984,13 +1998,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     # ============================================================
     # Build dashboard data
     # ============================================================
-    def _build_dashboard_data(self, request):
-        base_qs = self._base_queryset(request)
-        queryset, filters = self._apply_filters(request, base_qs)
-
-        # ============================================================
-        # Filter options
-        # ============================================================
+    def _filter_options(self, base_qs, filters):
         # Each dropdown uses the base scope plus selections to its left.
         # Later selections must not hide alternatives in earlier dropdowns.
         options_qs = base_qs
@@ -2048,7 +2056,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         # Narrow only after collecting this dropdown's available choices.
         if filters["gre_year"]:
             options_qs = options_qs.filter(
-                **{"gre_year": filters["gre_year"]}
+                **{"gre_year__in": filters["gre_year"]}
             )
 
         gre_month_options = list(
@@ -2062,7 +2070,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         # Narrow only after collecting this dropdown's available choices.
         if filters["gre_month"]:
             options_qs = options_qs.filter(
-                **{"gre_month": filters["gre_month"]}
+                **{"gre_month__in": filters["gre_month"]}
             )
 
         shamsiyear_options = list(
@@ -2076,7 +2084,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         # Narrow only after collecting this dropdown's available choices.
         if filters["shamsiyear"]:
             options_qs = options_qs.filter(
-                **{"shamsiyear": filters["shamsiyear"]}
+                **{"shamsiyear__in": filters["shamsiyear"]}
             )
 
         shamsimonth_options = list(
@@ -2090,7 +2098,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         # Narrow only after collecting this dropdown's available choices.
         if filters["shamsimonth"]:
             options_qs = options_qs.filter(
-                **{"shamsimonth": filters["shamsimonth"]}
+                **{"shamsimonth__in": filters["shamsimonth"]}
             )
 
         bl_progress_options = list(
@@ -2114,6 +2122,26 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .distinct()
             .order_by("period")
         )
+
+        return {
+            "province_options": province_options,
+            "facility_options": facility_options,
+            "gre_year_options": gre_year_options,
+            "gre_month_options": gre_month_options,
+            "shamsiyear_options": shamsiyear_options,
+            "shamsimonth_options": shamsimonth_options,
+            "bl_progress_options": bl_progress_options,
+            "period_options": period_options,
+        }
+
+    def _build_dashboard_data(self, request):
+        base_qs = self._base_queryset(request)
+        queryset, filters = self._apply_filters(request, base_qs)
+
+        # ============================================================
+        # Filter options
+        # ============================================================
+        options = self._filter_options(base_qs, filters)
 
         # ============================================================
         # Aggregation fields
@@ -2542,19 +2570,13 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         }
 
         export_query = request.GET.copy()
+        export_query.pop("filter_options", None)
         export_query["export"] = "1"
 
         return {
             "filters": filters,
+            **options,
             "export_query": export_query.urlencode(),
-            "province_options": province_options,
-            "facility_options": facility_options,
-            "gre_year_options": gre_year_options,
-            "gre_month_options": gre_month_options,
-            "shamsiyear_options": shamsiyear_options,
-            "shamsimonth_options": shamsimonth_options,
-            "bl_progress_options": bl_progress_options,
-            "period_options": period_options,
             "kpis": kpis,
             "progress_rows": progress_rows,
             "indicator_comparison_rows": indicator_comparison_rows,
@@ -2859,6 +2881,10 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "The Facility_Indicator_Comparison sheet compares summed facility-level values for each indicator between PRE-I and PRE-P.",
         ])
 
+        for key, value in data["filters"].items():
+            display = ", ".join(value) if isinstance(value, list) else value
+            ws10.append(["Filter: " + key, display or "All"])
+
         for sheet in wb.worksheets:
             style_sheet(sheet)
 
@@ -2871,6 +2897,7 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response
+
 
     
 # ============================================================
