@@ -9291,31 +9291,71 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "aimfacilityname__districtfk__provincefk",
         )
 
-    def _apply_filters(self, request, queryset):
-        names = ("province", "facility", "gre_year", "gre_month",
-                 "shamsiyear", "shamsimonth", "bl_progress", "period")
-        filters = {name: request.GET.get(name, "").strip() for name in names}
-        paths = {
-            "province": "aimfacilityname__districtfk__provincefk_id",
-            "facility": "aimfacilityname_id",
-        }
-        for name, value in filters.items():
-            if not value:
-                continue
-            if name in paths:
-                if not value.isdecimal() or len(value) > 18 or int(value) <= 0:
-                    raise SuspiciousOperation("Invalid dashboard filter ID")
-                queryset = queryset.filter(**{paths[name]: int(value)})
-            elif name == "bl_progress":
-                canonical = value.upper().replace("_", "-").replace(" ", "-")
-                canonical = {"PREI": "PRE-I", "PREP": "PRE-P"}.get(canonical, canonical)
-                if canonical in ("PRE-I", "PRE-P"):
-                    queryset = self._progress_filter(queryset, canonical)
-                else:
-                    queryset = queryset.filter(bl_progress=value)
+    date_filter_names = ("gre_year", "gre_month", "shamsiyear", "shamsimonth")
+    filter_names = ("province", "facility", "gre_year", "gre_month",
+                    "shamsiyear", "shamsimonth", "bl_progress", "period")
+
+    def _read_filters(self, request):
+        filters = {}
+        for name in self.filter_names:
+            if name in self.date_filter_names:
+                filters[name] = list(dict.fromkeys(
+                    value.strip() for value in request.GET.getlist(name) if value.strip()
+                ))
             else:
-                queryset = queryset.filter(**{name: value})
+                filters[name] = request.GET.get(name, "").strip()
+        return filters
+
+    def _filter_value(self, queryset, name, value):
+        if not value:
+            return queryset
+        paths = {"province": "aimfacilityname__districtfk__provincefk_id",
+                 "facility": "aimfacilityname_id"}
+        if name in paths:
+            if not value.isdecimal() or len(value) > 18 or int(value) <= 0:
+                raise SuspiciousOperation("Invalid dashboard filter ID")
+            return queryset.filter(**{paths[name]: int(value)})
+        if name in self.date_filter_names:
+            return queryset.filter(**{name + "__in": value})
+        if name == "bl_progress":
+            canonical = value.upper().replace("_", "-").replace(" ", "-")
+            canonical = {"PREI": "PRE-I", "PREP": "PRE-P"}.get(canonical, canonical)
+            if canonical in ("PRE-I", "PRE-P"):
+                return self._progress_filter(queryset, canonical)
+        return queryset.filter(**{name: value})
+
+    def _apply_filters(self, request, queryset):
+        filters = self._read_filters(request)
+        for name in self.filter_names:
+            queryset = self._filter_value(queryset, name, filters[name])
         return queryset, filters
+
+    def _filter_options(self, base_qs, filters):
+        options = {}
+        queryset = base_qs.order_by()
+        for name in self.filter_names:
+            if name == "province":
+                options["province_options"] = [
+                    {"province_id": pk, "province": label or ""} for pk, label in
+                    queryset.exclude(aimfacilityname__districtfk__provincefk_id__isnull=True)
+                    .values_list("aimfacilityname__districtfk__provincefk_id",
+                                 "aimfacilityname__districtfk__provincefk__name")
+                    .order_by("aimfacilityname__districtfk__provincefk__name").distinct()
+                ]
+            elif name == "facility":
+                options["facility_options"] = [
+                    {"facility_id": pk, "facility": label or ""} for pk, label in
+                    queryset.values_list("aimfacilityname_id", "aimfacilityname__name")
+                    .order_by("aimfacilityname__name").distinct()
+                ]
+            else:
+                options[name + "_options"] = list(
+                    queryset.exclude(**{name: ""}).exclude(**{name + "__isnull": True})
+                    .values_list(name, flat=True).order_by(name).distinct()
+                )
+            # Apply this selection only AFTER calculating its own choices.
+            queryset = self._filter_value(queryset, name, filters[name])
+        return options
 
     def _annotations(self):
         # Never SUM the stored Decimal percentage.
@@ -9438,25 +9478,7 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def _build_dashboard_data(self, request):
         base_qs = self._base_queryset(request)
         queryset, filters = self._apply_filters(request, base_qs)
-        # Facility choices cascade from the selected province, within user scope.
-        # _apply_filters has already validated the province ID.
-        facility_qs = base_qs
-        if filters["province"]:
-            facility_qs = facility_qs.filter(
-                aimfacilityname__districtfk__provincefk_id=int(filters["province"])
-            )
-        options = {
-            "province_options": [{"province_id": pid, "province": name} for pid, name in
-                base_qs.values_list("aimfacilityname__districtfk__provincefk_id",
-                                    "aimfacilityname__districtfk__provincefk__name").distinct().order_by(
-                                        "aimfacilityname__districtfk__provincefk__name")],
-            "facility_options": [{"facility_id": fid, "facility": name} for fid, name in
-                facility_qs.values_list("aimfacilityname_id", "aimfacilityname__name").distinct().order_by(
-                    "aimfacilityname__name")],
-        }
-        for field in ("gre_year", "gre_month", "shamsiyear", "shamsimonth", "bl_progress", "period"):
-            options[field + "_options"] = list(base_qs.exclude(**{field: ""}).exclude(
-                **{field + "__isnull": True}).values_list(field, flat=True).distinct().order_by(field))
+        options = self._filter_options(base_qs, filters)
         totals = self._totals(queryset)
         kpis = {
             **totals, "records": queryset.count(),
@@ -9546,6 +9568,7 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         charts.append(self._chart("comparison", "PRE-I vs PRE-P — selected count indicators", compare_chart if any(period_totals) else [],
                                   "indicator", [("pre_i", "PRE-I"), ("pre_p", "PRE-P")], horizontal=True))
         export_query = request.GET.copy()
+        export_query.pop("filter_options", None)
         export_query["export"] = "1"
         return {
             **options, "filters": filters, "export_query": export_query.urlencode(),
@@ -9557,6 +9580,9 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         if not self.has_view_permission(request):
             raise PermissionDenied
+        if request.GET.get("filter_options") == "1":
+            filters = self._read_filters(request)
+            return JsonResponse(self._filter_options(self._base_queryset(request), filters))
         data = self._build_dashboard_data(request)
         if request.GET.get("export") == "1":
             return self._export_dashboard_excel(data)
@@ -9585,7 +9611,7 @@ class AimPEEDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             notes.append([label, f"100 × SUM({numerator}) / SUM({denominator}); denominator <= 0: N/A"])
         notes.append(["Indicator 9", "AVG(opd_pree_weekly_lab_testing_percent); unweighted mean of stored percentages, not pooled coverage"])
         for key, value in data["filters"].items():
-            notes.append(["Filter: " + key, value or "All"])
+            notes.append(["Filter: " + key, (", ".join(value) if isinstance(value, list) else value) or "All"])
         for table in data["tables"]:
             if table["note"]:
                 notes.append([table["title"], table["note"]])

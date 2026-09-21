@@ -403,6 +403,8 @@
             min-width: 100%;
         }
     }
+    .pee-filter-grid select[multiple] { height: 112px; }
+    .pee-clear-date { margin-top: 5px; font-size: 12px; cursor: pointer; }
 </style>
 
 <div class="pee-dashboard">
@@ -422,6 +424,8 @@
 
     <div class="pee-card">
         <form method="get" id="aimpee-filter-form">
+            <p id="aimpee-date-help">Select one or more years/months. Hold Ctrl (Windows) or Command (Mac) to select several values. No selection means All. Choices refresh automatically; click Apply filters to update the dashboard.</p>
+            <p id="aimpee-filter-status" role="status" aria-live="polite"></p>
             <div class="pee-filter-grid">
 
                 <div>
@@ -449,51 +453,51 @@
                 </div>
 
                 <div>
-                    <label>Gregorian Year</label>
-                    <select name="gre_year">
-                        <option value="">All</option>
+                    <label for="aimpee-gre_year-filter">Gregorian Year</label>
+                    <select name="gre_year" id="aimpee-gre_year-filter" multiple size="4" aria-describedby="aimpee-date-help">
                         {% for y in gre_year_options %}
-                            <option value="{{ y }}" {% if filters.gre_year|stringformat:"s" == y|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ y }}" {% if y in filters.gre_year %}selected{% endif %}>
                                 {{ y }}
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="pee-clear-date" data-clear="gre_year">Clear selection (All)</button>
                 </div>
 
                 <div>
-                    <label>Gregorian Month</label>
-                    <select name="gre_month">
-                        <option value="">All</option>
+                    <label for="aimpee-gre_month-filter">Gregorian Month</label>
+                    <select name="gre_month" id="aimpee-gre_month-filter" multiple size="4" aria-describedby="aimpee-date-help">
                         {% for m in gre_month_options %}
-                            <option value="{{ m }}" {% if filters.gre_month|stringformat:"s" == m|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ m }}" {% if m in filters.gre_month %}selected{% endif %}>
                                 {{ m }}
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="pee-clear-date" data-clear="gre_month">Clear selection (All)</button>
                 </div>
 
                 <div>
-                    <label>Shamsi Year</label>
-                    <select name="shamsiyear">
-                        <option value="">All</option>
+                    <label for="aimpee-shamsiyear-filter">Shamsi Year</label>
+                    <select name="shamsiyear" id="aimpee-shamsiyear-filter" multiple size="4" aria-describedby="aimpee-date-help">
                         {% for y in shamsiyear_options %}
-                            <option value="{{ y }}" {% if filters.shamsiyear|stringformat:"s" == y|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ y }}" {% if y in filters.shamsiyear %}selected{% endif %}>
                                 {{ y }}
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="pee-clear-date" data-clear="shamsiyear">Clear selection (All)</button>
                 </div>
 
                 <div>
-                    <label>Shamsi Month</label>
-                    <select name="shamsimonth">
-                        <option value="">All</option>
+                    <label for="aimpee-shamsimonth-filter">Shamsi Month</label>
+                    <select name="shamsimonth" id="aimpee-shamsimonth-filter" multiple size="4" aria-describedby="aimpee-date-help">
                         {% for m in shamsimonth_options %}
-                            <option value="{{ m }}" {% if filters.shamsimonth|stringformat:"s" == m|stringformat:"s" %}selected{% endif %}>
+                            <option value="{{ m }}" {% if m in filters.shamsimonth %}selected{% endif %}>
                                 {{ m }}
                             </option>
                         {% endfor %}
                     </select>
+                    <button type="button" class="pee-clear-date" data-clear="shamsimonth">Clear selection (All)</button>
                 </div>
 
                 <div>
@@ -577,17 +581,73 @@
 (function () {
     "use strict";
     const filterForm = document.getElementById("aimpee-filter-form");
-    const provinceFilter = document.getElementById("aimpee-province-filter");
-    const facilityFilter = document.getElementById("aimpee-facility-filter");
-    provinceFilter.addEventListener("change", function () {
-        // Clear the previous facility before refreshing the server-scoped choices.
-        // The GET form retains all the other selected filters, including Period.
-        facilityFilter.value = "";
-        if (typeof filterForm.requestSubmit === "function") {
-            filterForm.requestSubmit();
-        } else {
-            filterForm.submit();
+    const filterStatus = document.getElementById("aimpee-filter-status");
+    const order = ["province", "facility", "gre_year", "gre_month", "shamsiyear", "shamsimonth", "bl_progress", "period"];
+    let pending = null;
+    let revision = 0;
+    function clearSelection(select) {
+        if (select.multiple) { Array.from(select.options).forEach(function (option) { option.selected = false; }); }
+        else { select.value = ""; }
+    }
+    function submitFilters() {
+        // Disabled selects are cleared dependent controls and must not be submitted.
+        if (typeof filterForm.requestSubmit === "function") { filterForm.requestSubmit(); }
+        else { filterForm.submit(); }
+    }
+    async function changed(name) {
+        const index = order.indexOf(name);
+        const later = order.slice(index + 1);
+        const current = filterForm.elements.namedItem(name);
+        revision += 1;
+        const mine = revision;
+        if (pending) { pending.abort(); }
+        later.forEach(function (key) { clearSelection(filterForm.elements.namedItem(key)); });
+        if (!current.multiple) { submitFilters(); return; }
+        if (typeof fetch !== "function" || typeof AbortController !== "function") {
+            later.forEach(function (key) { filterForm.elements.namedItem(key).disabled = true; });
+            filterStatus.textContent = "Click Apply filters to refresh the dependent choices.";
+            return;
         }
+        const params = new URLSearchParams(new FormData(filterForm));
+        params.delete("export");
+        params.set("filter_options", "1");
+        later.forEach(function (key) { filterForm.elements.namedItem(key).disabled = true; });
+        filterStatus.textContent = "Refreshing available choices…";
+        pending = new AbortController();
+        try {
+            const response = await fetch(window.location.pathname + "?" + params.toString(), {
+                signal: pending.signal, credentials: "same-origin", headers: {"Accept": "application/json"}
+            });
+            if (!response.ok) { throw new Error("Filter request failed"); }
+            const choices = await response.json();
+            if (mine !== revision) { return; }
+            later.forEach(function (key) {
+                if (!Array.isArray(choices[key + "_options"])) { throw new Error("Invalid filter response"); }
+            });
+            later.forEach(function (key) {
+                const select = filterForm.elements.namedItem(key);
+                const values = choices[key + "_options"];
+                select.replaceChildren();
+                if (!select.multiple) { select.add(new Option("All", "")); }
+                values.forEach(function (value) { select.add(new Option(String(value), String(value))); });
+                select.disabled = false;
+            });
+            filterStatus.textContent = "Choices updated. Click Apply filters to update the dashboard.";
+        } catch (error) {
+            if (mine !== revision || error.name === "AbortError") { return; }
+            filterStatus.textContent = "Choices could not refresh. Click Apply filters to reload them.";
+        }
+    }
+    order.forEach(function (name) {
+        filterForm.elements.namedItem(name).addEventListener("change", function () { changed(name); });
+    });
+    document.querySelectorAll(".pee-clear-date[data-clear]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            const select = filterForm.elements.namedItem(button.dataset.clear);
+            if (select.disabled) { return; }
+            clearSelection(select);
+            changed(button.dataset.clear);
+        });
     });
     document.querySelectorAll(".pee-search[data-table]").forEach(function (input) {
         input.addEventListener("input", function () {
