@@ -9670,10 +9670,10 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     actions = None
     count_definitions = (
         ('total_cs', 'Total Number of Cesarean Section'),
-        ('total_deliv', 'Total Number of Deliveries (Normal + C-section + Assisted)'),
+        ('total_deliv', 'Total Number of Deliveries'),
         ('who_ssc_completed', 'Number of WHO Surgical Safety Checklists completed'),
         ('safe_tracker_complete', 'Number of Safe Surgery Tracker with all fields completed'),
-        ('pph_cs_num', 'Number of Post-Partum Hemorrhage cases during or after CS =>1000ml'),
+        ('pph_cs_num', 'Number of Post-Partum Hemorrhage cases during or after CS'),
         ('qbl_cs_num', 'Number of C-Section cases with QBL performed & recorded'),
         ('postop_fever_num', 'Number of CS with post-operation fever (>38℃) requiring antibiotics'),
         ('bladder_injury_num', 'Number of cases of injury to bladder due to CS'),
@@ -9691,7 +9691,7 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ('cs_rate', 'Cesarean Section Rate (%)', 'total_cs', 'total_deliv'),
         ('who_ssc_rate', 'Surgical Safety Checklist completion rate (%)', 'who_ssc_completed', 'total_cs'),
         ('safe_tracker_rate', 'Safe Surgery Tracker completion rate (%)', 'safe_tracker_complete', 'total_cs'),
-        ('pph_cs_rate', 'Cesarean PPH Rate (=>1000 ml) (%)', 'pph_cs_num', 'total_cs'),
+        ('pph_cs_rate', 'Cesarean PPH Rate (>500 ml) (%)', 'pph_cs_num', 'total_cs'),
         ('qbl_cs_rate', 'QBL performance rate during C-sections (%)', 'qbl_cs_num', 'total_cs'),
         ('postop_fever_rate', 'Post operation fever (>38℃) rate requiring antibiotics (%)', 'postop_fever_num', 'total_cs'),
         ('bladder_injury_rate', 'Injury to bladder rate due to CS (%)', 'bladder_injury_num', 'total_cs'),
@@ -9805,7 +9805,10 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         queryset = base_qs
         filters, dropdowns = {}, []
         for name, label, path in self.filter_definitions:
-            value = request.GET.get(name, "").strip()
+            multiple = name in ("gre_year", "gre_month", "shamsiyear", "shamsimonth")
+            value = (list(dict.fromkeys(
+                item.strip() for item in request.GET.getlist(name) if item.strip()
+            )) if multiple else request.GET.get(name, "").strip())
             filters[name] = value
             if name in ("province", "facility"):
                 if value and (not value.isdecimal() or len(value) > 18 or int(value) <= 0):
@@ -9819,9 +9822,9 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 choices = [{"value": item, "label": item} for item in
                            queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
                            .order_by(path).values_list(path, flat=True).distinct()]
-            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices})
+            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices, "multiple": multiple})
             if value:
-                queryset = queryset.filter(**{path: int(value) if name in ("province", "facility") else value})
+                queryset = queryset.filter(**{path + ("__in" if multiple else ""): int(value) if name in ("province", "facility") else value})
         return queryset, filters, dropdowns
 
     def _annotations(self):
@@ -9997,6 +10000,7 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         charts.append(self._chart("comparison", "PRE-I vs PRE-P — selected count indicators",
             comparison_chart if any(phases) else [], "indicator", [("pre_i", "PRE-I"), ("pre_p", "PRE-P")], horizontal=True))
         export_query = request.GET.copy()
+        export_query.pop("filter_options", None)
         export_query["export"] = "1"
         return {"filters": filters, "dropdowns": dropdowns, "export_query": export_query.urlencode(),
             "kpis": kpis, "cards": [{"label": label, "value": self._display(kpis[key])} for key, label in card_definitions],
@@ -10005,6 +10009,12 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         if not self.has_view_permission(request):
             raise PermissionDenied
+        if request.GET.get("filter_options") == "1":
+            _, _, dropdowns = self._filters_and_options(request, self._base_queryset(request))
+            return JsonResponse({
+                dropdown["name"] + "_options": [option["value"] for option in dropdown["choices"]]
+                for dropdown in dropdowns
+            })
         data = self._build_dashboard_data(request)
         if request.GET.get("export") == "1":
             return self._export_dashboard_excel(data)
@@ -10032,7 +10042,7 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         for key, label, numerator, denominator in self.rate_definitions:
             notes.append([label, f"100 × SUM({numerator}) / SUM({denominator}); denominator <= 0: N/A"])
         for key, value in data["filters"].items():
-            notes.append(["Filter: " + key, value or "All"])
+            notes.append(["Filter: " + key, (", ".join(value) if isinstance(value, list) else value) or "All"])
         for table in data["tables"]:
             if table["note"]:
                 notes.append([table["title"], table["note"]])
