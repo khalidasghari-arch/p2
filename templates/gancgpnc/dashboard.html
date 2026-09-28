@@ -1,73 +1,78 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-
 {% block title %}
 GANC/PNC Continuum Dashboard
 {% endblock %}
-
 {% block extrastyle %}
-
 {{ block.super }}
-
 <link
     rel="stylesheet"
     href="{% static 'gancgpnc/css/dashboard.css' %}"
 >
 
+<style>
+    .ganc-filter-panel .ganc-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .ganc-filter-panel .ganc-filter-grid > div { min-width: 0; }
+    .ganc-filter-panel .ganc-filter-grid select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    @media (max-width: 1200px) {
+        .ganc-filter-panel .ganc-filter-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 768px) {
+        .ganc-filter-panel .ganc-filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 480px) {
+        .ganc-filter-panel .ganc-filter-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 {% endblock %}
-
-
 {% block content %}
-
 <div class="ganc-dashboard">
-
     <!-- ================================================== -->
     <!-- HEADER -->
     <!-- ================================================== -->
-
     <div class="ganc-dashboard-header">
-
         <h1>
             GANC/PNC Continuum of Care Dashboard
         </h1>
-
         <p class="ganc-dashboard-subtitle">
             Strategic monitoring from enrollment through ANC,
             delivery, maternal and newborn outcomes,
             postnatal care, breastfeeding and family planning.
         </p>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- FILTERS -->
     <!-- ================================================== -->
-
     <form
         method="get"
         class="ganc-filter-panel"
     >
-
         <div class="ganc-filter-grid">
-
             <div>
-
                 <label for="province-filter">
                     Province
                 </label>
-
                 <select
                     id="province-filter"
                     name="province"
                 >
-
                     <option value="">
                         All Provinces
                     </option>
-
                     {% for row in province_options %}
-
                         <option
                             value="{{ row.facility__districtfk__provincefk_id }}"
                             {% if selected_filters.province == row.facility__districtfk__provincefk_id|stringformat:"s" %}
@@ -76,31 +81,21 @@ GANC/PNC Continuum Dashboard
                         >
                             {{ row.facility__districtfk__provincefk__name }}
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
-
             <div>
-
                 <label for="district-filter">
                     District
                 </label>
-
                 <select
                     id="district-filter"
                     name="district"
                 >
-
                     <option value="">
                         All Districts
                     </option>
-
                     {% for row in district_options %}
-
                         <option
                             value="{{ row.facility__districtfk_id }}"
                             {% if selected_filters.district == row.facility__districtfk_id|stringformat:"s" %}
@@ -109,31 +104,21 @@ GANC/PNC Continuum Dashboard
                         >
                             {{ row.facility__districtfk__name }}
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
-
             <div>
-
                 <label for="facility-filter">
                     Health Facility
                 </label>
-
                 <select
                     id="facility-filter"
                     name="facility"
                 >
-
                     <option value="">
                         All Facilities
                     </option>
-
                     {% for row in facility_options %}
-
                         <option
                             value="{{ row.facility_id }}"
                             {% if selected_filters.facility == row.facility_id|stringformat:"s" %}
@@ -142,31 +127,21 @@ GANC/PNC Continuum Dashboard
                         >
                             {{ row.facility__name }}
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
-
             <div>
-
                 <label for="cohort-filter">
                     Cohort
                 </label>
-
                 <select
                     id="cohort-filter"
                     name="cohort"
                 >
-
                     <option value="">
                         All Cohorts
                     </option>
-
                     {% for cohort in cohort_options %}
-
                         <option
                             value="{{ cohort.pk }}"
                             {% if selected_filters.cohort == cohort.pk|stringformat:"s" %}
@@ -175,31 +150,37 @@ GANC/PNC Continuum Dashboard
                         >
                             {{ cohort.cohortname }}
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
-
             <div>
-
+                <label for="cohort-number-filter">Cohort Number</label>
+                <select id="cohort-number-filter" name="cohort_number">
+                    <option value="">All Cohort Numbers</option>
+                    {% if selected_filters.cohort_number and selected_filters.cohort_number not in cohort_number_options %}
+                        <option value="{{ selected_filters.cohort_number }}" selected>
+                            {{ selected_filters.cohort_number }} (unavailable)
+                        </option>
+                    {% endif %}
+                    {% for number in cohort_number_options %}
+                        <option value="{{ number }}"{% if selected_filters.cohort_number == number|stringformat:"s" %} selected{% endif %}>
+                            {{ number }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
                 <label for="cohort-status-filter">
                     Cohort Status
                 </label>
-
                 <select
                     id="cohort-status-filter"
                     name="cohort_status"
                 >
-
                     <option value="">
                         All Statuses
                     </option>
-
                     {% for value, label in cohort_status_choices %}
-
                         <option
                             value="{{ value }}"
                             {% if selected_filters.cohort_status == value %}
@@ -208,43 +189,29 @@ GANC/PNC Continuum Dashboard
                         >
                             {{ label }}
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
-
         </div>
-
-
         <div class="ganc-filter-actions">
-
             <button
                 type="submit"
                 class="button"
             >
                 Apply Filters
             </button>
-
             <a
                 href="{% url 'ganc_dashboard:dashboard' %}"
                 class="button"
             >
                 Reset
             </a>
-
         </div>
-
     </form>
-
-
     <!-- ================================================== -->
     <!-- EXECUTIVE CONTINUUM KPI -->
     <!-- ================================================== -->
-
     <div class="ganc-kpi-grid">
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 Enrolled Women
@@ -256,7 +223,6 @@ GANC/PNC Continuum Dashboard
                 Master population
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 ANC First
@@ -268,7 +234,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc1_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 ANC Second
@@ -280,7 +245,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc2_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 ANC Third
@@ -292,7 +256,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc3_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 ANC Fourth
@@ -304,7 +267,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc4_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 Delivery
@@ -316,7 +278,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.delivery_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 PNC First
@@ -328,7 +289,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.pnc1_pct }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 PNC Second
@@ -340,16 +300,11 @@ GANC/PNC Continuum Dashboard
                 {{ summary.pnc2_pct }}%
             </div>
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- RETENTION -->
     <!-- ================================================== -->
-
     <div class="ganc-kpi-grid">
-
         <div class="ganc-kpi-card ganc-retention-card">
             <div class="ganc-kpi-label">
                 ANC1 → ANC4
@@ -358,7 +313,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc1_to_anc4 }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card ganc-retention-card">
             <div class="ganc-kpi-label">
                 ANC4 → Delivery
@@ -367,7 +321,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.anc4_to_delivery }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card ganc-retention-card">
             <div class="ganc-kpi-label">
                 Delivery → PNC1
@@ -376,7 +329,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.delivery_to_pnc1 }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card ganc-retention-card">
             <div class="ganc-kpi-label">
                 PNC1 → PNC2
@@ -385,7 +337,6 @@ GANC/PNC Continuum Dashboard
                 {{ summary.pnc1_to_pnc2 }}%
             </div>
         </div>
-
         <div class="ganc-kpi-card ganc-retention-card">
             <div class="ganc-kpi-label">
                 Full Continuum
@@ -394,57 +345,38 @@ GANC/PNC Continuum Dashboard
                 {{ summary.full_continuum_completion }}%
             </div>
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- CONTINUUM -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Continuum of Care
         </h2>
-
         <div class="ganc-continuum-grid">
-
             {% for stage in continuum %}
-
                 <div class="ganc-stage">
-
                     <div class="ganc-stage-title">
                         {{ stage.label }}
                     </div>
-
                     <div class="ganc-stage-count">
                         {{ stage.count }}
                     </div>
-
                     <div class="ganc-stage-percent">
                         {{ stage.enrollment_pct }}%
                         of enrollment
                     </div>
-
                     {% if not forloop.first %}
-
                         <div class="ganc-stage-percent">
                             {{ stage.previous_stage_pct }}%
                             retained
                         </div>
-
                     {% endif %}
-
                 </div>
-
             {% endfor %}
-
         </div>
-
         {{ continuum_labels|json_script:"continuum-labels" }}
         {{ continuum_counts|json_script:"continuum-counts" }}
-
         <div class="ganc-chart-wrap">
             <svg
                 id="gancContinuumChart"
@@ -452,22 +384,15 @@ GANC/PNC Continuum Dashboard
                 aria-label="GANC PNC continuum"
             ></svg>
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- FOLLOW-UP -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Follow-up Required
         </h2>
-
         <div class="ganc-followup-grid">
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     Enrollment → ANC1
@@ -476,7 +401,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.enrolled_missing_anc1 }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     ANC1 → ANC2
@@ -485,7 +409,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.anc1_missing_anc2 }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     ANC2 → ANC3
@@ -494,7 +417,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.anc2_missing_anc3 }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     ANC3 → ANC4
@@ -503,7 +425,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.anc3_missing_anc4 }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     ANC4 → Delivery
@@ -512,7 +433,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.anc4_missing_delivery }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     Delivery → PNC1
@@ -521,7 +441,6 @@ GANC/PNC Continuum Dashboard
                     {{ followup.delivery_missing_pnc1 }}
                 </div>
             </div>
-
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
                     PNC1 → PNC2
@@ -530,26 +449,17 @@ GANC/PNC Continuum Dashboard
                     {{ followup.pnc1_missing_pnc2 }}
                 </div>
             </div>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- COHORT PERFORMANCE -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Cohort Performance
         </h2>
-
         <div class="ganc-table-wrapper">
-
             <table class="ganc-table">
-
                 <thead>
                     <tr>
                         <th>Province</th>
@@ -569,11 +479,8 @@ GANC/PNC Continuum Dashboard
                         <th>Status</th>
                     </tr>
                 </thead>
-
                 <tbody>
-
                     {% for row in cohort_performance %}
-
                         <tr>
                             <td>{{ row.province }}</td>
                             <td>{{ row.district }}</td>
@@ -591,40 +498,26 @@ GANC/PNC Continuum Dashboard
                             <td>{{ row.completion_pct }}%</td>
                             <td>{{ row.performance_status }}</td>
                         </tr>
-
                     {% empty %}
-
                         <tr>
                             <td colspan="15">
                                 No cohort records found.
                             </td>
                         </tr>
-
                     {% endfor %}
-
                 </tbody>
-
             </table>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- ANC QUALITY -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             ANC Quality & Clinical Performance
         </h2>
-
         <div class="ganc-table-wrapper">
-
             <table class="ganc-table">
-
                 <thead>
                     <tr>
                         <th>Indicator</th>
@@ -634,9 +527,7 @@ GANC/PNC Continuum Dashboard
                         <th>ANC Fourth</th>
                     </tr>
                 </thead>
-
                 <tbody>
-
                     <tr>
                         <td>Women</td>
                         <td>{{ anc_quality.anc1.women }}</td>
@@ -644,7 +535,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.women }}</td>
                         <td>{{ anc_quality.anc4.women }}</td>
                     </tr>
-
                     <tr>
                         <td>Hypertension Diagnosed</td>
                         <td>{{ anc_quality.anc1.hypertension }} ({{ anc_quality.anc1.hypertension_pct }}%)</td>
@@ -652,7 +542,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.hypertension }} ({{ anc_quality.anc3.hypertension_pct }}%)</td>
                         <td>{{ anc_quality.anc4.hypertension }} ({{ anc_quality.anc4.hypertension_pct }}%)</td>
                     </tr>
-
                     <tr>
                         <td>Hypertension Referral %</td>
                         <td>{{ anc_quality.anc1.hypertension_referral_pct }}%</td>
@@ -660,7 +549,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.hypertension_referral_pct }}%</td>
                         <td>{{ anc_quality.anc4.hypertension_referral_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>Anemia</td>
                         <td>{{ anc_quality.anc1.anemia }} ({{ anc_quality.anc1.anemia_pct }}%)</td>
@@ -668,7 +556,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.anemia }} ({{ anc_quality.anc3.anemia_pct }}%)</td>
                         <td>{{ anc_quality.anc4.anemia }} ({{ anc_quality.anc4.anemia_pct }}%)</td>
                     </tr>
-
                     <tr>
                         <td>Iron/Folate Coverage</td>
                         <td>{{ anc_quality.anc1.iron_folate_pct }}%</td>
@@ -676,7 +563,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.iron_folate_pct }}%</td>
                         <td>{{ anc_quality.anc4.iron_folate_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>Calcium Prescribed</td>
                         <td>{{ anc_quality.anc1.calcium_prescribed_pct }}%</td>
@@ -684,7 +570,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.calcium_prescribed_pct }}%</td>
                         <td>{{ anc_quality.anc4.calcium_prescribed_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>Average MUAC</td>
                         <td>{{ anc_quality.anc1.average_muac }}</td>
@@ -692,7 +577,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.average_muac }}</td>
                         <td>{{ anc_quality.anc4.average_muac }}</td>
                     </tr>
-
                     <tr>
                         <td>MAM Diagnosed</td>
                         <td>{{ anc_quality.anc1.mam }}</td>
@@ -700,7 +584,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.mam }}</td>
                         <td>{{ anc_quality.anc4.mam }}</td>
                     </tr>
-
                     <tr>
                         <td>MAM Referral %</td>
                         <td>{{ anc_quality.anc1.mam_referral_pct }}%</td>
@@ -708,7 +591,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.mam_referral_pct }}%</td>
                         <td>{{ anc_quality.anc4.mam_referral_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>SAM Diagnosed</td>
                         <td>{{ anc_quality.anc1.sam }}</td>
@@ -716,7 +598,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.sam }}</td>
                         <td>{{ anc_quality.anc4.sam }}</td>
                     </tr>
-
                     <tr>
                         <td>SAM Referral %</td>
                         <td>{{ anc_quality.anc1.sam_referral_pct }}%</td>
@@ -724,7 +605,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.sam_referral_pct }}%</td>
                         <td>{{ anc_quality.anc4.sam_referral_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>Urine Examination</td>
                         <td>{{ anc_quality.anc1.urine_exam_pct }}%</td>
@@ -732,7 +612,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.urine_exam_pct }}%</td>
                         <td>{{ anc_quality.anc4.urine_exam_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>TT Vaccine</td>
                         <td>{{ anc_quality.anc1.tt_vaccine_pct }}%</td>
@@ -740,7 +619,6 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.tt_vaccine_pct }}%</td>
                         <td>{{ anc_quality.anc4.tt_vaccine_pct }}%</td>
                     </tr>
-
                     <tr>
                         <td>Danger Signs</td>
                         <td>{{ anc_quality.anc1.danger_sign }}</td>
@@ -748,35 +626,24 @@ GANC/PNC Continuum Dashboard
                         <td>{{ anc_quality.anc3.danger_sign }}</td>
                         <td>{{ anc_quality.anc4.danger_sign }}</td>
                     </tr>
-
                 </tbody>
-
             </table>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- DELIVERY -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Delivery & Maternal/Newborn Outcomes
         </h2>
-
         <div class="ganc-kpi-grid">
-
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">Deliveries</div>
                 <div class="ganc-kpi-value">
                     {{ delivery_summary.deliveries }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">
                     AMTSL Uterotonic
@@ -785,7 +652,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.immediate_uterotonic_pct }}%
                 </div>
             </div>
-
             <div class="ganc-kpi-card ganc-risk-card">
                 <div class="ganc-kpi-label">
                     Maternal Complications
@@ -801,7 +667,6 @@ GANC/PNC Continuum Dashboard
                     </div>
                 {% endif %}
             </div>
-
             <div class="ganc-kpi-card ganc-danger-card">
                 <div class="ganc-kpi-label">
                     Maternal Deaths
@@ -810,7 +675,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.maternal_death }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">
                     Total Newborns
@@ -819,7 +683,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.total_newborn }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card ganc-success-card">
                 <div class="ganc-kpi-label">
                     Alive Newborns
@@ -828,7 +691,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.alive_newborn }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card ganc-danger-card">
                 <div class="ganc-kpi-label">
                     Newborn Deaths
@@ -837,7 +699,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.newborn_death }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card ganc-risk-card">
                 <div class="ganc-kpi-label">
                     Fresh Stillbirths
@@ -846,7 +707,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.fresh_stillbirth }}
                 </div>
             </div>
-
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">
                     Early Breastfeeding
@@ -855,7 +715,6 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.early_breastfeeding_pct }}%
                 </div>
             </div>
-
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">
                     Newborn Vaccination
@@ -864,44 +723,29 @@ GANC/PNC Continuum Dashboard
                     {{ delivery_summary.vaccination_before_discharge_pct }}%
                 </div>
             </div>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- PNC COMPARISON -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Postnatal Care Clinical Performance
         </h2>
-
         <p class="ganc-dashboard-subtitle">
             Comparison between PNC First Session and
             PNC Second Session.
         </p>
-
         <div class="ganc-table-wrapper">
-
             <table class="ganc-table">
-
                 <thead>
-
                     <tr>
                         <th>Indicator</th>
                         <th>PNC First</th>
                         <th>PNC Second</th>
                     </tr>
-
                 </thead>
-
-
                 <tbody>
-
                     <tr>
                         <td>Women Attending</td>
                         <td>
@@ -911,412 +755,273 @@ GANC/PNC Continuum Dashboard
                             {{ pnc_summary.pnc2.women }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Hypertension Diagnosed</td>
-
                         <td>
                             {{ pnc_summary.pnc1.hypertension }}
                             ({{ pnc_summary.pnc1.hypertension_pct }}%)
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.hypertension }}
                             ({{ pnc_summary.pnc2.hypertension_pct }}%)
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Hypertension Referral %</td>
-
                         <td>
                             {{ pnc_summary.pnc1.hypertension_referral_pct }}%
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.hypertension_referral_pct }}%
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Average MUAC</td>
-
                         <td>
                             {{ pnc_summary.pnc1.average_muac }}
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.average_muac }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Anemia</td>
-
                         <td>
                             {{ pnc_summary.pnc1.anemia }}
                             ({{ pnc_summary.pnc1.anemia_pct }}%)
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.anemia }}
                             ({{ pnc_summary.pnc2.anemia_pct }}%)
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>MAM Diagnosed</td>
-
                         <td>
                             {{ pnc_summary.pnc1.mam }}
                             ({{ pnc_summary.pnc1.mam_pct }}%)
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.mam }}
                             ({{ pnc_summary.pnc2.mam_pct }}%)
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>MAM Referral %</td>
-
                         <td>
                             {{ pnc_summary.pnc1.mam_referral_pct }}%
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.mam_referral_pct }}%
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>SAM Diagnosed</td>
-
                         <td>
                             {{ pnc_summary.pnc1.sam }}
                             ({{ pnc_summary.pnc1.sam_pct }}%)
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.sam }}
                             ({{ pnc_summary.pnc2.sam_pct }}%)
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>SAM Referral %</td>
-
                         <td>
                             {{ pnc_summary.pnc1.sam_referral_pct }}%
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.sam_referral_pct }}%
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Maternal Danger Signs</td>
-
                         <td>
                             {{ pnc_summary.pnc1.maternal_danger_sign }}
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.maternal_danger_sign }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Newborn Danger Signs</td>
-
                         <td>
                             {{ pnc_summary.pnc1.newborn_danger_sign }}
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.newborn_danger_sign }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Maternal Deaths</td>
-
                         <td>
                             {{ pnc_summary.pnc1.maternal_death }}
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.maternal_death }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Newborn Deaths</td>
-
                         <td>
                             {{ pnc_summary.pnc1.newborn_death }}
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.newborn_death }}
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Newborn Vaccination</td>
-
                         <td>
                             {{ pnc_summary.pnc1.newborn_vaccination_pct }}%
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.newborn_vaccination_pct }}%
                         </td>
                     </tr>
-
-
                     <tr>
                         <td>Exclusive Breastfeeding</td>
-
                         <td>
                             {{ pnc_summary.pnc1.exclusive_breastfeeding_pct }}%
                         </td>
-
                         <td>
                             {{ pnc_summary.pnc2.exclusive_breastfeeding_pct }}%
                         </td>
                     </tr>
-
                 </tbody>
-
             </table>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- BREASTFEEDING CONTINUUM -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Breastfeeding Continuum
         </h2>
-
         <div class="ganc-kpi-grid">
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Early Breastfeeding at Delivery
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ delivery_summary.early_breastfeeding_pct }}%
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Exclusive Breastfeeding PNC1
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc1.exclusive_breastfeeding_pct }}%
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Exclusive Breastfeeding PNC2
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc2.exclusive_breastfeeding_pct }}%
                 </div>
-
             </div>
-
         </div>
-
-
         {{ breastfeeding_labels|json_script:"breastfeeding-labels" }}
         {{ breastfeeding_values|json_script:"breastfeeding-values" }}
-
-
         <div class="ganc-chart-wrap">
-
             <svg
                 id="gancBreastfeedingChart"
                 role="img"
                 aria-label="Breastfeeding continuum"
             ></svg>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- POSTNATAL MENTAL HEALTH -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Postnatal Mental Health
         </h2>
-
         <div class="ganc-kpi-grid">
-
             <div class="ganc-kpi-card ganc-risk-card">
-
                 <div class="ganc-kpi-label">
                     Postnatal Depression Diagnosed
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc2.postnatal_depression }}
                 </div>
-
                 <div class="ganc-kpi-note">
                     {{ pnc_summary.pnc2.postnatal_depression_pct }}%
                     of PNC2 women
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Psychosocial Referral
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc2.psychosocial_referral }}
                 </div>
-
                 <div class="ganc-kpi-note">
                     {{ pnc_summary.pnc2.psychosocial_referral_pct }}%
                     of diagnosed
                 </div>
-
             </div>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- FAMILY PLANNING CONTINUUM -->
     <!-- ================================================== -->
-
     <div class="ganc-section">
-
         <h2>
             Postpartum Family Planning & Birth Spacing
         </h2>
-
         <div class="ganc-kpi-grid">
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Counseling Before Discharge
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ delivery_summary.ppfp_counseling_pct }}%
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Immediate PPFP at Delivery
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ delivery_summary.immediate_ppfp_pct }}%
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     PPFP Method Chosen at PNC1
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc1.ppfp_chosen_pct }}%
                 </div>
-
             </div>
-
-
             <div class="ganc-kpi-card">
-
                 <div class="ganc-kpi-label">
                     Birth Spacing Method Chosen at PNC2
                 </div>
-
                 <div class="ganc-kpi-value">
                     {{ pnc_summary.pnc2.birth_spacing_chosen_pct }}%
                 </div>
-
             </div>
-
         </div>
-
     </div>
-
-
     <!-- ================================================== -->
     <!-- FP METHOD DISTRIBUTIONS -->
     <!-- ================================================== -->
-
     <div class="ganc-two-column">
-
         <div class="ganc-section">
-
             <h2>
                 PNC First PPFP Methods
             </h2>
-
             <div class="ganc-table-wrapper">
-
                 <table class="ganc-table">
-
                     <thead>
                         <tr>
                             <th>Method</th>
@@ -1324,58 +1029,36 @@ GANC/PNC Continuum Dashboard
                             <th>%</th>
                         </tr>
                     </thead>
-
                     <tbody>
-
                         {% for row in pnc_summary.pnc1.method_distribution %}
-
                             <tr>
-
                                 <td>
                                     {{ row.ppfp_method_taken }}
                                 </td>
-
                                 <td>
                                     {{ row.total }}
                                 </td>
-
                                 <td>
                                     {{ row.pct }}%
                                 </td>
-
                             </tr>
-
                         {% empty %}
-
                             <tr>
-
                                 <td colspan="3">
                                     No PPFP method data.
                                 </td>
-
                             </tr>
-
                         {% endfor %}
-
                     </tbody>
-
                 </table>
-
             </div>
-
         </div>
-
-
         <div class="ganc-section">
-
             <h2>
                 PNC Second Birth Spacing Methods
             </h2>
-
             <div class="ganc-table-wrapper">
-
                 <table class="ganc-table">
-
                     <thead>
                         <tr>
                             <th>Method</th>
@@ -1383,54 +1066,33 @@ GANC/PNC Continuum Dashboard
                             <th>%</th>
                         </tr>
                     </thead>
-
                     <tbody>
-
                         {% for row in pnc_summary.pnc2.method_distribution %}
-
                             <tr>
-
                                 <td>
                                     {{ row.birthspacingmethod }}
                                 </td>
-
                                 <td>
                                     {{ row.total }}
                                 </td>
-
                                 <td>
                                     {{ row.pct }}%
                                 </td>
-
                             </tr>
-
                         {% empty %}
-
                             <tr>
-
                                 <td colspan="3">
                                     No birth spacing method data.
                                 </td>
-
                             </tr>
-
                         {% endfor %}
-
                     </tbody>
-
                 </table>
-
             </div>
-
         </div>
-
     </div>
-
 </div>
-
-
 <script
     src="{% static 'gancgpnc/js/dashboard.js' %}"
 ></script>
-
 {% endblock %}

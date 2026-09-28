@@ -117,6 +117,10 @@ def ganc_dashboard(request):
         or None
     )
 
+    cohort_number = (
+        request.GET.get("cohort_number") or ""
+    ).strip()
+
     # ========================================================
     # MASTER POPULATION
     # ========================================================
@@ -145,6 +149,30 @@ def ganc_dashboard(request):
             cohort_status=cohort_status,
         )
     )
+
+    # Available numbers respect the existing population filters.
+    cohort_number_options = [
+        str(number)
+        for number in (
+            enrollments
+            .exclude(cohortname__cohortnumber__isnull=True)
+            .order_by("cohortname__cohortnumber")
+            .values_list(
+                "cohortname__cohortnumber",
+                flat=True,
+            )
+            .distinct()
+        )
+    ]
+
+    if cohort_number:
+        if cohort_number in cohort_number_options:
+            enrollments = enrollments.filter(
+                cohortname__cohortnumber=int(cohort_number)
+            )
+        else:
+            # Invalid or unavailable selections return no results.
+            enrollments = enrollments.none()
 
     # ========================================================
     # ANALYSIS
@@ -232,6 +260,8 @@ def ganc_dashboard(request):
         "cohort_status": str(
             cohort_status or ""
         ),
+
+        "cohort_number": cohort_number,
     }
 
     # ========================================================
@@ -351,6 +381,8 @@ def ganc_dashboard(request):
             selected_filters
         ),
 
+        "cohort_number_options": cohort_number_options,
+        
         "user_province": (
             user_province
         ),
