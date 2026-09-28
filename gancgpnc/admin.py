@@ -4354,7 +4354,7 @@ class GroupPncfirstSessionAdmin(BaseSessionAdmin):
         def safe_text(value):
             return "" if value is None else str(value)
 
-        for obj in queryset.prefetch_related("complications"):
+        for obj in queryset:
 
             enrollment = obj.registerid
 
@@ -4421,7 +4421,7 @@ class GroupPncfirstSessionAdmin(BaseSessionAdmin):
                 yes_no(obj.newborn_death),
                 yes_no(obj.maternal_death),
 
-                safe_text(obj.urine_exam),
+                yes_no(obj.urine_exam),
                 safe_text(obj.protein_uria),
                 yes_no(obj.referred_positive_protein_uria_to_md),
 

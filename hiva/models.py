@@ -1199,7 +1199,7 @@ class aimpee(models.Model):
 
     preeclampsia_diagnosed = models.BigIntegerField(
         default=0,
-        verbose_name="3. Number of ANC women diagnosed with Pre-Eclampsia (BP >140/90 + proteinuria)"
+        verbose_name="3. Number of ANC women diagnosed with Mild Pre-Eclampsia (BP >140/90 + proteinuria)"
     )
 
     # =========================
