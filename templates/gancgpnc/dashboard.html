@@ -37,7 +37,78 @@ GANC/PNC Continuum Dashboard
         }
     }
 </style>
+<style>
+.ganc-dashboard { --fu-ink:#173b3b; --fu-line:#dbe7e5; --fu-green:#0f766e; color:var(--fu-ink); }
+.ganc-dashboard .ganc-section { border:1px solid var(--fu-line); border-radius:16px; box-shadow:0 3px 12px #173b3b08; margin-bottom:22px; background:#fff; padding:22px; }
+.ganc-dashboard .ganc-section h2 { color:#173b3b; font-size:19px; letter-spacing:-.25px; }
+.ganc-dashboard .ganc-kpi-card { border-top:3px solid #0f766e; border-radius:12px; }
+.ganc-dashboard .ganc-filter-panel { background:#f4f9f8; border-radius:16px; }
+.followup-nav { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.followup-nav a,.followup-button,.chart-save { display:inline-flex; align-items:center; justify-content:center; padding:9px 13px; border:1px solid #c7dcd8; border-radius:8px; background:#fff; color:#165d56!important; font:inherit; font-weight:600; text-decoration:none; cursor:pointer; }
+.followup-nav a:hover,.followup-button:hover,.chart-save:hover { background:#e8f3f0; }
+.followup-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.followup-heading p,.followup-note { color:#52666a; line-height:1.6; max-width:1000px; }
+.followup-eyebrow { font-size:11px; letter-spacing:1.6px; color:#0f766e; font-weight:800; }
+.attendance-legend { display:flex; flex-wrap:wrap; gap:9px; margin:16px 0 22px; }
+.status-pill { display:inline-block; padding:7px 10px; border:1px solid transparent; border-radius:8px; font:inherit; font-size:12px; font-weight:700; line-height:1.5; white-space:normal; }
+.status-pill.present { color:#09664c; background:#e5f5ee; border-color:#b7dfcb; }
+.status-pill.absent { color:#854800; background:#fff3d8; border-color:#e8c476; }
+.status-pill.dropout { color:#a32d38; background:#ffebed; border-color:#e8aab1; }
+button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
+.followup-toggle span { display:block; font-size:10px; text-decoration:underline; }
+.ganc-dashboard :is(button,a,input,summary):focus-visible { outline:3px solid #19798a; outline-offset:3px; }
+.ganc-dashboard .ganc-table-wrapper { overflow-x:auto; }
+.attendance-table { width:100%; border-collapse:separate; border-spacing:0; }
+.attendance-table > thead th { background:#edf5f3!important; padding:13px; white-space:normal; }
+.attendance-table > tbody > tr > td,.attendance-table > tbody > tr > th { padding:12px; vertical-align:top; }
+.followup-detail-row > td { padding:0 12px 10px!important; }
+.absent-detail > td { background:#fffbf1!important; border-left:4px solid #d29524; }
+.dropout-detail > td { background:#fff6f7!important; border-left:4px solid #c44958; }
+.women-details summary { cursor:pointer; font-weight:700; padding:10px 0; }
+.women-details[open] { padding-bottom:12px; }
+.women-tools { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 0 15px; }
+.women-tools label { font-size:12px; font-weight:600; }
+.women-tools input { display:block; margin-top:6px; width:min(420px,70vw); padding:9px!important; border:1px solid #c4d4d1!important; border-radius:6px!important; background:#fff!important; color:#173b3b!important; }
+.women-match-count { color:#52666a; font-size:12px; }
+.women-table { min-width:900px; width:100%; background:white; }
+.women-table th { background:#f1f5f4!important; color:#173b3b!important; font-size:11px; }
+.women-table td { padding:11px!important; background:#fff!important; }
+.women-table small { display:block; color:#65767a; margin-top:4px; }
+.followup-note { font-size:12px; margin-top:16px; }
+.chart-toolbar { display:flex; justify-content:flex-end; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; }
+.chart-save { font-size:12px; }
+.chart-save:disabled { opacity:.6; cursor:wait; }
+.chart-export-message { color:#6a4b08; font-size:12px; }
+.ganc-dashboard [hidden] { display:none!important; }
+@media(max-width:700px) { .followup-heading { flex-direction:column; } .ganc-dashboard .ganc-section { padding:14px; } .attendance-table { min-width:740px; } }
+@media print { .chart-toolbar,.followup-nav,.women-tools,.followup-button { display:none!important; } }
+
+/* Scoped layout overrides: included here so static-file caching cannot hide them. */
+.ganc-dashboard { font-family:Arial,Helvetica,sans-serif; max-width:1480px; margin:0 auto; padding:8px 0 24px; }
+.ganc-dashboard .ganc-dashboard-header { padding:24px 26px; margin-bottom:18px; border-radius:16px; background:linear-gradient(120deg,#eaf5f2,#f5f9fc); border:1px solid #cfe2dc; }
+.ganc-dashboard .ganc-dashboard-header h1 { font-size:26px; font-weight:700; line-height:1.25; color:#173b3b; margin:0 0 10px; }
+.ganc-dashboard .ganc-dashboard-subtitle { font-size:13px; color:#52666a; margin:0; line-height:1.6; }
+.ganc-dashboard .ganc-filter-panel { padding:18px; border:1px solid #d5e3df; background:#fff; }
+.ganc-dashboard .ganc-filter-grid label { display:block; font-weight:600; font-size:12px; margin-bottom:7px; color:#355753; }
+.ganc-dashboard .ganc-filter-grid select { min-height:40px; border-radius:7px; }
+.ganc-dashboard .ganc-filter-actions { display:flex; align-items:center; gap:8px; margin-top:16px; }
+.ganc-dashboard .ganc-filter-actions .button { padding:10px 16px; border-radius:7px; border:0; font-weight:600; background:#0f766e; color:#fff; cursor:pointer; text-decoration:none; }
+.ganc-dashboard .ganc-filter-actions a.button { background:#edf4f2; color:#285b54; }
+.ganc-dashboard .followup-nav { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:18px 0 24px; }
+.ganc-dashboard .followup-nav a { min-height:44px; box-sizing:border-box; padding:12px 14px; border:1px solid #c7dcd8; border-radius:9px; font-size:12px; text-align:center; }
+.ganc-dashboard .followup-nav a:first-child { background:#0f766e; color:#fff!important; border-color:#0f766e; }
+.ganc-dashboard .ganc-kpi-grid { gap:12px; margin-bottom:20px; }
+.ganc-dashboard .ganc-kpi-card { padding:16px; }
+.ganc-dashboard .ganc-table td,.ganc-dashboard .ganc-table th { line-height:1.5; }
+.ganc-dashboard .followup-heading h2 { margin:6px 0 10px; }
+.ganc-dashboard .ganc-section { scroll-margin-top:20px; }
+.ganc-dashboard .ganc-table-wrapper:focus-visible { outline:2px solid #19798a; }
+@media(max-width:900px) { .ganc-dashboard .followup-nav { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:500px) { .ganc-dashboard .ganc-dashboard-header { padding:18px; } .ganc-dashboard .ganc-dashboard-header h1 { font-size:21px; } .ganc-dashboard .followup-nav { gap:7px; } }
+
+</style>
 {% endblock %}
+{% block content_title %}{% endblock %}
 {% block content %}
 <div class="ganc-dashboard">
     <!-- ================================================== -->
@@ -59,6 +130,7 @@ GANC/PNC Continuum Dashboard
     <form
         method="get"
         class="ganc-filter-panel"
+        id="ganc-filter-form"
     >
         <div class="ganc-filter-grid">
             <div>
@@ -209,6 +281,7 @@ GANC/PNC Continuum Dashboard
         </div>
     </form>
     <!-- ================================================== -->
+<nav class="followup-nav" aria-label="Dashboard sections"><a href="#attendance-breakdown">Attendance &amp; follow-up</a><a href="#gancContinuumChart">Continuum chart</a><a href="#anc-quality">ANC indicators</a><a href="#gancBreastfeedingChart">Breastfeeding chart</a></nav>
     <!-- EXECUTIVE CONTINUUM KPI -->
     <!-- ================================================== -->
     <div class="ganc-kpi-grid">
@@ -510,55 +583,55 @@ GANC/PNC Continuum Dashboard
         </div>
     </div>
     <!-- ATTENDANCE BREAKDOWN -->
-    <div class="ganc-section" id="attendance-breakdown">
-        <h2>Attendance Breakdown — ANC and PNC</h2>
-        <p>
-            Present includes Group and Individual. Permanently Absent means
-            recorded Dropout for that session type. Percentages use all enrolled
-            women within the selected dashboard filters.
-        </p>
-        <div class="ganc-table-wrapper" style="overflow-x: auto;">
-            <table class="ganc-table">
-                <thead>
-                    <tr>
-                        <th scope="col">Session</th>
-                        <th scope="col">Enrolled Women</th>
-                        <th scope="col">Present (Group + Individual)</th>
-                        <th scope="col">Absent</th>
-                        <th scope="col">Permanently Absent (Dropout)</th>
-                        <th scope="col">Not Recorded / Unknown</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in summary.attendance_breakdown %}
-                        <tr>
-                            <th scope="row">{{ row.label }}</th>
-                            <td>{{ row.enrolled }}</td>
-                            <td>{{ row.present }} ({{ row.present_pct|floatformat:1 }}%)</td>
-                            <td>{{ row.absent }} ({{ row.absent_pct|floatformat:1 }}%)</td>
-                            <td>{{ row.dropout }} ({{ row.dropout_pct|floatformat:1 }}%)</td>
-                            <td>{{ row.unknown }} ({{ row.unknown_pct|floatformat:1 }}%)</td>
-                        </tr>
-                    {% empty %}
-                        <tr><td colspan="6">No attendance breakdown available.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <p>
-            Each woman is counted once per session type. If multiple records
-            have different statuses, Present takes priority, then Dropout,
-            then Absent. PNC “No” is included under Absent. Missing records and
-            blank or unrecognized statuses are shown as Not Recorded / Unknown.
-            Percentages may not total exactly 100% due to rounding; when no
-            women are enrolled, all counts and percentages are zero.
-        </p>
-    </div>
+    <section class="ganc-section attendance-panel" id="attendance-breakdown">
+        <div class="followup-heading"><div><span class="followup-eyebrow">COHORT FOLLOW-UP</span>
+        <h2>Attendance &amp; Women Needing Follow-up</h2>
+        <p>Open an amber or red count to see the women in that session. Details follow your selected cohort and location filters.</p></div>
+        <a class="followup-button" href="#ganc-filter-form">Change filters ↑</a></div>
+        <div class="attendance-legend"><span class="status-pill present">Present: Group + Individual</span><span class="status-pill absent">Absent: follow-up needed</span><span class="status-pill dropout">Dropout: permanently absent</span></div>
+        <div class="ganc-table-wrapper">
+        <table class="ganc-table attendance-table">
+            <thead><tr><th scope="col">Session</th><th scope="col">Enrolled</th><th scope="col">Present</th><th scope="col">Absent</th><th scope="col">Permanently Absent<br>(Dropout)</th><th scope="col">Not Recorded / Unknown</th></tr></thead>
+            <tbody>
+            {% for row in summary.attendance_breakdown %}
+            <tr><th scope="row">{{ row.label }}</th><td>{{ row.enrolled }}</td>
+                <td><span class="status-pill present">{{ row.present }} · {{ row.present_pct|floatformat:1 }}%</span></td>
+                <td>{% if row.absent %}<button type="button" class="status-pill absent followup-toggle" data-details="absent-{{ forloop.counter }}" aria-controls="absent-{{ forloop.counter }}" aria-expanded="false">{{ row.absent }} · {{ row.absent_pct|floatformat:1 }}% <span>View women ↓</span></button>{% else %}<span class="status-pill absent">0 · 0.0%</span>{% endif %}</td>
+                <td>{% if row.dropout %}<button type="button" class="status-pill dropout followup-toggle" data-details="dropout-{{ forloop.counter }}" aria-controls="dropout-{{ forloop.counter }}" aria-expanded="false">{{ row.dropout }} · {{ row.dropout_pct|floatformat:1 }}% <span>View women ↓</span></button>{% else %}<span class="status-pill dropout">0 · 0.0%</span>{% endif %}</td>
+                <td>{{ row.unknown }} · {{ row.unknown_pct|floatformat:1 }}%</td></tr>
+            {% if row.absent %}
+            <tr class="followup-detail-row absent-detail"><td colspan="6">
+            <details id="absent-{{ forloop.counter }}" class="women-details"><summary>{{ row.label }} — Absent women ({{ row.absent }})</summary>
+            {% with women=row.absent_women status="Absent" status_class="absent" %}
+<div class="women-tools"><label>Find a woman or cohort <input type="search" class="women-search" placeholder="Name, register number, cohort or facility" autocomplete="off"></label><span class="women-match-count" aria-live="polite"></span></div>
+<div class="ganc-table-wrapper"><table class="ganc-table women-table"><thead><tr><th scope="col">Register No. / ID</th><th scope="col">Woman</th><th scope="col">Father's Name</th><th scope="col">Contact</th><th scope="col">Cohort / Number</th><th scope="col">Facility</th><th scope="col">Session Date</th><th scope="col">Status</th></tr></thead><tbody>
+{% for woman in women %}<tr data-woman-row><td>{{ woman.register_number|default_if_none:"—" }}<small>ID {{ woman.id }}</small></td><td><strong>{{ woman.name|default:"—" }}</strong></td><td>{{ woman.father_name|default:"—" }}</td><td>{{ woman.contact|default:"—" }}</td><td>{{ woman.cohort|default:"—" }}<small>No. {{ woman.cohort_number|default_if_none:"—" }}</small></td><td>{{ woman.facility|default:"—" }}</td><td>{{ woman.session_date|date:"Y-m-d"|default:"—" }}</td><td><span class="status-pill {{ status_class }}">{{ status }}</span></td></tr>{% endfor %}
+<tr class="women-no-match" hidden><td colspan="8">No women match your search.</td></tr></tbody></table></div>
 
+{% endwith %}
+            </details></td></tr>
+            {% endif %}
+            {% if row.dropout %}
+            <tr class="followup-detail-row dropout-detail"><td colspan="6">
+            <details id="dropout-{{ forloop.counter }}" class="women-details"><summary>{{ row.label }} — Permanently absent / Dropout ({{ row.dropout }})</summary>
+            {% with women=row.dropout_women status="Dropout" status_class="dropout" %}
+<div class="women-tools"><label>Find a woman or cohort <input type="search" class="women-search" placeholder="Name, register number, cohort or facility" autocomplete="off"></label><span class="women-match-count" aria-live="polite"></span></div>
+<div class="ganc-table-wrapper"><table class="ganc-table women-table"><thead><tr><th scope="col">Register No. / ID</th><th scope="col">Woman</th><th scope="col">Father's Name</th><th scope="col">Contact</th><th scope="col">Cohort / Number</th><th scope="col">Facility</th><th scope="col">Session Date</th><th scope="col">Status</th></tr></thead><tbody>
+{% for woman in women %}<tr data-woman-row><td>{{ woman.register_number|default_if_none:"—" }}<small>ID {{ woman.id }}</small></td><td><strong>{{ woman.name|default:"—" }}</strong></td><td>{{ woman.father_name|default:"—" }}</td><td>{{ woman.contact|default:"—" }}</td><td>{{ woman.cohort|default:"—" }}<small>No. {{ woman.cohort_number|default_if_none:"—" }}</small></td><td>{{ woman.facility|default:"—" }}</td><td>{{ woman.session_date|date:"Y-m-d"|default:"—" }}</td><td><span class="status-pill {{ status_class }}">{{ status }}</span></td></tr>{% endfor %}
+<tr class="women-no-match" hidden><td colspan="8">No women match your search.</td></tr></tbody></table></div>
+
+{% endwith %}
+            </details></td></tr>
+            {% endif %}
+            {% endfor %}
+            </tbody>
+        </table></div>
+        <p class="followup-note">Percentages use enrolled women in the selected filters. Each woman counts once per session type. For conflicting records, Present takes priority, then Dropout, then Absent; details show the latest record in that category. PNC “No” counts as Absent. Dropout reflects the recorded status for that session, not an assumption about future attendance. Missing or unknown records remain separate.</p>
+    </section>
     <!-- ================================================== -->
     <!-- ANC QUALITY -->
     <!-- ================================================== -->
-    <div class="ganc-section">
+    <div class="ganc-section" id="anc-quality">
         <h2>
             ANC Quality & Clinical Performance
         </h2>
@@ -679,7 +752,7 @@ GANC/PNC Continuum Dashboard
     <!-- ================================================== -->
     <!-- DELIVERY -->
     <!-- ================================================== -->
-    <div class="ganc-section">
+    <div class="ganc-section" id="delivery-outcomes">
         <h2>
             Delivery & Maternal/Newborn Outcomes
         </h2>
@@ -1141,4 +1214,117 @@ GANC/PNC Continuum Dashboard
 <script
     src="{% static 'gancgpnc/js/dashboard.js' %}"
 ></script>
+<script>
+(() => {
+  'use strict';
+  function init() {
+    const root = document.querySelector('.ganc-dashboard');
+    if (!root || root.dataset.followupReady) return;
+    root.dataset.followupReady = 'true';
+    const appliedCaption = filterCaption();
+    root.querySelectorAll('.followup-toggle').forEach(button => {
+      const details = document.getElementById(button.dataset.details);
+      if (!details) return;
+      button.addEventListener('click', () => {
+        details.open = !details.open;
+        if (details.open) details.scrollIntoView({block:'nearest',behavior:'smooth'});
+      });
+      details.addEventListener('toggle', () => {
+        button.setAttribute('aria-expanded', String(details.open));
+        button.querySelector('span').textContent = details.open ? 'Hide women ↑' : 'View women ↓';
+      });
+    });
+    root.querySelectorAll('.women-search').forEach(input => {
+      const details = input.closest('details');
+      const rows = [...details.querySelectorAll('[data-woman-row]')];
+      const update = () => {
+        const q = input.value.trim().toLocaleLowerCase();
+        let count = 0;
+        rows.forEach(row => { row.hidden = !row.textContent.toLocaleLowerCase().includes(q); if (!row.hidden) count++; });
+        details.querySelector('.women-match-count').textContent = `${count} of ${rows.length} women`;
+        details.querySelector('.women-no-match').hidden = count !== 0;
+      };
+      input.addEventListener('input',update); update();
+    });
+    root.querySelectorAll('.ganc-chart-wrap svg').forEach(svg => {
+      const title = svg.closest('.ganc-section')?.querySelector('h2')?.textContent.trim() || svg.getAttribute('aria-label') || 'Dashboard chart';
+      const toolbar = document.createElement('div'); toolbar.className = 'chart-toolbar';
+      const message = document.createElement('span'); message.className='chart-export-message'; message.setAttribute('role','status');
+      ['PNG','SVG'].forEach(format => {
+        const button=document.createElement('button'); button.type='button'; button.className='chart-save';
+        button.textContent=`Save ${format}`; button.setAttribute('aria-label',`Save ${title} as ${format}`);
+        button.addEventListener('click',async () => {
+          button.disabled=true; message.textContent='Preparing chart…';
+          try { await exportChart(svg,title,format,appliedCaption); message.textContent=`${format} download ready`; }
+          catch(error) { message.textContent=error.message || 'Unable to save this chart. Try again.'; }
+          finally { button.disabled=false; }
+        }); toolbar.appendChild(button);
+      });
+      toolbar.appendChild(message); svg.parentNode.insertBefore(toolbar,svg);
+    });
+  }
+  function filterCaption() {
+    return [...document.querySelectorAll('.ganc-filter-panel select')].map(select => {
+      const label=document.querySelector(`label[for="${select.id}"]`)?.textContent.trim() || select.name;
+      const values=[...select.selectedOptions].filter(o=>o.value).map(o=>o.textContent.trim());
+      return values.length ? `${label}: ${values.join(', ')}` : '';
+    }).filter(Boolean).join(' · ') || 'All available cohorts and locations';
+  }
+  function wrapText(text, max) {
+    const lines=[]; let line='';
+    for (const word of text.split(/\s+/)) {
+      if ((line+' '+word).length>max && line) {lines.push(line);line='';}
+      line += (line?' ':'')+word;
+    }
+    if(line) lines.push(line); return lines;
+  }
+  function svgExport(svg,title,caption) {
+    if (!svg.querySelector('rect,path,line,circle,text,polyline,polygon')) throw new Error('Chart is not ready yet. Wait for it to load and try again.');
+    const box=svg.getBoundingClientRect();
+    const vb=svg.viewBox.baseVal;
+    const sourceW=vb.width || box.width, sourceH=vb.height || box.height;
+    if (!sourceW || !sourceH) throw new Error('Chart has no visible size. Reload the dashboard and try again.');
+    const clone=svg.cloneNode(true);
+    const originals=[svg,...svg.querySelectorAll('*')], copies=[clone,...clone.querySelectorAll('*')];
+    const properties=['fill','stroke','stroke-width','stroke-dasharray','opacity','fill-opacity','stroke-opacity','font-family','font-size','font-weight','text-anchor','dominant-baseline','visibility'];
+    originals.forEach((node,i) => {
+      const computed=getComputedStyle(node);
+      properties.forEach(p=>copies[i].style.setProperty(p,computed.getPropertyValue(p)));
+    });
+    const ns='http://www.w3.org/2000/svg', width=1400, margin=40;
+    const titleLines=wrapText(title,85), captionLines=wrapText(caption,130);
+    const header=42+titleLines.length*32+captionLines.length*22+35;
+    const chartH=(width-2*margin)*sourceH/sourceW, height=Math.ceil(header+chartH+50);
+    const outer=document.createElementNS(ns,'svg'); outer.setAttribute('width',width);outer.setAttribute('height',height);outer.setAttribute('viewBox',`0 0 ${width} ${height}`);
+    const bg=document.createElementNS(ns,'rect');bg.setAttribute('width','100%');bg.setAttribute('height','100%');bg.setAttribute('fill','#ffffff');outer.appendChild(bg);
+    const addText=(text,y,size,color) => { const n=document.createElementNS(ns,'text');n.setAttribute('x',margin);n.setAttribute('y',y);n.setAttribute('font-family','Arial, sans-serif');n.setAttribute('font-size',size);n.setAttribute('fill',color);n.textContent=text;outer.appendChild(n); };
+    let y=40;titleLines.forEach(l=>{addText(l,y,27,'#173b3b');y+=32;});
+    captionLines.forEach(l=>{addText(l,y,15,'#52666a');y+=22;});
+    addText(`GANC/PNC Dashboard · Exported ${new Date().toLocaleDateString()}`,y+4,14,'#52666a');
+    clone.setAttribute('viewBox',svg.getAttribute('viewBox') || `0 0 ${sourceW} ${sourceH}`);
+    clone.setAttribute('x',margin);clone.setAttribute('y',header);clone.setAttribute('width',width-2*margin);clone.setAttribute('height',chartH);
+    clone.style.removeProperty('width');clone.style.removeProperty('height');clone.removeAttribute('id');outer.appendChild(clone);
+    return {text:new XMLSerializer().serializeToString(outer),width,height};
+  }
+  function download(blob,name) {
+    const url=URL.createObjectURL(blob), a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }
+  async function exportChart(svg,title,format,caption) {
+    const data=svgExport(svg,title,caption), blob=new Blob([data.text],{type:'image/svg+xml;charset=utf-8'});
+    const slug=(title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'chart');
+    const name=`ganc-pnc-${slug}-${new Date().toISOString().slice(0,10)}`;
+    if(format==='SVG') {download(blob,name+'.svg');return;}
+    const url=URL.createObjectURL(blob);
+    try {
+      const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Unable to render PNG. Please use Save SVG.'));img.src=url;});
+      const canvas=document.createElement('canvas');canvas.width=data.width*2;canvas.height=data.height*2;
+      const ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.drawImage(img,0,0,data.width,data.height);
+      const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+      if(!png)throw new Error('PNG export failed. Please use Save SVG.');download(png,name+'.png');
+    } finally {URL.revokeObjectURL(url);}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+
+</script>
 {% endblock %}

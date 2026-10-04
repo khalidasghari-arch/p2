@@ -254,53 +254,94 @@ def get_session_querysets(enrollments):
 # EXECUTIVE SUMMARY
 # ============================================================
 def get_attendance_breakdown(enrollments):
-    """One category per woman per session type, within the filtered population.
+    """Scoped, mutually exclusive attendance counts and follow-up lists.
 
-    Any attendance takes precedence, then dropout, then absence. Missing or
-    unknown statuses are reported separately and are never assumed absent.
+    Present takes precedence over dropout, then absence. For duplicate records
+    in the chosen category, show the most recent session date and primary key.
     """
     enrollment_ids = enrollments.order_by().values_list("pk", flat=True).distinct()
     enrolled = enrollment_ids.count()
     session_models = (
-        ("ANC First", Gancfirstsession),
-        ("ANC Second", Gancsecondsession),
-        ("ANC Third", Gancthirdsession),
-        ("ANC Fourth", Gancfouthsession),
-        ("PNC First", GroupPncfirstSession),
-        ("PNC Second", GroupPncsecondSession),
+        ("ANC First", Gancfirstsession, "sessiondate"),
+        ("ANC Second", Gancsecondsession, "sessiondate"),
+        ("ANC Third", Gancthirdsession, "sessiondate"),
+        ("ANC Fourth", Gancfouthsession, "sessiondate"),
+        ("PNC First", GroupPncfirstSession, "session_date"),
+        ("PNC Second", GroupPncsecondSession, "sessiondate"),
     )
     rows = []
-    for label, model in session_models:
+    followup_ids = set()
+    for label, model, date_field in session_models:
         records = model.objects.filter(
             registerid_id__in=enrollment_ids
         ).annotate(
             dashboard_attendance=Lower(Trim("attendance"))
-        ).order_by().values_list("registerid_id", "dashboard_attendance").distinct()
+        ).order_by("-" + date_field, "-pk").values(
+            "pk", "registerid_id", "dashboard_attendance", date_field
+        )
         present, absent, dropout = set(), set(), set()
-        for woman_id, status in records:
+        details = {"absent": {}, "dropout": {}}
+        for record in records:
+            woman_id = record["registerid_id"]
+            status = record["dashboard_attendance"]
             if status in ("group", "individual"):
                 present.add(woman_id)
             elif status == "dropout":
                 dropout.add(woman_id)
+                details["dropout"].setdefault(woman_id, record)
             elif status in ("absent", "no"):
                 absent.add(woman_id)
+                details["absent"].setdefault(woman_id, record)
         dropout -= present
         absent -= present | dropout
-        unknown = enrolled - len(present | absent | dropout)
+        followup_ids.update(absent | dropout)
         row = {"label": label, "enrolled": enrolled}
         for key, count in (
-            ("present", len(present)),
-            ("absent", len(absent)),
+            ("present", len(present)), ("absent", len(absent)),
             ("dropout", len(dropout)),
-            ("unknown", unknown),
+            ("unknown", enrolled - len(present | absent | dropout)),
         ):
             row[key] = count
             row[key + "_pct"] = percentage(count, enrolled)
+        row["_detail_records"] = {
+            key: [(woman_id, details[key][woman_id]) for woman_id in ids]
+            for key, ids in (("absent", absent), ("dropout", dropout))
+        }
+        row["_date_field"] = date_field
         rows.append(row)
+    women = {
+        woman.pk: woman
+        for woman in enrollments.filter(pk__in=followup_ids).select_related(
+            "cohortname__facility"
+        ).distinct()
+    }
+    for row in rows:
+        date_field = row.pop("_date_field")
+        for category, records in row.pop("_detail_records").items():
+            result = []
+            for woman_id, record in records:
+                woman = women[woman_id]
+                cohort = woman.cohortname
+                facility = cohort.facility if cohort else None
+                result.append({
+                    "id": woman.pk,
+                    "register_number": woman.enrollmentid,
+                    "name": woman.name,
+                    "father_name": woman.fathername,
+                    "contact": woman.contactnumber,
+                    "cohort": cohort.cohortname if cohort else "",
+                    "cohort_number": cohort.cohortnumber if cohort else None,
+                    "facility": facility.name if facility else "",
+                    "session_date": record[date_field],
+                })
+            row[category + "_women"] = sorted(result, key=lambda x: (
+                x["facility"].casefold(), x["cohort"].casefold(),
+                (x["name"] or "").casefold(), x["id"]
+            ))
     return rows
 
 
-def get_dashboard_summary(enrollments):
+def get_dashboard_summary(enrollments, include_attendance=True):
     sessions = get_session_querysets(
         enrollments
     )
@@ -333,7 +374,7 @@ def get_dashboard_summary(enrollments):
     )
     return {
         "enrolled": enrolled,
-        "attendance_breakdown": get_attendance_breakdown(enrollments),
+        "attendance_breakdown": (get_attendance_breakdown(enrollments) if include_attendance else []),
         "anc1": anc1,
         "anc2": anc2,
         "anc3": anc3,
@@ -407,7 +448,7 @@ def get_dashboard_summary(enrollments):
 # ============================================================
 def get_continuum_data(enrollments):
     summary = get_dashboard_summary(
-        enrollments
+        enrollments, include_attendance=False
     )
     stages = [
         {
@@ -556,7 +597,7 @@ def get_cohort_performance(enrollments):
             )
         )
         summary = get_dashboard_summary(
-            cohort_enrollments
+            cohort_enrollments, include_attendance=False
         )
         completion = summary[
             "full_continuum_completion"

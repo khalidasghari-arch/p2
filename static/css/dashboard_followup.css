@@ -1,0 +1,44 @@
+.ganc-dashboard { --fu-ink:#173b3b; --fu-line:#dbe7e5; --fu-green:#0f766e; color:var(--fu-ink); }
+.ganc-dashboard .ganc-section { border:1px solid var(--fu-line); border-radius:16px; box-shadow:0 3px 12px #173b3b08; margin-bottom:22px; background:#fff; padding:22px; }
+.ganc-dashboard .ganc-section h2 { color:#173b3b; font-size:19px; letter-spacing:-.25px; }
+.ganc-dashboard .ganc-kpi-card { border-top:3px solid #0f766e; border-radius:12px; }
+.ganc-dashboard .ganc-filter-panel { background:#f4f9f8; border-radius:16px; }
+.followup-nav { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.followup-nav a,.followup-button,.chart-save { display:inline-flex; align-items:center; justify-content:center; padding:9px 13px; border:1px solid #c7dcd8; border-radius:8px; background:#fff; color:#165d56!important; font:inherit; font-weight:600; text-decoration:none; cursor:pointer; }
+.followup-nav a:hover,.followup-button:hover,.chart-save:hover { background:#e8f3f0; }
+.followup-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.followup-heading p,.followup-note { color:#52666a; line-height:1.6; max-width:1000px; }
+.followup-eyebrow { font-size:11px; letter-spacing:1.6px; color:#0f766e; font-weight:800; }
+.attendance-legend { display:flex; flex-wrap:wrap; gap:9px; margin:16px 0 22px; }
+.status-pill { display:inline-block; padding:7px 10px; border:1px solid transparent; border-radius:8px; font:inherit; font-size:12px; font-weight:700; line-height:1.5; white-space:normal; }
+.status-pill.present { color:#09664c; background:#e5f5ee; border-color:#b7dfcb; }
+.status-pill.absent { color:#854800; background:#fff3d8; border-color:#e8c476; }
+.status-pill.dropout { color:#a32d38; background:#ffebed; border-color:#e8aab1; }
+button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
+.followup-toggle span { display:block; font-size:10px; text-decoration:underline; }
+.ganc-dashboard :is(button,a,input,summary):focus-visible { outline:3px solid #19798a; outline-offset:3px; }
+.ganc-dashboard .ganc-table-wrapper { overflow-x:auto; }
+.attendance-table { width:100%; border-collapse:separate; border-spacing:0; }
+.attendance-table > thead th { background:#edf5f3!important; padding:13px; white-space:normal; }
+.attendance-table > tbody > tr > td,.attendance-table > tbody > tr > th { padding:12px; vertical-align:top; }
+.followup-detail-row > td { padding:0 12px 10px!important; }
+.absent-detail > td { background:#fffbf1!important; border-left:4px solid #d29524; }
+.dropout-detail > td { background:#fff6f7!important; border-left:4px solid #c44958; }
+.women-details summary { cursor:pointer; font-weight:700; padding:10px 0; }
+.women-details[open] { padding-bottom:12px; }
+.women-tools { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 0 15px; }
+.women-tools label { font-size:12px; font-weight:600; }
+.women-tools input { display:block; margin-top:6px; width:min(420px,70vw); padding:9px!important; border:1px solid #c4d4d1!important; border-radius:6px!important; background:#fff!important; color:#173b3b!important; }
+.women-match-count { color:#52666a; font-size:12px; }
+.women-table { min-width:900px; width:100%; background:white; }
+.women-table th { background:#f1f5f4!important; color:#173b3b!important; font-size:11px; }
+.women-table td { padding:11px!important; background:#fff!important; }
+.women-table small { display:block; color:#65767a; margin-top:4px; }
+.followup-note { font-size:12px; margin-top:16px; }
+.chart-toolbar { display:flex; justify-content:flex-end; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 0; }
+.chart-save { font-size:12px; }
+.chart-save:disabled { opacity:.6; cursor:wait; }
+.chart-export-message { color:#6a4b08; font-size:12px; }
+.ganc-dashboard [hidden] { display:none!important; }
+@media(max-width:700px) { .followup-heading { flex-direction:column; } .ganc-dashboard .ganc-section { padding:14px; } .attendance-table { min-width:740px; } }
+@media print { .chart-toolbar,.followup-nav,.women-tools,.followup-button { display:none!important; } }
