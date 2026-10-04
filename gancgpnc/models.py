@@ -95,7 +95,7 @@ class Gancfirstsession(models.Model):
     sessiontype = models.CharField(max_length=225,choices=SESSION_TYPE, default="GROUP-ANC", verbose_name="Session-Type")
     sessionround = models.CharField(max_length=255, choices=SESSION_ROUND, default="FIRST-SESSION", verbose_name="Session-Round")
     sessiondate = models.DateField()
-    attendance = models.CharField(max_length=255, choices=INDIVIDUAL_ATTENDANCE, default="GROUP",verbose_name="Attendance (Group/Individual/Absent)")
+    attendance = models.CharField(max_length=255, choices=INDIVIDUAL_ATTENDANCE, default="GROUP",verbose_name="Attendance")
     presentga = models.PositiveIntegerField(verbose_name="Present_Gestational Age (Weeks)")
     bp = models.CharField(max_length=255)
     dhypertension = models.BooleanField(verbose_name="Diagnosed with hypertension")
@@ -180,7 +180,7 @@ class Gancsecondsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
+        verbose_name="Attendance"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present_Gestational Age (weeks)")
@@ -286,7 +286,7 @@ class Gancthirdsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
+        verbose_name="Attendance"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present Gestational Age (weeks)")
@@ -426,7 +426,7 @@ class Gancfouthsession(models.Model):
         max_length=255,
         choices=INDIVIDUAL_ATTENDANCE,
         default="GROUP",
-        verbose_name="Attendance (Group/Individual/Absent/Dropout)"
+        verbose_name="Attendance"
     )
 
     presentga = models.PositiveIntegerField(verbose_name="Present Gestational Age (weeks)")

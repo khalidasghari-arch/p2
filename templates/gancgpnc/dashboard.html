@@ -509,6 +509,52 @@ GANC/PNC Continuum Dashboard
             </table>
         </div>
     </div>
+    <!-- ATTENDANCE BREAKDOWN -->
+    <div class="ganc-section" id="attendance-breakdown">
+        <h2>Attendance Breakdown — ANC and PNC</h2>
+        <p>
+            Present includes Group and Individual. Permanently Absent means
+            recorded Dropout for that session type. Percentages use all enrolled
+            women within the selected dashboard filters.
+        </p>
+        <div class="ganc-table-wrapper" style="overflow-x: auto;">
+            <table class="ganc-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Session</th>
+                        <th scope="col">Enrolled Women</th>
+                        <th scope="col">Present (Group + Individual)</th>
+                        <th scope="col">Absent</th>
+                        <th scope="col">Permanently Absent (Dropout)</th>
+                        <th scope="col">Not Recorded / Unknown</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in summary.attendance_breakdown %}
+                        <tr>
+                            <th scope="row">{{ row.label }}</th>
+                            <td>{{ row.enrolled }}</td>
+                            <td>{{ row.present }} ({{ row.present_pct|floatformat:1 }}%)</td>
+                            <td>{{ row.absent }} ({{ row.absent_pct|floatformat:1 }}%)</td>
+                            <td>{{ row.dropout }} ({{ row.dropout_pct|floatformat:1 }}%)</td>
+                            <td>{{ row.unknown }} ({{ row.unknown_pct|floatformat:1 }}%)</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6">No attendance breakdown available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p>
+            Each woman is counted once per session type. If multiple records
+            have different statuses, Present takes priority, then Dropout,
+            then Absent. PNC “No” is included under Absent. Missing records and
+            blank or unrecognized statuses are shown as Not Recorded / Unknown.
+            Percentages may not total exactly 100% due to rounding; when no
+            women are enrolled, all counts and percentages are zero.
+        </p>
+    </div>
+
     <!-- ================================================== -->
     <!-- ANC QUALITY -->
     <!-- ================================================== -->
