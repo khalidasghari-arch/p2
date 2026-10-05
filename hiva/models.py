@@ -1173,6 +1173,12 @@ class Mpdsr(models.Model):
     def __str__(self):
         return f"{self.facilityname} - {self.yearmpdsr}/{int(self.monthmpdsr):02d}"
     
+class MPDSRDashboard(Mpdsr):
+    class Meta:
+        proxy = True
+        verbose_name = "MPDSR Dashboard"
+        verbose_name_plural = "MPDSR Dashboard"
+    
 class aimpee(models.Model):
     shamsimonth = models.CharField()
     shamsiyear = models.CharField()

@@ -1,4 +1,6 @@
 from urllib.parse import urlencode
+from calendar import month_name
+from collections import Counter, defaultdict
 from django.db.models import Sum, Count, F
 from django.db.models import Count, Max, Min, Q
 import openpyxl
@@ -61,7 +63,8 @@ from .models import (
     Position,
     WhoChildbirthChecklistMonthly,
     QICommittee, FacilityStaff,ShamsiMonth, ShamsiYear, Period, BaselineProgress, GregorianMonth, GregorianYear, 
-    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,SafeSurgeryDashboard,WhoChildbirthChecklistDashboard,
+    AimPPHDashboard,HQIPAssessmentDashboard, HQIPContentDashboard,SafeSurgeryDashboard,WhoChildbirthChecklistDashboard,MPDSRDashboard,
+    SPECIFIC_CAUSE_CATEGORY_MAP,
 )
 from django.utils.http import urlencode
 from decimal import Decimal, InvalidOperation
@@ -10473,3 +10476,289 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
         workbook.save(response)
         return response
 
+@admin.register(MPDSRDashboard)
+class MPDSRDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    change_list_template = "admin/mpdsr/dashboard.html"
+    actions = None
+    pairs = (
+        ("maternal", "Maternal deaths", "n_maternaldeathreported", "n_maternaldeathreviewed"),
+        ("antepartum", "Antepartum stillbirths", "nastillbirthreportedreported", "nastillbirthreportedreviewed"),
+        ("intrapartum", "Intrapartum stillbirths", "nistillbirthreported", "nistillbirthreviewed"),
+        ("neonatal", "Neonatal deaths after live birth", "nndeath_afteralivebirth_reported", "nndeath_afteralivebirth_reviewed"),
+    )
+    structured = (
+        ("maternal_death_cause_category", "Maternal cause category"),
+        ("maternal_death_specific_cause", "Specific maternal cause"),
+        ("maternal_death_contributing_factor", "Contributing factor"),
+        ("maternal_death_preventability", "Preventability"),
+        ("maternal_death_timing", "Timing"),
+        ("maternal_death_place", "Place"),
+    )
+    filter_definitions = (
+        ("province", "Province", "facilityname__districtfk__provincefk_id"),
+        ("facility", "Facility", "facilityname_id"),
+        ("yearmpdsr", "Gregorian Year", "yearmpdsr"),
+        ("monthmpdsr", "Gregorian Month", "monthmpdsr"),
+    ) + tuple((field, label, field) for field, label in structured)
+    methodology_note = (
+        "Counts sum the selected facility-month records. Review coverage = 100 × reviews / reported deaths "
+        "within each category; it is N/A with no reported deaths or an invalid count pair. "
+        "The reported-minus-reviewed difference is a recorded review gap, not a verified case backlog. "
+        "Structured maternal charts count reports with at least one maternal death, not individual deaths: "
+        "one monthly record can contain several deaths but only one structured value per field. "
+        "Staff participation sums attendance counts across reports, not unique people. "
+        "No mortality rate, preventable-death total, reporting-completeness rate or intervention effect "
+        "can be calculated from this model alone. Zero values are treated as recorded zeros."
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        user = request.user
+        opts = self.model._meta
+        concrete = opts.concrete_model._meta
+        allowed = user.is_active and user.is_staff and (
+            user.is_superuser or user.has_perm(f"{opts.app_label}.view_{opts.model_name}")
+            or user.has_perm(f"{concrete.app_label}.view_{concrete.model_name}")
+            or user.has_perm(f"{concrete.app_label}.change_{concrete.model_name}")
+        )
+        return bool(allowed and (obj is None or self.get_queryset(request).filter(pk=obj.pk).exists()))
+
+    def get_model_perms(self, request):
+        return {"view": True} if self.has_view_permission(request) else {}
+
+    def province_filter_kwargs(self, request):
+        return {"facilityname__districtfk__provincefk": user_province(request)}
+
+    def _base_queryset(self, request):
+        return self.get_queryset(request).select_related("facilityname__districtfk__provincefk")
+
+    @staticmethod
+    def _numeric_key(value):
+        text = str(value)
+        return (0, int(text), text) if text.isdecimal() else (1, 0, text)
+
+    def _label(self, field, value):
+        if value in (None, ""):
+            return "Not recorded"
+        if field == "monthmpdsr" and str(value).isdecimal() and 1 <= int(value) <= 12:
+            return month_name[int(value)] + (" [stored: " + str(value) + "]" if str(value).startswith("0") else "")
+        labels = dict(self.model._meta.get_field(field).flatchoices)
+        return str(labels.get(value, value))
+
+    def _filters_and_options(self, request, queryset):
+        filters, dropdowns = {}, []
+        for name, label, path in self.filter_definitions:
+            multiple = name in ("yearmpdsr", "monthmpdsr")
+            value = (list(dict.fromkeys(v.strip() for v in request.GET.getlist(name) if v.strip()))
+                     if multiple else request.GET.get(name, "").strip())
+            if name in ("province", "facility") and value:
+                if not value.isdecimal() or len(value) > 18 or int(value) <= 0:
+                    raise SuspiciousOperation("Invalid dashboard filter ID")
+            if name == "yearmpdsr" and any(not v.isdecimal() or len(v) > 4 for v in value):
+                raise SuspiciousOperation("Invalid dashboard year")
+            filters[name] = value
+            if name in ("province", "facility"):
+                label_path = "facilityname__districtfk__provincefk__name" if name == "province" else "facilityname__name"
+                choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
+                           queryset.exclude(**{path + "__isnull": True}).order_by(label_path, path)
+                           .values_list(path, label_path).distinct()]
+            else:
+                values = queryset.exclude(**{path + "__isnull": True}).order_by().values_list(path, flat=True).distinct()
+                values = [v for v in values if v != ""]
+                values.sort(key=self._numeric_key if multiple else str)
+                choices = [{"value": str(v), "label": self._label(name, v)} for v in values]
+            dropdowns.append({"name": name, "label": label, "value": value, "multiple": multiple, "choices": choices})
+            if value:
+                queryset = queryset.filter(**{path + ("__in" if multiple else ""): value})
+        return queryset, filters, dropdowns
+
+    @staticmethod
+    def _display(value):
+        return "N/A" if value is None else value
+
+    def _table(self, key, title, columns, rows, note=""):
+        return {"key": key, "title": title, "note": note, "headers": [label for field, label in columns],
+                "rows": [[self._display(row.get(field)) for field, label in columns] for row in rows]}
+
+    @staticmethod
+    def _chart(key, title, rows, series, kind="bar", percent=False, horizontal=False):
+        return {"key": key, "title": title, "kind": kind, "percent": percent, "horizontal": horizontal,
+                "labels": [row["label"] for row in rows],
+                "series": [{"label": label, "data": [row.get(field) for row in rows]} for field, label in series]}
+
+    def _summary(self, rows):
+        result = {"records": len(rows), "facilities": len({r.facilityname_id for r in rows}),
+                  "participants": sum(r.n_mpdsrcommittee or 0 for r in rows)}
+        for key, label, reported, reviewed in self.pairs:
+            invalid = any(getattr(r, reported) is None or getattr(r, reviewed) is None
+                          or getattr(r, reported) < 0 or getattr(r, reviewed) < 0
+                          or getattr(r, reviewed) > getattr(r, reported) for r in rows)
+            n = sum(getattr(r, reported) or 0 for r in rows)
+            v = sum(getattr(r, reviewed) or 0 for r in rows)
+            result.update({key + "_reported": n, key + "_reviewed": v,
+                           key + "_gap": None if invalid else n - v,
+                           key + "_coverage": round(100 * v / n, 2) if n > 0 and not invalid else None})
+        return result
+
+    def _build_dashboard_data(self, request):
+        qs, filters, dropdowns = self._filters_and_options(request, self._base_queryset(request))
+        rows = list(qs.order_by("yearmpdsr", "pk"))
+        totals = self._summary(rows)
+        cards = [{"label": "Facility-month reports", "value": totals["records"]},
+                 {"label": "Facilities with records", "value": totals["facilities"]},
+                 {"label": "Staff participations (not unique staff)", "value": totals["participants"]}]
+        overview = []
+        for key, label, reported, reviewed in self.pairs:
+            overview.append({"label": label, "reported": totals[key + "_reported"], "reviewed": totals[key + "_reviewed"],
+                             "gap": totals[key + "_gap"], "coverage": totals[key + "_coverage"]})
+            cards.extend([{"label": label + " — reported", "value": totals[key + "_reported"]},
+                          {"label": label + " — review coverage (%)", "value": self._display(totals[key + "_coverage"])}])
+        tables = [self._table("review_summary", "Reported deaths and reviews", [("label", "Category"), ("reported", "Reported"),
+                  ("reviewed", "Reviewed"), ("gap", "Recorded review gap"), ("coverage", "Review coverage (%)")], overview)]
+        charts = [self._chart("reported_reviewed", "Reported deaths and reviews", overview, [("reported", "Reported"), ("reviewed", "Reviewed")]),
+                  self._chart("coverage", "Review coverage by category (%)", overview, [("coverage", "Reviewed / reported (%)")], percent=True)]
+        groups = {"province": defaultdict(list), "facility": defaultdict(list), "monthly": defaultdict(list)}
+        for row in rows:
+            facility = row.facilityname
+            province = facility.districtfk.provincefk if facility.districtfk else None
+            groups["province"][(province.pk if province else None, province.name if province else "Not recorded")].append(row)
+            groups["facility"][(facility.pk, facility.name, province.name if province else "Not recorded")].append(row)
+            groups["monthly"][(row.yearmpdsr, row.monthmpdsr)].append(row)
+        aggregate_columns = [("records", "Reports"), ("participants", "Staff participations")]
+        for key, label, _, _ in self.pairs:
+            aggregate_columns += [(key + "_reported", label + " reported"), (key + "_reviewed", label + " reviewed"),
+                                  (key + "_gap", label + " review gap"), (key + "_coverage", label + " reviewed (%)")]
+        for group, values in groups.items():
+            ordered = sorted(values, key=(lambda k: (k[0], self._numeric_key(k[1]))) if group == "monthly" else (lambda k: str(k[1])))
+            summaries = []
+            for key in ordered:
+                summary = self._summary(values[key])
+                summary["label"] = (str(key[0]) + " / " + self._label("monthmpdsr", key[1])) if group == "monthly" else key[1]
+                summary["province"] = key[2] if group == "facility" else ""
+                summaries.append(summary)
+            columns = [("label", group.title())] + ([("province", "Province")] if group == "facility" else []) + aggregate_columns
+            tables.append(self._table(group, group.title() + " breakdown", columns, summaries))
+            if group == "monthly":
+                charts.append(self._chart("monthly", "Monthly reported deaths / stillbirths", summaries,
+                    [(key + "_reported", label) for key, label, _, _ in self.pairs], kind="line"))
+            if group == "province":
+                charts.append(self._chart("province", "Maternal deaths reported and reviewed by province", summaries,
+                    [("maternal_reported", "Reported"), ("maternal_reviewed", "Reviewed")]))
+        maternal_rows = [r for r in rows if r.n_maternaldeathreported > 0]
+        for index, (field, label) in enumerate(self.structured):
+            counts = Counter(getattr(r, field) or "" for r in maternal_rows)
+            distribution = [{"label": self._label(field, value), "reports": count,
+                             "share": round(100 * count / len(maternal_rows), 2)}
+                            for value, count in sorted(counts.items(), key=lambda item: (-item[1], str(item[0])))]
+            note = "Unit: facility-month reports with at least one maternal death. Includes Not recorded. These are not death-level counts or percentages."
+            tables.append(self._table("structured_" + str(index), label + " — reports", [("label", label), ("reports", "Reports"), ("share", "Share of maternal-death reports (%)")], distribution, note))
+            charts.append(self._chart("structured_" + str(index), label + " — number of reports", distribution, [("reports", "Reports (not deaths)")], horizontal=True))
+        quality, details = [], []
+        for row in rows:
+            issues = []
+            for key, label, reported, reviewed in self.pairs:
+                n, v = getattr(row, reported), getattr(row, reviewed)
+                if n is None or v is None or n < 0 or v < 0:
+                    issues.append(label + ": missing/negative count")
+                elif v > n:
+                    issues.append(label + ": reviewed exceeds reported")
+            if row.n_mpdsrcommittee < 0:
+                issues.append("Negative staff participation")
+            if not str(row.monthmpdsr).isdecimal() or not 1 <= int(row.monthmpdsr) <= 12:
+                issues.append("Invalid calendar month")
+            for field, label in self.structured:
+                value = getattr(row, field)
+                if value and value not in dict(self.model._meta.get_field(field).flatchoices):
+                    issues.append(label + ": unrecognized stored value")
+                if row.n_maternaldeathreported > 0 and not value:
+                    issues.append(label + ": not recorded (optional/legacy)")
+            if row.n_maternaldeathreported <= 0 and any(getattr(row, f) for f, _ in self.structured):
+                issues.append("Structured maternal fields without a positive maternal death count")
+            category = row.maternal_death_cause_category
+            cause = row.maternal_death_specific_cause
+            if bool(category) != bool(cause):
+                issues.append("Maternal category and specific cause are only partially recorded")
+            expected = SPECIFIC_CAUSE_CATEGORY_MAP.get(cause)
+            if category and expected and category != expected:
+                issues.append("Specific maternal cause does not match the recorded category")
+            item = {"id": row.pk, "facility": row.facilityname.name,
+                    "period": str(row.yearmpdsr) + " / " + self._label("monthmpdsr", row.monthmpdsr),
+                    "maternal": row.causeofmaternaldeaths_m or "", "neonatal": row.causeofneonataldeath_n or "",
+                    "intervention": row.interventionperformed or "", "recommendation": row.recfromMPDSRcommittee or "", "remarks": row.remarks or ""}
+            details.append(item)
+            if issues:
+                quality.append({**item, "issues": "; ".join(dict.fromkeys(issues))})
+        tables.append(self._table("quality", "Data quality and documentation gaps", [("id", "Record ID"), ("facility", "Facility"), ("period", "Month"), ("issues", "Review finding")], quality,
+            "Optional fields may be absent in legacy records. Flags support record review; they do not rewrite data."))
+        tables.append(self._table("actions", "Recorded interventions and committee recommendations", [("id", "Record ID"), ("facility", "Facility"), ("period", "Month"),
+            ("maternal", "Maternal cause narrative"), ("neonatal", "Neonatal cause narrative"), ("intervention", "Intervention performed"),
+            ("recommendation", "Committee recommendation"), ("remarks", "Remarks")], details,
+            "Narratives are displayed as recorded. The model has no action owner, due date or completion status, so recommendation completion is not inferred."))
+        export_query = request.GET.copy()
+        export_query.pop("filter_options", None)
+        export_query["export"] = "1"
+        return {"filters": filters, "dropdowns": dropdowns, "cards": cards, "kpis": totals, "tables": tables,
+                "charts": charts, "chart_data": charts, "methodology_note": self.methodology_note, "export_query": export_query.urlencode()}
+
+    def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        if request.GET.get("filter_options") == "1":
+            _, _, dropdowns = self._filters_and_options(request, self._base_queryset(request))
+            return JsonResponse({d["name"] + "_options": d["choices"] for d in dropdowns})
+        data = self._build_dashboard_data(request)
+        if request.GET.get("export") == "1":
+            return self._export_dashboard_excel(data)
+        return TemplateResponse(request, self.change_list_template, {
+            **self.admin_site.each_context(request), **(extra_context or {}), **data,
+            "title": "MPDSR Dashboard", "opts": self.model._meta})
+
+    def _export_dashboard_excel(self, data):
+        workbook = Workbook()
+        summary = workbook.active
+        summary.title = "Summary"
+        summary.append(["MPDSR Dashboard", "Value"])
+        for card in data["cards"]:
+            summary.append([card["label"], card["value"]])
+        for table in data["tables"]:
+            sheet = workbook.create_sheet(table["key"].title()[:31])
+            sheet.append(table["headers"])
+            for row in table["rows"]:
+                sheet.append(row)
+        notes = workbook.create_sheet("Methodology_Notes")
+        notes.append(["Topic", "Explanation"])
+        notes.append(["Methodology", data["methodology_note"]])
+        for key, value in data["filters"].items():
+            notes.append(["Filter: " + key, (", ".join(value) if isinstance(value, list) else value) or "All"])
+        for table in data["tables"]:
+            if table["note"]:
+                notes.append([table["title"], table["note"]])
+        for sheet in workbook.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for row in sheet:
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cell.value = ILLEGAL_CHARACTERS_RE.sub("", cell.value)
+                        # Treat record labels as text, including strings beginning with '='.
+                        cell.data_type = "s"
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor="1F4E78")
+            for column in sheet.columns:
+                width = max(len(str(cell.value or "")) for cell in column)
+                sheet.column_dimensions[get_column_letter(column[0].column)].width = min(max(width + 2, 14), 55)
+        filename = "MPDSR_Dashboard_" + timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S") + ".xlsx"
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        workbook.save(response)
+        return response

@@ -1,0 +1,613 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+
+<style>
+    :root {
+        --mp-blue: #1f4e78;
+        --mp-blue-2: #1565c0;
+        --mp-green: #2e7d32;
+        --mp-orange: #ef6c00;
+        --mp-red: #c62828;
+        --mp-purple: #6a1b9a;
+        --mp-gray: #607d8b;
+        --mp-light-blue: #f4f8fb;
+        --mp-border: #d9e2f3;
+        --mp-text: #263238;
+        --mp-muted: #607d8b;
+    }
+
+    .mp-dashboard {
+        font-family: Arial, sans-serif;
+        color: var(--mp-text);
+    }
+
+    .mp-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .mp-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--mp-blue);
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .mp-subtitle {
+        color: #555;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .mp-card,
+    .mp-section {
+        background: #ffffff;
+        border: 1px solid var(--mp-border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
+    }
+
+    .mp-section h2 {
+        margin: 0 0 12px 0;
+        color: var(--mp-blue);
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .mp-section h3 {
+        margin: 0 0 6px 0;
+        color: var(--mp-blue);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .mp-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(110px, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .mp-filter-grid label {
+        display: block;
+        font-weight: 600;
+        font-size: 12px;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .mp-filter-grid input,
+    .mp-filter-grid select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+        background: #ffffff;
+        min-height: 36px;
+        box-sizing: border-box;
+    }
+
+    .mp-filter-grid input:focus,
+    .mp-filter-grid select:focus,
+    .mp-search:focus {
+        outline: none;
+        border-color: var(--mp-blue);
+        box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
+    }
+
+    .mp-btn {
+        display: inline-block;
+        padding: 9px 15px;
+        background: var(--mp-blue);
+        color: #ffffff !important;
+        border-radius: 7px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    .mp-btn:hover {
+        background: #173b5b;
+        color: #ffffff !important;
+    }
+
+    .mp-btn-secondary {
+        background: var(--mp-gray);
+    }
+
+    .mp-btn-secondary:hover {
+        background: #455a64;
+    }
+
+    .mp-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(115px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .mp-kpi {
+        background: linear-gradient(180deg, #ffffff, var(--mp-light-blue));
+        border: 1px solid var(--mp-border);
+        border-radius: 12px;
+        padding: 14px 10px;
+        text-align: center;
+        min-height: 86px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .mp-kpi-value {
+        font-size: 25px;
+        font-weight: 800;
+        color: var(--mp-blue);
+        line-height: 1.1;
+    }
+
+    .mp-kpi-label {
+        font-size: 12px;
+        color: #555;
+        margin-top: 6px;
+        line-height: 1.3;
+    }
+
+    .mp-note {
+        padding: 12px 14px;
+        background: #fff8e1;
+        border-left: 5px solid #f9a825;
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .mp-info-note {
+        padding: 12px 14px;
+        background: #e3f2fd;
+        border-left: 5px solid var(--mp-blue-2);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .mp-warning-note {
+        padding: 12px 14px;
+        background: #ffebee;
+        border-left: 5px solid var(--mp-red);
+        margin-bottom: 16px;
+        font-size: 13px;
+        line-height: 1.55;
+        border-radius: 8px;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 12px;
+    }
+
+    .chart-card {
+        background: #ffffff;
+        border: 1px solid var(--mp-border);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
+    }
+
+    .chart-card p {
+        margin: 0 0 10px 0;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.4;
+    }
+
+    .chart-box {
+        position: relative;
+        height: 330px;
+        width: 100%;
+    }
+
+    .chart-box-large {
+        height: 390px;
+    }
+
+    .chart-empty {
+        display: none;
+        height: 160px;
+        border: 1px dashed #ccd6e0;
+        border-radius: 10px;
+        align-items: center;
+        justify-content: center;
+        color: #607d8b;
+        font-size: 13px;
+        text-align: center;
+        padding: 12px;
+    }
+
+    table.mp-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .mp-table th {
+        background: var(--mp-blue);
+        color: #ffffff;
+        padding: 8px;
+        border: 1px solid var(--mp-border);
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .mp-table td {
+        padding: 7px;
+        border: 1px solid var(--mp-border);
+        vertical-align: top;
+        line-height: 1.4;
+    }
+
+    .mp-table tr:nth-child(even) {
+        background: #f7fbff;
+    }
+
+    .mp-table tr:hover {
+        background: #eef6ff;
+    }
+
+    .mp-comparison-table th {
+        background: #1f4e78;
+        color: #ffffff;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .mp-comparison-table td:nth-child(3) {
+        min-width: 380px;
+    }
+
+    .mp-comparison-table td:nth-child(10),
+    .mp-comparison-table td:nth-child(11) {
+        min-width: 260px;
+    }
+
+    .mp-comparison-table tr:nth-child(even) {
+        background: #c7ecf7;
+    }
+
+    .mp-comparison-table tr:nth-child(odd) {
+        background: #ffffff;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        max-width: 100%;
+        max-height: 620px;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        color: #ffffff;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .badge-green {
+        background: var(--mp-green);
+    }
+
+    .badge-blue {
+        background: var(--mp-blue-2);
+    }
+
+    .badge-orange {
+        background: var(--mp-orange);
+    }
+
+    .badge-gray {
+        background: var(--mp-gray);
+    }
+
+    .badge-red {
+        background: var(--mp-red);
+    }
+
+    .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    .small-muted {
+        color: var(--mp-muted);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .mp-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .mp-search {
+        min-width: 260px;
+        padding: 8px;
+        border: 1px solid #ccd6e0;
+        border-radius: 7px;
+    }
+
+    .mp-footer-note {
+        margin-top: 12px;
+        color: #607d8b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 1400px) {
+        .mp-filter-grid,
+        .mp-kpi-grid {
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
+        }
+
+        .chart-grid,
+        .two-col {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .mp-header {
+            flex-direction: column;
+        }
+
+        .mp-filter-grid,
+        .mp-kpi-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .mp-title {
+            font-size: 23px;
+        }
+
+        .chart-box {
+            height: 300px;
+        }
+
+        .mp-search {
+            width: 100%;
+            min-width: 100%;
+        }
+    }
+    .mp-filter-grid select[multiple] { height: 112px; }
+    .mp-clear-date { margin-top: 5px; font-size: 12px; cursor: pointer; }
+</style>
+
+<div class="mp-dashboard">
+
+    <div class="mp-header">
+        <div>
+            <h1 class="mp-title">MPDSR Dashboard</h1>
+            <div class="mp-subtitle">
+                Maternal and perinatal death reporting, review coverage, recorded contributing factors and committee actions.
+            </div>
+        </div>
+
+        <div>
+            <a class="mp-btn" href="?{{ export_query }}">Export Excel</a>
+        </div>
+    </div>
+
+    <div class="mp-card">
+        <form method="get" id="mpdsr-filter-form">
+            <p id="mpdsr-date-help">Select one or more years/months. Hold Ctrl (Windows) or Command (Mac) to select several values. No selection means All. Choices refresh automatically; click Apply filters to update the dashboard.</p>
+            <p id="mpdsr-filter-status" role="status" aria-live="polite"></p>
+            <div class="mp-filter-grid">
+                {% for dropdown in dropdowns %}
+                <div>
+                    <label for="mp-filter-{{ dropdown.name }}">{{ dropdown.label }}</label>
+                    <select id="mp-filter-{{ dropdown.name }}" name="{{ dropdown.name }}" {% if dropdown.multiple %}multiple size="4" aria-describedby="mpdsr-date-help"{% endif %}>
+                        {% if not dropdown.multiple %}<option value="">All</option>{% endif %}
+                        {% for option in dropdown.choices %}
+                        <option value="{{ option.value }}" {% if dropdown.multiple %}{% if option.value in dropdown.value %}selected{% endif %}{% elif dropdown.value == option.value %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if dropdown.multiple %}<button type="button" class="mp-clear-date" data-clear="{{ dropdown.name }}">Clear selection (All)</button>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div style="margin-top:14px;">
+                <button type="submit" class="mp-btn">Apply filters</button>
+                <a href="?" class="mp-btn mp-btn-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="mp-kpi-grid">
+        {% for card in cards %}
+        <div class="mp-kpi"><div class="mp-kpi-value">{{ card.value }}</div><div class="mp-kpi-label">{{ card.label }}</div></div>
+        {% endfor %}
+    </div>
+    <div class="mp-note"><strong>Methodology note:</strong> {{ methodology_note }}</div>
+    {{ chart_data|json_script:"mpdsr-chart-data" }}
+    <div class="mp-section">
+        <h2>MPDSR dashboard charts</h2>
+        <div class="mp-info-note">All views use the selected filters. Review coverage is reviews ÷ reported deaths × 100. Structured maternal charts count reports, not individual deaths.</div>
+        <div class="chart-grid">
+        {% for chart in charts %}
+            <div class="chart-card">
+                <h3>{{ chart.title }}</h3>
+                <div class="chart-box chart-box-large">
+                    <canvas id="mpdsr-{{ chart.key }}" role="img" aria-label="{{ chart.title }}"></canvas>
+                    <div class="chart-empty" id="mpdsr-{{ chart.key }}-empty">No chart data available.</div>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% for table in tables %}
+    <div class="mp-section">
+        <div class="mp-toolbar">
+            <h2>{{ table.title }}</h2>
+            <input class="mp-search" type="search" aria-label="Search {{ table.title }}" data-table="mpdsr-table-{{ table.key }}" placeholder="Search this table...">
+        </div>
+        {% if table.note %}<div class="mp-info-note">{{ table.note }}</div>{% endif %}
+        <div class="table-scroll">
+            <table class="mp-table{% if table.key == 'comparison' %} mp-comparison-table{% endif %}" id="mpdsr-table-{{ table.key }}">
+                <thead><tr>{% for header in table.headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in table.rows %}
+                    <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+                {% empty %}
+                    <tr><td colspan="{{ table.headers|length }}">{% if table.key == 'quality' %}No issues detected by the implemented checks.{% else %}No records found for the selected filters.{% endif %}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="mp-footer-note">Dashboard calculations are read-only. Verify findings against facility records before using them in reports or success stories.</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    "use strict";
+    const filterForm = document.getElementById("mpdsr-filter-form");
+    const filterStatus = document.getElementById("mpdsr-filter-status");
+    const order = ["province", "facility", "yearmpdsr", "monthmpdsr", "maternal_death_cause_category", "maternal_death_specific_cause", "maternal_death_contributing_factor", "maternal_death_preventability", "maternal_death_timing", "maternal_death_place"];
+    let pending = null;
+    let revision = 0;
+    function clearSelection(select) {
+        if (select.multiple) { Array.from(select.options).forEach(function (option) { option.selected = false; }); }
+        else { select.value = ""; }
+    }
+    function submitFilters() {
+        // Disabled selects are cleared dependent controls and must not be submitted.
+        if (typeof filterForm.requestSubmit === "function") { filterForm.requestSubmit(); }
+        else { filterForm.submit(); }
+    }
+    async function changed(name) {
+        const index = order.indexOf(name);
+        const later = order.slice(index + 1);
+        const current = filterForm.elements.namedItem(name);
+        revision += 1;
+        const mine = revision;
+        if (pending) { pending.abort(); }
+        later.forEach(function (key) { clearSelection(filterForm.elements.namedItem(key)); });
+        if (!current.multiple) { submitFilters(); return; }
+        if (typeof fetch !== "function" || typeof AbortController !== "function") {
+            later.forEach(function (key) { filterForm.elements.namedItem(key).disabled = true; });
+            filterStatus.textContent = "Click Apply filters to refresh the dependent choices.";
+            return;
+        }
+        const params = new URLSearchParams(new FormData(filterForm));
+        params.delete("export");
+        params.set("filter_options", "1");
+        later.forEach(function (key) { filterForm.elements.namedItem(key).disabled = true; });
+        filterStatus.textContent = "Refreshing available choices…";
+        pending = new AbortController();
+        try {
+            const response = await fetch(window.location.pathname + "?" + params.toString(), {
+                signal: pending.signal, credentials: "same-origin", headers: {"Accept": "application/json"}
+            });
+            if (!response.ok) { throw new Error("Filter request failed"); }
+            const choices = await response.json();
+            if (mine !== revision) { return; }
+            later.forEach(function (key) {
+                if (!Array.isArray(choices[key + "_options"])) { throw new Error("Invalid filter response"); }
+            });
+            later.forEach(function (key) {
+                const select = filterForm.elements.namedItem(key);
+                const values = choices[key + "_options"];
+                select.replaceChildren();
+                if (!select.multiple) { select.add(new Option("All", "")); }
+                values.forEach(function (option) { select.add(new Option(String(option.label), String(option.value))); });
+                select.disabled = false;
+            });
+            filterStatus.textContent = "Choices updated. Click Apply filters to update the dashboard.";
+        } catch (error) {
+            if (mine !== revision || error.name === "AbortError") { return; }
+            filterStatus.textContent = "Choices could not refresh. Click Apply filters to reload them.";
+        }
+    }
+    order.forEach(function (name) {
+        filterForm.elements.namedItem(name).addEventListener("change", function () { changed(name); });
+    });
+    document.querySelectorAll(".mp-clear-date[data-clear]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            const select = filterForm.elements.namedItem(button.dataset.clear);
+            if (select.disabled) { return; }
+            clearSelection(select);
+            changed(button.dataset.clear);
+        });
+    });
+    document.querySelectorAll(".mp-search[data-table]").forEach(function (input) {
+        input.addEventListener("input", function () {
+            const query = input.value.toLocaleLowerCase().trim();
+            document.querySelectorAll("#" + input.dataset.table + " tbody tr").forEach(function (row) {
+                row.hidden = !row.textContent.toLocaleLowerCase().includes(query);
+            });
+        });
+    });
+    const data = JSON.parse(document.getElementById("mpdsr-chart-data").textContent);
+    const colors = ["#42a5f5", "#c62828", "#2e7d32", "#7b1fa2"];
+    data.forEach(function (chart) {
+        const canvas = document.getElementById("mpdsr-" + chart.key);
+        const empty = document.getElementById("mpdsr-" + chart.key + "-empty");
+        const hasValues = chart.series.some(function (series) { return series.data.some(function (v) { return v !== null; }); });
+        if (typeof Chart === "undefined" || !chart.labels.length || !hasValues) {
+            canvas.style.display = "none";
+            empty.style.display = "flex";
+            if (typeof Chart === "undefined") { empty.textContent = "Charts could not load. Data remain available in the tables below."; }
+            return;
+        }
+        new Chart(canvas, {
+            type: chart.kind,
+            data: {
+                labels: chart.labels,
+                datasets: chart.series.map(function (series, i) {
+                    return {label: series.label, data: series.data,
+                            backgroundColor: colors[i % colors.length], borderColor: colors[i % colors.length],
+                            borderWidth: 2, tension: 0.2, fill: false, spanGaps: false};
+                })
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: chart.horizontal ? "y" : "x",
+                plugins: {legend: {position: "bottom"}, tooltip: {callbacks: {
+                    label: function (context) {
+                        return context.dataset.label + ": " + (context.raw === null ? "N/A" : Number(context.raw).toLocaleString() + (chart.percent ? "%" : ""));
+                    }
+                }}},
+                scales: chart.horizontal ? {x: {beginAtZero: true}, y: {grid: {display: false}}} :
+                                           {y: {beginAtZero: true}, x: {grid: {display: false}}}
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}
