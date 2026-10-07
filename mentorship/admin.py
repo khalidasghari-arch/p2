@@ -26,6 +26,7 @@ from django.utils.html import format_html
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from .dashboard_extensions import build_dashboard_extensions, append_extension_sheets
 
 # =====================================================
 # Helpers
@@ -815,30 +816,25 @@ MentorshipDashboardMixin, admin.ModelAdmin):
         ).values("id", "name").order_by("name")
 
         return JsonResponse(list(topics), safe=False)
+    
 @admin.register(MentorshipDashboard)
 class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/mentorship/dashboard.html"
-
     # ------------------------------------------------------------
     # Dashboard permissions
     # ------------------------------------------------------------
     def has_add_permission(self, request):
         return False
-
     def has_change_permission(self, request, obj=None):
         return False
-
     def has_delete_permission(self, request, obj=None):
         return False
-
     def has_view_permission(self, request, obj=None):
         return request.user.is_active and request.user.is_staff
-
     def get_model_perms(self, request):
         if self.has_view_permission(request):
             return {"view": True}
         return {}
-
     # ------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------
@@ -850,32 +846,26 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 output_field=IntegerField(),
             )
         )
-
     def changelist_view(self, request, extra_context=None):
         data = self._build_dashboard_data(request)
-
         if request.GET.get("export") == "1":
             return self._export_dashboard_excel(data)
-
         context = {
             **self.admin_site.each_context(request),
             "title": "Mentorship Dashboard",
             **data,
         }
-
         return TemplateResponse(
             request,
             self.change_list_template,
             context,
         )
-
     def _base_querysets(self, request):
         visits_qs = Mentorshipvisit.objects.select_related(
             "facilityfk",
             "facilityfk__districtfk",
             "facilityfk__districtfk__provincefk",
         )
-
         details_qs = Mentorshipdetails.objects.select_related(
             "mentorshipvistfk",
             "mentorshipvistfk__facilityfk",
@@ -890,19 +880,17 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ).filter(
             mentorshipvistfk__isnull=False
         )
-
         prov_id = _prov_id(request)
-
-        if prov_id and not request.user.is_superuser:
+        if not request.user.is_superuser:
+            if prov_id is None:
+                return visits_qs.none(), details_qs.none()
             visits_qs = visits_qs.filter(
                 facilityfk__districtfk__provincefk_id=prov_id
             )
             details_qs = details_qs.filter(
                 mentorshipvistfk__facilityfk__districtfk__provincefk_id=prov_id
             )
-
         return visits_qs, details_qs
-
     def _apply_filters(self, request, visits_qs, details_qs):
         date_from = request.GET.get("date_from", "").strip()
         date_to = request.GET.get("date_to", "").strip()
@@ -911,15 +899,12 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         mentor_id = request.GET.get("mentor", "").strip()
         thematic_id = request.GET.get("thematic", "").strip()
         visit_round = request.GET.get("visit_round", "").strip()
-
         if date_from:
             visits_qs = visits_qs.filter(visitdate__gte=date_from)
             details_qs = details_qs.filter(mentorshipvistfk__visitdate__gte=date_from)
-
         if date_to:
             visits_qs = visits_qs.filter(visitdate__lte=date_to)
             details_qs = details_qs.filter(mentorshipvistfk__visitdate__lte=date_to)
-
         if province_id:
             visits_qs = visits_qs.filter(
                 facilityfk__districtfk__provincefk_id=province_id
@@ -927,23 +912,18 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             details_qs = details_qs.filter(
                 mentorshipvistfk__facilityfk__districtfk__provincefk_id=province_id
             )
-
         if facility_id:
             visits_qs = visits_qs.filter(facilityfk_id=facility_id)
             details_qs = details_qs.filter(mentorshipvistfk__facilityfk_id=facility_id)
-
         if mentor_id:
             details_qs = details_qs.filter(mentor_id=mentor_id)
             visits_qs = visits_qs.filter(items__mentor_id=mentor_id).distinct()
-
         if thematic_id:
             details_qs = details_qs.filter(thematicname_id=thematic_id)
             visits_qs = visits_qs.filter(items__thematicname_id=thematic_id).distinct()
-
         if visit_round:
             visits_qs = visits_qs.filter(visitround=visit_round)
             details_qs = details_qs.filter(mentorshipvistfk__visitround=visit_round)
-
         filters = {
             "date_from": date_from,
             "date_to": date_to,
@@ -953,19 +933,18 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "thematic": thematic_id,
             "visit_round": visit_round,
         }
-
         return visits_qs, details_qs, filters
-
     def _build_dashboard_data(self, request):
         visits_qs, details_qs = self._base_querysets(request)
         option_visits_qs, option_details_qs = self._base_querysets(request)
-
         visits_qs, details_qs, filters = self._apply_filters(
             request,
             visits_qs,
             details_qs,
         )
-
+        extensions = build_dashboard_extensions(
+            request, details_qs, option_details_qs, filters, _prov_id(request)
+        )
         # ------------------------------------------------------------
         # Filter options
         # ------------------------------------------------------------
@@ -978,7 +957,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .distinct()
             .order_by("province")
         )
-
         facility_options = list(
             option_visits_qs.values(
                 facility_id=F("facilityfk_id"),
@@ -988,7 +966,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .distinct()
             .order_by("facility")
         )
-
         mentor_options = [
         {
             "mentor_id": row["mentor_id"],
@@ -1002,7 +979,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .order_by("mentor__name")
             )
         ]
-
         thematic_options = [
         {
             "thematic_id": row["id"],
@@ -1014,14 +990,12 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .order_by("name")
             )
         ]
-
         visit_round_options = list(
             option_visits_qs.values_list("visitround", flat=True)
             .exclude(visitround__isnull=True)
             .distinct()
             .order_by("visitround")
         )
-
         # ------------------------------------------------------------
         # KPI cards
         # ------------------------------------------------------------
@@ -1037,20 +1011,16 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             total_pc=self._bool_sum("pc"),
             total_mc=self._bool_sum("mc"),
         )
-
         for key in kpis:
             kpis[key] = int(kpis[key] or 0)
-
         kpis["competency_instances"] = kpis["total_pc"] + kpis["total_mc"]
         kpis["competency_minus_ls"] = kpis["competency_instances"] - kpis["total_ls"]
-
         mentor_visit_keys = set(
             details_qs.exclude(mentor_id__isnull=True)
             .exclude(mentorshipvistfk__visitdate__isnull=True)
             .values_list("mentorshipvistfk__visitdate", "mentor_id")
         )
         kpis["mentor_visit_instances"] = len(mentor_visit_keys)
-
         # ------------------------------------------------------------
         # Province summary
         # ------------------------------------------------------------
@@ -1073,7 +1043,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             .order_by("province")
         )
-
         max_province_value = max(
             [
                 max(
@@ -1084,18 +1053,15 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 for r in province_rows
             ] or [1]
         )
-
         for r in province_rows:
             r["ls"] = int(r["ls"] or 0)
             r["pc"] = int(r["pc"] or 0)
             r["mc"] = int(r["mc"] or 0)
             r["competency_instances"] = r["pc"] + r["mc"]
             r["competency_minus_ls"] = r["competency_instances"] - r["ls"]
-
             r["ls_width"] = round((r["ls"] / max_province_value) * 100, 1) if max_province_value else 0
             r["pc_width"] = round((r["pc"] / max_province_value) * 100, 1) if max_province_value else 0
             r["mc_width"] = round((r["mc"] / max_province_value) * 100, 1) if max_province_value else 0
-
             if r["mc"] > r["ls"]:
                 r["interpretation"] = "MC is higher than LS; competency demonstration instances exceeded learning session instances."
             elif r["competency_instances"] > r["ls"]:
@@ -1104,7 +1070,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r["interpretation"] = "LS is higher than competency instances; mentees may need follow-up PC/MC."
             else:
                 r["interpretation"] = "LS and competency activity are balanced."
-
         # ------------------------------------------------------------
         # Facility summary
         # ------------------------------------------------------------
@@ -1128,14 +1093,12 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             .order_by("province", "district", "facility")
         )
-
         for r in facility_rows:
             r["ls"] = int(r["ls"] or 0)
             r["pc"] = int(r["pc"] or 0)
             r["mc"] = int(r["mc"] or 0)
             r["competency_instances"] = r["pc"] + r["mc"]
             r["competency_minus_ls"] = r["competency_instances"] - r["ls"]
-
             if r["mc"] > r["ls"]:
                 r["interpretation"] = "MC activity was higher than LS."
             elif r["competency_instances"] > r["ls"]:
@@ -1144,13 +1107,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r["interpretation"] = "LS activity was higher; follow-up PC/MC may be needed."
             else:
                 r["interpretation"] = "Balanced LS and competency activity."
-
         facility_driver_rows = sorted(
             facility_rows,
             key=lambda x: abs(x["competency_minus_ls"]),
             reverse=True,
         )[:25]
-
         # ------------------------------------------------------------
         # Monthly trend
         # ------------------------------------------------------------
@@ -1169,7 +1130,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             .order_by("month")
         )
-
         for r in monthly_total_rows:
             r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
             r["ls"] = int(r["ls"] or 0)
@@ -1177,7 +1137,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             r["mc"] = int(r["mc"] or 0)
             r["competency_instances"] = r["pc"] + r["mc"]
             r["total"] = r["ls"] + r["pc"] + r["mc"]
-
         trend_rows = list(
             details_qs.annotate(
                 month=TruncMonth("mentorshipvistfk__visitdate")
@@ -1196,19 +1155,16 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
             .order_by("province", "month")
         )
-
         for r in trend_rows:
             r["month_label"] = r["month"].strftime("%b %Y") if r["month"] else "Unknown"
             r["ls"] = int(r["ls"] or 0)
             r["pc"] = int(r["pc"] or 0)
             r["mc"] = int(r["mc"] or 0)
             r["competency_instances"] = r["pc"] + r["mc"]
-
         # ------------------------------------------------------------
         # First mentorship visit by province
         # ------------------------------------------------------------
         first_visit_rows = []
-
         first_by_province = list(
             visits_qs.values(
                 province_id=F("facilityfk__districtfk__provincefk_id"),
@@ -1218,7 +1174,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .annotate(first_date=Min("visitdate"))
             .order_by("province")
         )
-
         for row in first_by_province:
             first_visit = (
                 visits_qs.filter(
@@ -1228,10 +1183,8 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 .order_by("visitdate", "id")
                 .first()
             )
-
             facility = first_visit.facilityfk if first_visit else None
             district = facility.districtfk if facility else None
-
             first_visit_rows.append({
                 "province": row["province"],
                 "first_date": row["first_date"],
@@ -1240,12 +1193,10 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "district": district.name if district else "",
                 "visit_round": first_visit.visitround if first_visit else "",
             })
-
         # ------------------------------------------------------------
         # Mentee profile table
         # ------------------------------------------------------------
         mentee_profiles = {}
-
         detail_records = details_qs.order_by(
             "mentorshipvistfk__facilityfk__districtfk__provincefk__name",
             "mentorshipvistfk__facilityfk__districtfk__name",
@@ -1254,13 +1205,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "mentorshipvistfk__visitdate",
             "id",
         )
-
         mentee_ids = list(
             detail_records.exclude(menteename_id__isnull=True)
             .values_list("menteename_id", flat=True)
             .distinct()
         )
-
         topic_status_map = {}
         if mentee_ids:
             status_rows = MenteeTopicStatus.objects.filter(
@@ -1274,20 +1223,16 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "last_date",
                 "competent_date",
             )
-
             for s in status_rows:
                 topic_status_map[(s["mentee_id"], s["topic_id"])] = s
-
         def safe_text(value):
             return str(value).strip() if value is not None else ""
-
         def get_gender_text(value):
             if value is True:
                 return "Female"
             if value is False:
                 return "Male"
             return ""
-
         for d in detail_records:
             visit = d.mentorshipvistfk
             facility = visit.facilityfk if visit else None
@@ -1295,18 +1240,14 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             province = district.provincefk if district else None
             mentee = d.menteename
             topic = d.topicname
-
             if not mentee:
                 continue
-
             topic_name = safe_text(topic) or "Unknown topic"
             thematic_name = safe_text(d.thematicname) or "Unknown thematic area"
-
             profile_key = (
                 facility.id if facility else None,
                 mentee.id,
             )
-
             if profile_key not in mentee_profiles:
                 mentee_profiles[profile_key] = {
                     "province": safe_text(getattr(province, "name", "")),
@@ -1326,53 +1267,39 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     "needs_graduation_topics": set(),
                     "last_visit_date": None,
                 }
-
             profile = mentee_profiles[profile_key]
-
             if visit:
                 profile["visits"].add(visit.id)
-
                 if visit.visitdate:
                     if not profile["last_visit_date"] or visit.visitdate > profile["last_visit_date"]:
                         profile["last_visit_date"] = visit.visitdate
-
             profile["topics_all"].add(topic_name)
-
             if d.ls:
                 profile["ls_topics"].add(topic_name)
-
             if d.pc:
                 profile["pc_topics"].add(topic_name)
                 profile["competent_topics"].add(topic_name)
-
             if d.mc:
                 profile["mc_topics"].add(topic_name)
                 profile["competent_topics"].add(topic_name)
-
             status = topic_status_map.get((mentee.id, topic.id if topic else None))
             if status and status.get("status") == "COMPETENT":
                 profile["competent_topics"].add(topic_name)
-
         mentee_profile_rows = []
-
         for _key, profile in mentee_profiles.items():
             active_topics = (
                 profile["ls_topics"]
                 | profile["pc_topics"]
                 | profile["mc_topics"]
             )
-
             profile["needs_graduation_topics"] = active_topics - profile["competent_topics"]
-
             ls_topics = sorted(profile["ls_topics"])
             pc_topics = sorted(profile["pc_topics"])
             mc_topics = sorted(profile["mc_topics"])
             competent_topics = sorted(profile["competent_topics"])
             needs_topics = sorted(profile["needs_graduation_topics"])
-
             needs_count = len(needs_topics)
             competent_count = len(competent_topics)
-
             if needs_count > 0:
                 overall_status = "Needs graduation / follow-up"
                 status_badge = "warning"
@@ -1382,7 +1309,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             else:
                 overall_status = "No competency progress recorded"
                 status_badge = "neutral"
-
             mentee_profile_rows.append({
                 "province": profile["province"],
                 "district": profile["district"],
@@ -1408,7 +1334,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "overall_status": overall_status,
                 "status_badge": status_badge,
             })
-
         mentee_profile_rows = sorted(
             mentee_profile_rows,
             key=lambda x: (
@@ -1419,12 +1344,10 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 x["mentee"],
             ),
         )
-
         # ------------------------------------------------------------
         # Story candidates
         # ------------------------------------------------------------
         story_candidates = []
-
         for r in facility_rows:
             story_score = (
                 int(r["ls"] or 0)
@@ -1432,7 +1355,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 + int(r["mc"] or 0) * 3
                 + int(r["topics"] or 0)
             )
-
             if r["ls"] > 0 or r["pc"] > 0 or r["mc"] > 0:
                 story_candidates.append({
                     **r,
@@ -1443,13 +1365,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                         else "Strong learning session implementation with follow-up need"
                     ),
                 })
-
         story_candidates = sorted(
             story_candidates,
             key=lambda x: x["story_score"],
             reverse=True,
         )[:15]
-
         # ------------------------------------------------------------
         # Chart data
         # ------------------------------------------------------------
@@ -1512,11 +1432,10 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 )[:10]
             ],
         }
-
         export_query = request.GET.copy()
         export_query["export"] = "1"
-
         return {
+            **extensions,
             "filters": filters,
             "export_query": export_query.urlencode(),
             "province_options": province_options,
@@ -1539,10 +1458,8 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "A single mentee may appear multiple times across visits, thematic areas, topics, mentors, or competency assessments."
             ),
         }
-
     def _export_dashboard_excel(self, data):
         wb = Workbook()
-
         def style_sheet(ws):
             header_fill = PatternFill("solid", fgColor="1F4E78")
             header_font = Font(color="FFFFFF", bold=True)
@@ -1552,31 +1469,24 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 top=Side(style="thin", color="D9E2F3"),
                 bottom=Side(style="thin", color="D9E2F3"),
             )
-
             ws.freeze_panes = "A2"
             ws.auto_filter.ref = ws.dimensions
-
             for cell in ws[1]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 cell.border = border
-
             for row in ws.iter_rows():
                 for cell in row:
                     cell.border = border
                     cell.alignment = Alignment(vertical="top", wrap_text=True)
-
             for col in ws.columns:
                 max_length = 0
                 col_letter = get_column_letter(col[0].column)
-
                 for cell in col:
                     if cell.value is not None:
                         max_length = max(max_length, len(str(cell.value)))
-
                 ws.column_dimensions[col_letter].width = min(max(max_length + 2, 12), 50)
-
         ws = wb.active
         ws.title = "Province_Summary"
         ws.append([
@@ -1584,7 +1494,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "Thematics", "Topics", "LS", "PC", "MC",
             "PC + MC", "Competency - LS", "Interpretation",
         ])
-
         for r in data["province_rows"]:
             ws.append([
                 r.get("province"),
@@ -1601,7 +1510,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("competency_minus_ls"),
                 r.get("interpretation"),
             ])
-
         ws2 = wb.create_sheet("Facility_Detail")
         ws2.append([
             "Province", "District", "Facility", "HF Code",
@@ -1609,7 +1517,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "LS", "PC", "MC", "PC + MC", "Competency - LS",
             "Interpretation",
         ])
-
         for r in data["facility_rows"]:
             ws2.append([
                 r.get("province"),
@@ -1628,13 +1535,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("competency_minus_ls"),
                 r.get("interpretation"),
             ])
-
         ws3 = wb.create_sheet("Monthly_Trend")
         ws3.append([
             "Province", "Month", "Mentees", "Visits", "Topics",
             "LS", "PC", "MC", "PC + MC",
         ])
-
         for r in data["trend_rows"]:
             ws3.append([
                 r.get("province"),
@@ -1647,13 +1552,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("mc"),
                 r.get("competency_instances"),
             ])
-
         ws4 = wb.create_sheet("First_Visits")
         ws4.append([
             "Province", "First Visit Date", "First Facility",
             "HF Code", "District", "Visit Round",
         ])
-
         for r in data["first_visit_rows"]:
             ws4.append([
                 r.get("province"),
@@ -1663,7 +1566,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("district"),
                 r.get("visit_round"),
             ])
-
         ws5 = wb.create_sheet("Mentee_Profile")
         ws5.append([
             "Province", "District", "Facility", "HF Code",
@@ -1674,7 +1576,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "Competent Topics", "Topics Needing Graduation",
             "Last Visit Date", "Overall Status",
         ])
-
         for r in data["mentee_profile_rows"]:
             ws5.append([
                 r.get("province"),
@@ -1700,13 +1601,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("last_visit_date"),
                 r.get("overall_status"),
             ])
-
         ws6 = wb.create_sheet("Story_Candidates")
         ws6.append([
             "Province", "District", "Facility", "HF Code",
             "LS", "PC", "MC", "PC + MC", "Story Angle", "Story Score",
         ])
-
         for r in data["story_candidates"]:
             ws6.append([
                 r.get("province"),
@@ -1720,7 +1619,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("story_angle"),
                 r.get("story_score"),
             ])
-
         ws7 = wb.create_sheet("Methodology_Notes")
         ws7.append(["Topic", "Explanation"])
         ws7.append(["LS / PC / MC interpretation", data["methodology_note"]])
@@ -1728,13 +1626,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "Graduation logic",
             "A topic is counted as competent/graduated when PC or MC is recorded, or when MenteeTopicStatus is COMPETENT.",
         ])
-
+        append_extension_sheets(wb, data)
         for sheet in wb.worksheets:
             style_sheet(sheet)
-
         timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
         filename = f"Mentorship_Dashboard_{timestamp}.xlsx"
-
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )

@@ -1,10 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load i18n static %}
-
 {% block content_title %}{% endblock %}
-
 {% block content %}
-
 <style>
     :root {
         --mh-blue: #1f4e78;
@@ -19,12 +16,10 @@
         --mh-text: #263238;
         --mh-muted: #607d8b;
     }
-
     .mh-dashboard {
         font-family: Arial, sans-serif;
         color: var(--mh-text);
     }
-
     .mh-header {
         display: flex;
         justify-content: space-between;
@@ -32,7 +27,6 @@
         gap: 16px;
         margin-bottom: 18px;
     }
-
     .mh-title {
         font-size: 28px;
         font-weight: 700;
@@ -40,14 +34,12 @@
         margin: 0;
         line-height: 1.2;
     }
-
     .mh-subtitle {
         color: #555;
         margin-top: 6px;
         font-size: 13px;
         line-height: 1.5;
     }
-
     .mh-card,
     .mh-section {
         background: #ffffff;
@@ -57,28 +49,24 @@
         margin-bottom: 18px;
         box-shadow: 0 2px 7px rgba(31, 78, 120, 0.06);
     }
-
     .mh-section h2 {
         margin: 0 0 12px 0;
         color: var(--mh-blue);
         font-size: 20px;
         font-weight: 700;
     }
-
     .mh-section h3 {
         margin: 0 0 6px 0;
         color: var(--mh-blue);
         font-size: 15px;
         font-weight: 700;
     }
-
     .mh-filter-grid {
         display: grid;
         grid-template-columns: repeat(6, minmax(120px, 1fr));
         gap: 12px;
         align-items: end;
     }
-
     .mh-filter-grid label {
         display: block;
         font-weight: 600;
@@ -86,7 +74,6 @@
         color: #333;
         margin-bottom: 5px;
     }
-
     .mh-filter-grid input,
     .mh-filter-grid select {
         width: 100%;
@@ -97,7 +84,6 @@
         min-height: 36px;
         box-sizing: border-box;
     }
-
     .mh-filter-grid input:focus,
     .mh-filter-grid select:focus,
     .mh-search:focus {
@@ -105,7 +91,6 @@
         border-color: var(--mh-blue);
         box-shadow: 0 0 0 2px rgba(31, 78, 120, 0.12);
     }
-
     .mh-btn {
         display: inline-block;
         padding: 9px 15px;
@@ -119,27 +104,22 @@
         font-size: 13px;
         line-height: 1.2;
     }
-
     .mh-btn:hover {
         background: #173b5b;
         color: #ffffff !important;
     }
-
     .mh-btn-secondary {
         background: var(--mh-gray);
     }
-
     .mh-btn-secondary:hover {
         background: #455a64;
     }
-
     .mh-kpi-grid {
         display: grid;
         grid-template-columns: repeat(8, minmax(115px, 1fr));
         gap: 12px;
         margin-bottom: 18px;
     }
-
     .mh-kpi {
         background: linear-gradient(180deg, #ffffff, var(--mh-light-blue));
         border: 1px solid var(--mh-border);
@@ -151,21 +131,18 @@
         flex-direction: column;
         justify-content: center;
     }
-
     .mh-kpi-value {
         font-size: 26px;
         font-weight: 800;
         color: var(--mh-blue);
         line-height: 1.1;
     }
-
     .mh-kpi-label {
         font-size: 12px;
         color: #555;
         margin-top: 6px;
         line-height: 1.3;
     }
-
     .mh-note {
         padding: 12px 14px;
         background: #fff8e1;
@@ -175,7 +152,6 @@
         line-height: 1.55;
         border-radius: 8px;
     }
-
     .mh-info-note {
         padding: 12px 14px;
         background: #e3f2fd;
@@ -185,7 +161,6 @@
         line-height: 1.55;
         border-radius: 8px;
     }
-
     .mh-success-note {
         padding: 12px 14px;
         background: #e8f5e9;
@@ -195,14 +170,12 @@
         line-height: 1.55;
         border-radius: 8px;
     }
-
     .chart-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 18px;
         margin-top: 12px;
     }
-
     .chart-card {
         background: #ffffff;
         border: 1px solid var(--mh-border);
@@ -210,24 +183,20 @@
         padding: 14px;
         box-shadow: 0 2px 6px rgba(31, 78, 120, 0.05);
     }
-
     .chart-card p {
         margin: 0 0 10px 0;
         font-size: 12px;
         color: #666;
         line-height: 1.4;
     }
-
     .chart-box {
         position: relative;
         height: 330px;
         width: 100%;
     }
-
     .chart-box-large {
         height: 390px;
     }
-
     .chart-empty {
         display: none;
         height: 160px;
@@ -240,13 +209,11 @@
         text-align: center;
         padding: 12px;
     }
-
     table.mh-table {
         width: 100%;
         border-collapse: collapse;
         font-size: 12px;
     }
-
     .mh-table th {
         background: var(--mh-blue);
         color: #ffffff;
@@ -256,32 +223,26 @@
         vertical-align: middle;
         white-space: nowrap;
     }
-
     .mh-table td {
         padding: 7px;
         border: 1px solid var(--mh-border);
         vertical-align: top;
         line-height: 1.4;
     }
-
     .mh-table tr:nth-child(even) {
         background: #f7fbff;
     }
-
     .mh-table tr:hover {
         background: #eef6ff;
     }
-
     .bar-cell {
         min-width: 190px;
     }
-
     .bar-label {
         font-size: 11px;
         color: #455a64;
         margin-bottom: 2px;
     }
-
     .bar-wrap {
         background: #e0e0e0;
         height: 16px;
@@ -289,25 +250,21 @@
         overflow: hidden;
         margin-bottom: 5px;
     }
-
     .bar-ls {
         height: 16px;
         background: #42a5f5;
         border-radius: 10px;
     }
-
     .bar-pc {
         height: 16px;
         background: #ffb74d;
         border-radius: 10px;
     }
-
     .bar-mc {
         height: 16px;
         background: #66bb6a;
         border-radius: 10px;
     }
-
     .badge {
         display: inline-block;
         padding: 3px 8px;
@@ -317,31 +274,24 @@
         font-weight: 700;
         white-space: nowrap;
     }
-
     .badge-green {
         background: var(--mh-green);
     }
-
     .badge-blue {
         background: var(--mh-blue-2);
     }
-
     .badge-orange {
         background: var(--mh-orange);
     }
-
     .badge-gray {
         background: var(--mh-gray);
     }
-
     .badge-red {
         background: var(--mh-red);
     }
-
     .badge-purple {
         background: var(--mh-purple);
     }
-
     .mentee-status-success {
         background: #2e7d32;
         color: #ffffff;
@@ -351,7 +301,6 @@
         font-weight: 700;
         white-space: nowrap;
     }
-
     .mentee-status-warning {
         background: #ef6c00;
         color: #ffffff;
@@ -361,7 +310,6 @@
         font-weight: 700;
         white-space: nowrap;
     }
-
     .mentee-status-neutral {
         background: #607d8b;
         color: #ffffff;
@@ -371,35 +319,29 @@
         font-weight: 700;
         white-space: nowrap;
     }
-
     .topic-list-cell {
         min-width: 180px;
         max-width: 300px;
         line-height: 1.45;
         white-space: normal;
     }
-
     .mentee-profile-table th {
         white-space: normal;
     }
-
     .two-col {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 18px;
     }
-
     .table-scroll {
         overflow-x: auto;
         max-width: 100%;
     }
-
     .small-muted {
         color: var(--mh-muted);
         font-size: 12px;
         line-height: 1.5;
     }
-
     .mh-toolbar {
         display: flex;
         justify-content: space-between;
@@ -408,60 +350,49 @@
         margin-bottom: 10px;
         flex-wrap: wrap;
     }
-
     .mh-search {
         min-width: 260px;
         padding: 8px;
         border: 1px solid #ccd6e0;
         border-radius: 7px;
     }
-
     .mh-footer-note {
         margin-top: 12px;
         color: #607d8b;
         font-size: 12px;
         line-height: 1.5;
     }
-
     @media (max-width: 1300px) {
         .mh-filter-grid,
         .mh-kpi-grid {
             grid-template-columns: repeat(2, minmax(120px, 1fr));
         }
-
         .chart-grid,
         .two-col {
             grid-template-columns: 1fr;
         }
     }
-
     @media (max-width: 700px) {
         .mh-header {
             flex-direction: column;
         }
-
         .mh-filter-grid,
         .mh-kpi-grid {
             grid-template-columns: 1fr;
         }
-
         .mh-title {
             font-size: 23px;
         }
-
         .chart-box {
             height: 300px;
         }
-
         .mh-search {
             width: 100%;
             min-width: 100%;
         }
     }
 </style>
-
 <div class="mh-dashboard">
-
     <div class="mh-header">
         <div>
             <h1 class="mh-title">Mentorship Dashboard</h1>
@@ -469,26 +400,21 @@
                 Routine dashboard for mentorship visits, LS, PC, MC, mentees, mentors, thematic areas, topics, facility performance, trends, and mentee competency follow-up.
             </div>
         </div>
-
         <div>
             <a class="mh-btn" href="?{{ export_query }}">Export Excel</a>
         </div>
     </div>
-
     <div class="mh-card">
         <form method="get">
             <div class="mh-filter-grid">
-
                 <div>
                     <label>Date from</label>
                     <input type="date" name="date_from" value="{{ filters.date_from }}">
                 </div>
-
                 <div>
                     <label>Date to</label>
                     <input type="date" name="date_to" value="{{ filters.date_to }}">
                 </div>
-
                 <div>
                     <label>Province</label>
                     <select name="province">
@@ -500,7 +426,6 @@
                         {% endfor %}
                     </select>
                 </div>
-
                 <div>
                     <label>Facility</label>
                     <select name="facility">
@@ -512,7 +437,6 @@
                         {% endfor %}
                     </select>
                 </div>
-
                 <div>
                     <label>Mentor</label>
                     <select name="mentor">
@@ -524,7 +448,6 @@
                         {% endfor %}
                     </select>
                 </div>
-
                 <div>
                     <label>Thematic Area</label>
                     <select name="thematic">
@@ -536,74 +459,71 @@
                         {% endfor %}
                     </select>
                 </div>
-
+                <div>
+                    <label>Visit round</label>
+                    <select name="visit_round">
+                        <option value="">All</option>
+                        {% for round in visit_round_options %}
+                        <option value="{{ round }}" {% if filters.visit_round|stringformat:"s" == round|stringformat:"s" %}selected{% endif %}>{{ round }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-
             <div style="margin-top:14px;">
                 <button type="submit" class="mh-btn">Apply filters</button>
                 <a href="?" class="mh-btn mh-btn-secondary">Reset</a>
             </div>
         </form>
     </div>
+    {% include "admin/mentorship/dashboard_extension_cards.html" %}
 
     <div class="mh-kpi-grid">
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.distinct_mentees|default:0 }}</div>
             <div class="mh-kpi-label">DISTINCT MENTEES</div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.distinct_visits|default:0 }}</div>
             <div class="mh-kpi-label">MENTORSHIP ACTIVITIES </div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.mentor_visit_instances|default:0 }}</div>
             <div class="mh-kpi-label">MENTORSHIP VISITS </div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.total_ls|default:0 }}</div>
             <div class="mh-kpi-label">LEARNING SESSIONS </div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.total_pc|default:0 }}</div>
             <div class="mh-kpi-label">PC</div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.total_mc|default:0 }}</div>
             <div class="mh-kpi-label">MC</div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.distinct_topics|default:0 }}</div>
             <div class="mh-kpi-label">DISTINCT TOPICS</div>
         </div>
-
         <div class="mh-kpi">
             <div class="mh-kpi-value">{{ kpis.distinct_facilities|default:0 }}</div>
             <div class="mh-kpi-label">FACILITIES</div>
         </div>
     </div>
-
     <div class="mh-note">
         <strong>Methodology note:</strong> {{ methodology_note }}
     </div>
+    {% include "admin/mentorship/dashboard_extension_sections.html" %}
 
     {{ chart_data|json_script:"mentorship-chart-data" }}
-
     <div class="mh-section">
         <h2>Visual analytics</h2>
-
         <div class="mh-info-note">
             These charts use mentorship detail-level data. LS, PC, and MC are counted as activity instances, not unique mentees.
             The charts help explain province-level performance, facility-level drivers, monthly trends, success story candidates, and mentees who still need graduation or follow-up.
         </div>
-
         <div class="chart-grid">
-
             <div class="chart-card">
                 <h3>Province LS, PC, and MC comparison</h3>
                 <p>Compares learning session, patient competent, and model competent instances by province.</p>
@@ -612,7 +532,6 @@
                     <div class="chart-empty" id="provinceLsPcMcChartEmpty">No chart data available.</div>
                 </div>
             </div>
-
             <div class="chart-card">
                 <h3>Province competency minus LS gap</h3>
                 <p>Shows whether PC + MC competency activity is higher or lower than LS activity.</p>
@@ -621,7 +540,6 @@
                     <div class="chart-empty" id="provinceGapChartEmpty">No chart data available.</div>
                 </div>
             </div>
-
             <div class="chart-card">
                 <h3>Monthly mentorship trend</h3>
                 <p>Shows LS, PC, MC, and total mentorship activity over time.</p>
@@ -630,7 +548,6 @@
                     <div class="chart-empty" id="monthlyTrendChartEmpty">No chart data available.</div>
                 </div>
             </div>
-
             <div class="chart-card">
                 <h3>Top facility-level drivers</h3>
                 <p>Highlights facilities contributing most to LS, PC, and MC activity volume.</p>
@@ -639,7 +556,6 @@
                     <div class="chart-empty" id="facilityDriversChartEmpty">No chart data available.</div>
                 </div>
             </div>
-
             <div class="chart-card">
                 <h3>Success story candidates</h3>
                 <p>Ranks facilities with strong mentorship implementation and competency progress potential.</p>
@@ -648,7 +564,6 @@
                     <div class="chart-empty" id="storyCandidatesChartEmpty">No story candidate chart data available.</div>
                 </div>
             </div>
-
             <div class="chart-card">
                 <h3>Mentees needing graduation follow-up</h3>
                 <p>Highlights mentees with the highest number of topics still needing graduation or follow-up.</p>
@@ -657,16 +572,13 @@
                     <div class="chart-empty" id="menteeNeedsChartEmpty">No mentee follow-up chart data available.</div>
                 </div>
             </div>
-
         </div>
     </div>
-
     <div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Province-level mentorship summary</h2>
             <input type="text" class="mh-search" id="provinceSearch" placeholder="Search province...">
         </div>
-
         <div class="table-scroll">
             <table class="mh-table" id="provinceTable">
                 <thead>
@@ -713,12 +625,10 @@
                                 <div class="bar-wrap">
                                     <div class="bar-ls" style="width:{{ r.ls_width|default:0 }}%;"></div>
                                 </div>
-
                                 <div class="bar-label">PC</div>
                                 <div class="bar-wrap">
                                     <div class="bar-pc" style="width:{{ r.pc_width|default:0 }}%;"></div>
                                 </div>
-
                                 <div class="bar-label">MC</div>
                                 <div class="bar-wrap">
                                     <div class="bar-mc" style="width:{{ r.mc_width|default:0 }}%;"></div>
@@ -734,20 +644,16 @@
                 </tbody>
             </table>
         </div>
-
         <div class="mh-footer-note">
             LS, PC, and MC are mentorship detail instances. They should not be interpreted as unique mentee counts.
         </div>
     </div>
-
     <div class="two-col">
         <div class="mh-section">
             <h2>Success story candidates</h2>
-
             <div class="small-muted" style="margin-bottom:10px;">
                 Facilities are prioritized based on LS, PC, MC, topic coverage, and competency activity. These are suggested candidates and should be verified with provincial mentors.
             </div>
-
             <div class="table-scroll">
                 <table class="mh-table">
                     <thead>
@@ -781,10 +687,8 @@
                 </table>
             </div>
         </div>
-
         <div class="mh-section">
             <h2>First recorded mentorship visit by province</h2>
-
             <div class="table-scroll">
                 <table class="mh-table">
                     <thead>
@@ -813,13 +717,11 @@
             </div>
         </div>
     </div>
-
     <div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Monthly trend by province</h2>
             <input type="text" class="mh-search" id="trendSearch" placeholder="Search province or month...">
         </div>
-
         <div class="table-scroll">
             <table class="mh-table" id="trendTable">
                 <thead>
@@ -855,22 +757,18 @@
             </table>
         </div>
     </div>
-
     <div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Mentee profile by facility</h2>
             <input type="text" class="mh-search" id="menteeProfileSearch" placeholder="Search mentee, facility, position, topic...">
         </div>
-
         <div class="small-muted" style="margin-bottom:10px;">
             This table groups each mentee by facility and shows which topics received LS, PC, MC, which topics are competent/graduated, and which topics still need graduation or follow-up.
         </div>
-
         <div class="mh-note">
             <strong>Interpretation:</strong>
             “Needs graduation / follow-up” means the mentee has LS, PC, or MC activity recorded for a topic, but the topic is not yet counted as competent/graduated based on PC, MC, or MenteeTopicStatus.
         </div>
-
         <div class="table-scroll">
             <table class="mh-table mentee-profile-table" id="menteeProfileTable">
                 <thead>
@@ -895,7 +793,6 @@
                         <th>Status</th>
                     </tr>
                 </thead>
-
                 <tbody>
                     {% for r in mentee_profile_rows %}
                         <tr>
@@ -971,13 +868,11 @@
             </table>
         </div>
     </div>
-
     <div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Facility-level drivers</h2>
             <input type="text" class="mh-search" id="facilitySearch" placeholder="Search province or facility...">
         </div>
-
         <div class="table-scroll">
             <table class="mh-table" id="facilityTable">
                 <thead>
@@ -1029,11 +924,8 @@
             </table>
         </div>
     </div>
-
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
 (function () {
     function getChartData() {
@@ -1041,7 +933,6 @@
         if (!chartElement) {
             return {};
         }
-
         try {
             return JSON.parse(chartElement.textContent || "{}");
         } catch (error) {
@@ -1049,9 +940,7 @@
             return {};
         }
     }
-
     const chartData = getChartData();
-
     const chartColors = {
         ls: "rgba(66, 165, 245, 0.78)",
         lsBorder: "rgba(66, 165, 245, 1)",
@@ -1070,28 +959,22 @@
         competent: "rgba(46, 125, 50, 0.76)",
         competentBorder: "rgba(46, 125, 50, 1)"
     };
-
     function numberFormatter(value) {
         return Number(value || 0).toLocaleString();
     }
-
     function showEmpty(canvasId) {
         const canvas = document.getElementById(canvasId);
         const emptyBox = document.getElementById(canvasId + "Empty");
-
         if (canvas) {
             canvas.style.display = "none";
         }
-
         if (emptyBox) {
             emptyBox.style.display = "flex";
         }
     }
-
     function hasRows(rows) {
         return Array.isArray(rows) && rows.length > 0;
     }
-
     function baseOptions() {
         return {
             responsive: true,
@@ -1136,7 +1019,6 @@
             }
         };
     }
-
     function horizontalOptions() {
         return {
             indexAxis: "y",
@@ -1180,15 +1062,12 @@
             }
         };
     }
-
     function createLsPcMcBarChart(canvasId, rows, labelKey) {
         const canvas = document.getElementById(canvasId);
-
         if (!canvas || !hasRows(rows)) {
             showEmpty(canvasId);
             return;
         }
-
         new Chart(canvas, {
             type: "bar",
             data: {
@@ -1223,15 +1102,12 @@
             options: baseOptions()
         });
     }
-
     function createHorizontalLsPcMcChart(canvasId, rows, labelKey) {
         const canvas = document.getElementById(canvasId);
-
         if (!canvas || !hasRows(rows)) {
             showEmpty(canvasId);
             return;
         }
-
         new Chart(canvas, {
             type: "bar",
             data: {
@@ -1266,28 +1142,22 @@
             options: horizontalOptions()
         });
     }
-
     function createSingleHorizontalBarChart(canvasId, rows, labelKey, valueKey, labelName, colorKey) {
         const canvas = document.getElementById(canvasId);
-
         if (!canvas || !hasRows(rows)) {
             showEmpty(canvasId);
             return;
         }
-
         let fillColor = chartColors.gap;
         let borderColor = chartColors.gapBorder;
-
         if (colorKey === "story") {
             fillColor = chartColors.story;
             borderColor = chartColors.storyBorder;
         }
-
         if (colorKey === "needs") {
             fillColor = chartColors.needs;
             borderColor = chartColors.needsBorder;
         }
-
         new Chart(canvas, {
             type: "bar",
             data: {
@@ -1306,15 +1176,12 @@
             options: horizontalOptions()
         });
     }
-
     function createMenteeNeedsChart(canvasId, rows) {
         const canvas = document.getElementById(canvasId);
-
         if (!canvas || !hasRows(rows)) {
             showEmpty(canvasId);
             return;
         }
-
         new Chart(canvas, {
             type: "bar",
             data: {
@@ -1341,15 +1208,12 @@
             options: horizontalOptions()
         });
     }
-
     function createLineChart(canvasId, rows) {
         const canvas = document.getElementById(canvasId);
-
         if (!canvas || !hasRows(rows)) {
             showEmpty(canvasId);
             return;
         }
-
         new Chart(canvas, {
             type: "line",
             data: {
@@ -1400,26 +1264,21 @@
             options: baseOptions()
         });
     }
-
     function enableTableSearch(inputId, tableId) {
         const input = document.getElementById(inputId);
         const table = document.getElementById(tableId);
-
         if (!input || !table) {
             return;
         }
-
         input.addEventListener("input", function () {
             const query = input.value.toLowerCase().trim();
             const rows = table.querySelectorAll("tbody tr");
-
             rows.forEach(function (row) {
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(query) ? "" : "none";
             });
         });
     }
-
     if (typeof Chart === "undefined") {
         showEmpty("provinceLsPcMcChart");
         showEmpty("provinceGapChart");
@@ -1434,7 +1293,6 @@
             chartData.province_lspcmc,
             "province"
         );
-
         createSingleHorizontalBarChart(
             "provinceGapChart",
             chartData.province_competency_gap,
@@ -1443,18 +1301,15 @@
             "PC + MC minus LS",
             "gap"
         );
-
         createLineChart(
             "monthlyTrendChart",
             chartData.monthly_lspcmc
         );
-
         createHorizontalLsPcMcChart(
             "facilityDriversChart",
             chartData.facility_drivers,
             "facility"
         );
-
         createSingleHorizontalBarChart(
             "storyCandidatesChart",
             chartData.story_candidates,
@@ -1463,18 +1318,15 @@
             "Story priority score",
             "story"
         );
-
         createMenteeNeedsChart(
             "menteeNeedsChart",
             chartData.mentee_needs
         );
     }
-
     enableTableSearch("provinceSearch", "provinceTable");
     enableTableSearch("trendSearch", "trendTable");
     enableTableSearch("menteeProfileSearch", "menteeProfileTable");
     enableTableSearch("facilitySearch", "facilityTable");
 })();
 </script>
-
 {% endblock %}
