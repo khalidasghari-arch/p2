@@ -1,11 +1,11 @@
-<style>
-.mx-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:20px 0}.mx-card{border:1px solid var(--hairline-color,#ddd);border-top:5px solid #2563eb;border-radius:10px;padding:18px;background:var(--body-bg,#fff)}.mx-card strong{display:block;font-size:30px;margin-top:10px}.mx-card small{display:block;margin-top:8px}.mx-active{border-top-color:#15803d}.mx-inactive{border-top-color:#b45309}
-</style>
 <div class="mx-cards">
- <div class="mx-card mx-active">Active mentees<strong>{{ mentee_status_kpis.active }}</strong></div>
- <div class="mx-card mx-inactive">Inactive mentees<strong>{{ mentee_status_kpis.inactive }}</strong></div>
- <div class="mx-card">Distinct thematic areas<strong>{{ distinct_thematics_added }}</strong><small>With matching mentorship activity</small></div>
- <div class="mx-card">Distinct topics<strong>{{ distinct_topics_added }}</strong><small>With matching mentorship activity</small></div>
- <div class="mx-card">Average LS before first competency<strong>{{ learning_stats.average_ls|default_if_none:"—" }}</strong><small>{{ learning_stats.completed_pairs }} mentee–topic pairs with usable chronology</small></div>
+ <div class="mx-card"><span>MENTORSHIP VISITS</span><strong>{{ kpis.mentorship_visits }}</strong><small>Visit by mentors · date + mentor</small></div>
+ <div class="mx-card mx-active"><span>Active mentees</span><strong>{{ mentee_status_kpis.active }}</strong></div>
+ <div class="mx-card mx-inactive"><span>Inactive mentees</span><strong>{{ mentee_status_kpis.inactive }}</strong></div>
+ <div class="mx-card"><span>Thematic areas</span><strong>{{ distinct_thematics_added }}</strong><small>Distinct areas mentored</small></div>
+ <div class="mx-card"><span>Topics covered</span><strong>{{ distinct_topics_added }}</strong><small>Distinct topics mentored</small></div>
+ <div class="mx-card mx-learning"><span>Average LS to competency</span><strong>{{ learning_stats.average_ls|default_if_none:"—" }}</strong><small>{{ learning_stats.completed_pairs }} completed mentee–topic pairs</small></div>
+ <div class="mx-card mx-inactive"><span>Attrition rate</span><strong>{{ attrition_rate|default_if_none:"—" }}{% if attrition_rate != None %}%{% endif %}</strong><small>Current inactive proportion</small></div>
+ <div class="mx-card"><span>Mentees at a later facility</span><strong>{{ quality_kpis.later_facility_mentees }}</strong><small>Same ID, later recorded date</small></div>
 </div>
-<p>{{ mentee_status_scope_note }} Unspecified status: {{ mentee_status_kpis.unspecified }}.</p>
+<p class="mx-scope">{{ mentee_status_scope_note }}{% if mentee_status_kpis.unspecified %} <b>Unspecified status: {{ mentee_status_kpis.unspecified }}.</b>{% endif %}</p>

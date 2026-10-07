@@ -4,16 +4,16 @@
 {% block content %}
 <style>
     :root {
-        --mh-blue: #1f4e78;
-        --mh-blue-2: #1565c0;
-        --mh-green: #2e7d32;
-        --mh-orange: #ef6c00;
+        --mh-blue: #083d33;
+        --mh-blue-2: #146b58;
+        --mh-green: #237a57;
+        --mh-orange: #b65315;
         --mh-red: #c62828;
         --mh-purple: #6a1b9a;
         --mh-gray: #607d8b;
-        --mh-light-blue: #f4f8fb;
-        --mh-border: #d9e2f3;
-        --mh-text: #263238;
+        --mh-light-blue: #f2f7f4;
+        --mh-border: #d5e3dc;
+        --mh-text: #203a32;
         --mh-muted: #607d8b;
     }
     .mh-dashboard {
@@ -293,7 +293,7 @@
         background: var(--mh-purple);
     }
     .mentee-status-success {
-        background: #2e7d32;
+        background: #237a57;
         color: #ffffff;
         padding: 3px 8px;
         border-radius: 12px;
@@ -302,7 +302,7 @@
         white-space: nowrap;
     }
     .mentee-status-warning {
-        background: #ef6c00;
+        background: #b65315;
         color: #ffffff;
         padding: 3px 8px;
         border-radius: 12px;
@@ -392,12 +392,14 @@
         }
     }
 </style>
+{% include "admin/mentorship/dashboard_msh_style.html" %}
 <div class="mh-dashboard">
     <div class="mh-header">
         <div>
+            <div class="mh-brandline">Management Sciences for Health · MNHIMS</div>
             <h1 class="mh-title">Mentorship Dashboard</h1>
             <div class="mh-subtitle">
-                Routine dashboard for mentorship visits, LS, PC, MC, mentees, mentors, thematic areas, topics, facility performance, trends, and mentee competency follow-up.
+                IQoC-MNH · Participation, mentorship visits and competency progress
             </div>
         </div>
         <div>
@@ -459,15 +461,6 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label>Visit round</label>
-                    <select name="visit_round">
-                        <option value="">All</option>
-                        {% for round in visit_round_options %}
-                        <option value="{{ round }}" {% if filters.visit_round|stringformat:"s" == round|stringformat:"s" %}selected{% endif %}>{{ round }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
             </div>
             <div style="margin-top:14px;">
                 <button type="submit" class="mh-btn">Apply filters</button>
@@ -477,47 +470,19 @@
     </div>
     {% include "admin/mentorship/dashboard_extension_cards.html" %}
 
-    <div class="mh-kpi-grid">
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.distinct_mentees|default:0 }}</div>
-            <div class="mh-kpi-label">DISTINCT MENTEES</div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.distinct_visits|default:0 }}</div>
-            <div class="mh-kpi-label">MENTORSHIP ACTIVITIES </div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.mentor_visit_instances|default:0 }}</div>
-            <div class="mh-kpi-label">MENTORSHIP VISITS </div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.total_ls|default:0 }}</div>
-            <div class="mh-kpi-label">LEARNING SESSIONS </div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.total_pc|default:0 }}</div>
-            <div class="mh-kpi-label">PC</div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.total_mc|default:0 }}</div>
-            <div class="mh-kpi-label">MC</div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.distinct_topics|default:0 }}</div>
-            <div class="mh-kpi-label">DISTINCT TOPICS</div>
-        </div>
-        <div class="mh-kpi">
-            <div class="mh-kpi-value">{{ kpis.distinct_facilities|default:0 }}</div>
-            <div class="mh-kpi-label">FACILITIES</div>
-        </div>
+    <div class="mh-quick-stats" aria-label="Additional mentorship metrics">
+        <span>Mentees mentored <b>{{ kpis.distinct_mentees|default:0 }}</b></span>
+        <span>LS <b>{{ kpis.total_ls|default:0 }}</b></span>
+        <span>PC <b>{{ kpis.total_pc|default:0 }}</b></span>
+        <span>MC <b>{{ kpis.total_mc|default:0 }}</b></span>
+        <span>Facilities <b>{{ kpis.distinct_facilities|default:0 }}</b></span>
     </div>
-    <div class="mh-note">
-        <strong>Methodology note:</strong> {{ methodology_note }}
-    </div>
+    <div class="mh-legend"><span><b>LS</b> Learning session</span><span><b>PC</b> Patient competent</span><span><b>MC</b> Model competent</span></div><details class="mh-help"><summary>How these counts are calculated</summary><p>{{ methodology_note }}</p><p>MENTORSHIP VISITS uses “visit by mentors”: one unique visit date and mentor name. Repeated details or visit records for the same mentor/date count once. Missing mentor names or dates are excluded.</p></details>
     {% include "admin/mentorship/dashboard_extension_sections.html" %}
+    {% include "admin/mentorship/dashboard_quality_sections.html" %}
 
     {{ chart_data|json_script:"mentorship-chart-data" }}
-    <div class="mh-section">
+    <details class="mh-fold"><summary>Visual analytics<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
         <h2>Visual analytics</h2>
         <div class="mh-info-note">
             These charts use mentorship detail-level data. LS, PC, and MC are counted as activity instances, not unique mentees.
@@ -571,10 +536,11 @@
                     <canvas id="menteeNeedsChart"></canvas>
                     <div class="chart-empty" id="menteeNeedsChartEmpty">No mentee follow-up chart data available.</div>
                 </div>
+                <details class="mx-detail"><summary>Mentee and father names</summary><div class="mx-scroll"><table class="mx-table"><thead><tr><th>Mentee</th><th>Father name</th><th>Needs follow-up</th></tr></thead><tbody>{% for r in chart_data.mentee_needs %}<tr><td>{{ r.mentee }}</td><td>{% include "admin/mentorship/dashboard_fathername.html" with fathername=r.fathername %}</td><td>{{ r.needs }}</td></tr>{% empty %}<tr><td colspan="3">No mentees match.</td></tr>{% endfor %}</tbody></table></div></details>
             </div>
         </div>
-    </div>
-    <div class="mh-section">
+    </div></details>
+    <details class="mh-fold"><summary>Province-level mentorship summary<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Province-level mentorship summary</h2>
             <input type="text" class="mh-search" id="provinceSearch" placeholder="Search province...">
@@ -647,9 +613,9 @@
         <div class="mh-footer-note">
             LS, PC, and MC are mentorship detail instances. They should not be interpreted as unique mentee counts.
         </div>
-    </div>
+    </div></details>
     <div class="two-col">
-        <div class="mh-section">
+        <details class="mh-fold"><summary>Success story candidates<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
             <h2>Success story candidates</h2>
             <div class="small-muted" style="margin-bottom:10px;">
                 Facilities are prioritized based on LS, PC, MC, topic coverage, and competency activity. These are suggested candidates and should be verified with provincial mentors.
@@ -686,8 +652,8 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-        <div class="mh-section">
+        </div></details>
+        <details class="mh-fold"><summary>First recorded mentorship visit by province<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
             <h2>First recorded mentorship visit by province</h2>
             <div class="table-scroll">
                 <table class="mh-table">
@@ -715,9 +681,9 @@
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div></details>
     </div>
-    <div class="mh-section">
+    <details class="mh-fold"><summary>Monthly trend by province<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Monthly trend by province</h2>
             <input type="text" class="mh-search" id="trendSearch" placeholder="Search province or month...">
@@ -756,8 +722,8 @@
                 </tbody>
             </table>
         </div>
-    </div>
-    <div class="mh-section">
+    </div></details>
+    <details class="mh-fold"><summary>Mentee profile by facility<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Mentee profile by facility</h2>
             <input type="text" class="mh-search" id="menteeProfileSearch" placeholder="Search mentee, facility, position, topic...">
@@ -776,6 +742,7 @@
                         <th>Province</th>
                         <th>Mentorship Facility</th>
                         <th>Mentee</th>
+                        <th>Father name</th>
                         <th>Position</th>
                         <th>Gender</th>
                         <th>Topics</th>
@@ -799,6 +766,7 @@
                             <td>{{ r.province }}</td>
                             <td>{{ r.facility }}</td>
                             <td><strong>{{ r.mentee }}</strong></td>
+                            <td>{% include "admin/mentorship/dashboard_fathername.html" with fathername=r.fathername %}</td>
                             <td>{{ r.position }}</td>
                             <td>{{ r.gender }}</td>
                             <td>{{ r.topic_count|default:0 }}</td>
@@ -815,35 +783,35 @@
                             </td>
                             <td class="topic-list-cell">
                                 {% if r.ls_topics_text %}
-                                    {{ r.ls_topics_text|linebreaksbr }}
+                                    <details class="mh-topic-list"><summary>{{ r.ls_count }} topics</summary>{{ r.ls_topics_text|linebreaksbr }}</details>
                                 {% else %}
                                     -
                                 {% endif %}
                             </td>
                             <td class="topic-list-cell">
                                 {% if r.pc_topics_text %}
-                                    {{ r.pc_topics_text|linebreaksbr }}
+                                    <details class="mh-topic-list"><summary>{{ r.pc_count }} topics</summary>{{ r.pc_topics_text|linebreaksbr }}</details>
                                 {% else %}
                                     -
                                 {% endif %}
                             </td>
                             <td class="topic-list-cell">
                                 {% if r.mc_topics_text %}
-                                    {{ r.mc_topics_text|linebreaksbr }}
+                                    <details class="mh-topic-list"><summary>{{ r.mc_count }} topics</summary>{{ r.mc_topics_text|linebreaksbr }}</details>
                                 {% else %}
                                     -
                                 {% endif %}
                             </td>
                             <td class="topic-list-cell">
                                 {% if r.competent_topics_text %}
-                                    {{ r.competent_topics_text|linebreaksbr }}
+                                    <details class="mh-topic-list"><summary>{{ r.competent_count }} topics</summary>{{ r.competent_topics_text|linebreaksbr }}</details>
                                 {% else %}
                                     -
                                 {% endif %}
                             </td>
                             <td class="topic-list-cell">
                                 {% if r.needs_topics_text %}
-                                    {{ r.needs_topics_text|linebreaksbr }}
+                                    <details class="mh-topic-list"><summary>{{ r.needs_count }} topics</summary>{{ r.needs_topics_text|linebreaksbr }}</details>
                                 {% else %}
                                     -
                                 {% endif %}
@@ -861,14 +829,14 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="18">No mentee profile records found for the selected filters.</td>
+                            <td colspan="19">No mentee profile records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-    </div>
-    <div class="mh-section">
+    </div></details>
+    <details class="mh-fold"><summary>Facility-level drivers<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
         <div class="mh-toolbar">
             <h2 style="margin-bottom:0;">Facility-level drivers</h2>
             <input type="text" class="mh-search" id="facilitySearch" placeholder="Search province or facility...">
@@ -923,7 +891,7 @@
                 </tbody>
             </table>
         </div>
-    </div>
+    </div></details>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -942,14 +910,14 @@
     }
     const chartData = getChartData();
     const chartColors = {
-        ls: "rgba(66, 165, 245, 0.78)",
-        lsBorder: "rgba(66, 165, 245, 1)",
-        pc: "rgba(255, 183, 77, 0.80)",
-        pcBorder: "rgba(251, 140, 0, 1)",
-        mc: "rgba(102, 187, 106, 0.78)",
-        mcBorder: "rgba(102, 187, 106, 1)",
-        gap: "rgba(31, 78, 120, 0.78)",
-        gapBorder: "rgba(31, 78, 120, 1)",
+        ls: "rgba(20, 107, 88, 0.78)",
+        lsBorder: "rgba(20, 107, 88, 1)",
+        pc: "rgba(227, 111, 30, 0.80)",
+        pcBorder: "rgba(227, 111, 30, 1)",
+        mc: "rgba(98, 146, 118, 0.78)",
+        mcBorder: "rgba(98, 146, 118, 1)",
+        gap: "rgba(8, 61, 51, 0.78)",
+        gapBorder: "rgba(8, 61, 51, 1)",
         total: "rgba(239, 108, 0, 0.78)",
         totalBorder: "rgba(239, 108, 0, 1)",
         story: "rgba(123, 31, 162, 0.76)",
@@ -1322,6 +1290,49 @@
             "menteeNeedsChart",
             chartData.mentee_needs
         );
+    }
+    document.querySelectorAll(".mh-fold").forEach(function (panel) {
+        panel.addEventListener("toggle", function () {
+            if (panel.open && typeof Chart !== "undefined") {
+                requestAnimationFrame(function () {
+                    panel.querySelectorAll("canvas").forEach(function (canvas) {
+                        const chart = Chart.getChart(canvas);
+                        if (chart) { chart.resize(); }
+                    });
+                });
+            }
+        });
+    });
+    document.querySelectorAll(".mx-search[data-table]").forEach(function (input) {
+        enableTableSearch(input.id || (input.id = "mx-search-" + input.dataset.table), input.dataset.table);
+    });
+    const topicSearch = document.getElementById("mxTopicSearch");
+    if (topicSearch) {
+        const topicGroups = Array.from(document.querySelectorAll(".mx-topic-group"));
+        const originalOpen = new Map();
+        let searching = false;
+        topicSearch.addEventListener("input", function () {
+            const query = topicSearch.value.toLowerCase().trim();
+            if (query && !searching) {
+                topicGroups.forEach(function (group) { originalOpen.set(group, group.open); });
+                searching = true;
+            }
+            let matches = 0;
+            topicGroups.forEach(function (group) {
+                let groupMatches = 0;
+                group.querySelectorAll(".mx-topic-row").forEach(function (row) {
+                    const visible = !query || row.textContent.toLowerCase().includes(query);
+                    row.hidden = !visible;
+                    if (visible) { groupMatches++; matches++; }
+                });
+                group.hidden = groupMatches === 0;
+                if (query && groupMatches) { group.open = true; }
+                if (!query && searching) { group.open = originalOpen.get(group) || false; }
+            });
+            if (!query) { searching = false; originalOpen.clear(); }
+            const noResults = document.getElementById("mxTopicNoResults");
+            if (noResults) { noResults.hidden = !query || matches > 0; }
+        });
     }
     enableTableSearch("provinceSearch", "provinceTable");
     enableTableSearch("trendSearch", "trendTable");
