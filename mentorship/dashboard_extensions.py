@@ -1,7 +1,7 @@
 """Additive dashboard data; copy into the mentorship app.
 
 Uses the supplied mentorship models. English topic text is the default topic
-description, with Dari/Pashto fallback. No schema changes are required.
+description, with Dari/Pashto fallback. Monthly actual visits use existing mentorship records only.
 """
 from collections import Counter, defaultdict
 from itertools import groupby
@@ -12,6 +12,7 @@ from django.db.models import Count, F, Q
 
 from .models import MenteeTopicStatus, MentorshipTopics, Staff
 from .dashboard_quality import build_quality_data
+from .dashboard_participation import build_participation_data
 
 
 def mentor_visit_counts(details_qs):
@@ -249,6 +250,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
     learning_rows.sort(key=lambda r: (r['mentee'], r['topic'], r['mentee_id'], r['topic_id']))
     return {
         **quality,
+        **build_participation_data(request, details_qs, filters, province_id),
         'mentor_visit_counts': visit_counts,
         'mentee_status_kpis': counts, 'facility_status_rows': facility_status,
         'mentee_status_rows': roster_rows,
@@ -276,6 +278,8 @@ def append_extension_sheets(workbook, data):
         ('Thematic_Detail', 'thematic_detail_rows', [(key.title(), key) for key in ('thematic_id', 'thematic', 'mentees', 'topics', 'mentor_visits', 'visits', 'records', 'ls', 'pc', 'mc')]),
         ('Topic_Definitions', 'topic_detail_rows', [(key.title(), key) for key in ('thematic_id', 'thematic', 'topic_id', 'topic', 'definition', 'definition_language', 'mentees', 'mentor_visits', 'visits', 'records', 'ls', 'pc', 'mc')]),
         ('Learning_To_Competency', 'learning_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'topic_id', 'topic', 'learning_sessions', 'first_competency_date', 'stored_competency_date', 'current_topic_status', 'status', 'included')]),
+        ('Mentee_Professions', 'profession_rows', [(key.title(), key) for key in ('profession_id', 'profession', 'mentees', 'female', 'male', 'unspecified')]),
+        ('Monthly_Mentor_Visits', 'monthly_visit_rows', [(key.title(), key) for key in ('month', 'mentor_visits', 'mentors_with_visits', 'average_actual')]),
         ('Name_Quality_Review', 'quality_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'facility', 'issues', 'recorded_values', 'suggested_values')]),
         ('Possible_Duplicates', 'duplicate_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'facility', 'other_id', 'other_mentee', 'other_fathername', 'other_facility', 'similarity', 'reason')]),
         ('Multiple_Facilities', 'multiple_facility_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'facility_count', 'facilities', 'first_seen', 'last_seen')]),
@@ -320,6 +324,7 @@ def append_extension_sheets(workbook, data):
     notes.append(['Competency unit', 'Mentee-topic pair, first dated Patient Competent or Model Competent.'])
     notes.append(['Stored competency date', 'MenteeTopicStatus.competent_date is displayed for comparison. It has no visit/mentor reference; it is not used to invent an achievement event. An earlier stored date or competent status without a dated PC/MC event triggers review and exclusion from summaries.'])
     notes.append(['MENTORSHIP VISITS / visit by mentors', 'Unique visit date + mentor name (trimmed and lowercased), matching the original visit by mentors export. Missing names/dates excluded. Group counts can overlap across facilities, topics and provinces; do not sum them to obtain the global total.'])
+    notes.append(['Monthly actual averages', 'Average per participating mentor = actual visits / distinct normalized mentor names with visits in the month. No participating mentors gives a blank. Overall monthly average = actual visits / displayed months, including zero-visit months within the date range. Partial months use only selected dates.'])
     notes.append(['LS count', 'Distinct visits for the same mentee/topic strictly before first competency; repeated detail rows in one visit count once.'])
     notes.append(['History and filters', 'All authorized history contributes to LS counts. Filters select first achievement events, not subsequent reassessments. Earlier history outside the user province cannot be used.'])
     notes.append(['Excluded from summaries', 'Pairs with undated history or same-day LS/competency. Zero LS means no earlier LS recorded.'])
@@ -363,6 +368,7 @@ def format_dashboard_workbook(workbook, data):
         ('Learning session details', kpis['total_ls'], 'LS detail instances; not unique mentees.'),
         ('Patient competent details', kpis['total_pc'], 'PC detail instances; not unique mentees.'),
         ('Model competent details', kpis['total_mc'], 'MC detail instances; not unique mentees.'),
+        ('Average monthly mentorship visits', data['monthly_average_visits'], 'Total visit-by-mentors count divided by displayed months, including zero months.'),
         ('Average LS before competency', data['learning_stats']['average_ls'], 'Distinct earlier LS visits per completed mentee–topic pair.'),
         ('Median LS before competency', data['learning_stats']['median_ls'], 'Only pairs with usable chronology.'),
         ('Completed mentee–topic pairs', data['learning_stats']['completed_pairs'], 'Usable first dated PC/MC events selected by filters.'),

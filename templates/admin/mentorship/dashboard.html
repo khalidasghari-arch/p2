@@ -407,7 +407,7 @@
         </div>
     </div>
     <div class="mh-card">
-        <form method="get">
+        <form method="get" id="mhDashboardFilters">
             <div class="mh-filter-grid">
                 <div>
                     <label>Date from</label>
@@ -467,6 +467,7 @@
                 <a href="?" class="mh-btn mh-btn-secondary">Reset</a>
             </div>
         </form>
+        <p class="mx-caption">Changing province or facility automatically updates the dependent facility and mentor options.</p>
     </div>
     {% include "admin/mentorship/dashboard_extension_cards.html" %}
 
@@ -480,6 +481,7 @@
     <div class="mh-legend"><span><b>LS</b> Learning session</span><span><b>PC</b> Patient competent</span><span><b>MC</b> Model competent</span></div><details class="mh-help"><summary>How these counts are calculated</summary><p>{{ methodology_note }}</p><p>MENTORSHIP VISITS uses “visit by mentors”: one unique visit date and mentor name. Repeated details or visit records for the same mentor/date count once. Missing mentor names or dates are excluded.</p></details>
     {% include "admin/mentorship/dashboard_extension_sections.html" %}
     {% include "admin/mentorship/dashboard_quality_sections.html" %}
+    {% include "admin/mentorship/dashboard_participation_sections.html" %}
 
     {{ chart_data|json_script:"mentorship-chart-data" }}
     <details class="mh-fold"><summary>Visual analytics<span class="mh-fold-hint">Expand to view</span></summary><div class="mh-section">
@@ -907,6 +909,25 @@
             console.error("Could not parse Mentorship chart data:", error);
             return {};
         }
+    }
+    const filterForm = document.getElementById("mhDashboardFilters");
+    if (filterForm) {
+        const province = filterForm.elements.namedItem("province");
+        const facility = filterForm.elements.namedItem("facility");
+        const mentor = filterForm.elements.namedItem("mentor");
+        function submitFilters() {
+            if (filterForm.requestSubmit) { filterForm.requestSubmit(); }
+            else { filterForm.submit(); }
+        }
+        province.addEventListener("change", function () {
+            facility.value = "";
+            mentor.value = "";
+            submitFilters();
+        });
+        facility.addEventListener("change", function () {
+            mentor.value = "";
+            submitFilters();
+        });
     }
     const chartData = getChartData();
     const chartColors = {

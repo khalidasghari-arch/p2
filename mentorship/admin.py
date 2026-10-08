@@ -956,8 +956,11 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .distinct()
             .order_by("province")
         )
+        cascade_visits = option_visits_qs
+        if filters["province"]:
+            cascade_visits = cascade_visits.filter(facilityfk__districtfk__provincefk_id=filters["province"])
         facility_options = list(
-            option_visits_qs.values(
+            cascade_visits.values(
                 facility_id=F("facilityfk_id"),
                 facility=F("facilityfk__name"),
             )
@@ -965,19 +968,20 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             .distinct()
             .order_by("facility")
         )
-        mentor_options = [
-        {
-            "mentor_id": row["mentor_id"],
-            "mentor": row["mentor__name"] or "",
-        }
-        for row in (
-            option_details_qs
-            .exclude(mentor_id__isnull=True)
-            .values("mentor_id", "mentor__name")
-            .distinct()
-            .order_by("mentor__name")
-            )
-        ]
+        Mentor = Mentorshipdetails._meta.get_field("mentor").remote_field.model
+        mentor_choices = Mentor.objects.all()
+        if not request.user.is_superuser:
+            prov_id = _prov_id(request)
+            mentor_choices = mentor_choices.filter(province_id=prov_id) if prov_id is not None else mentor_choices.none()
+        if filters["province"]:
+            mentor_choices = mentor_choices.filter(province_id=filters["province"])
+        if filters["facility"]:
+            recorded_mentors = option_details_qs.filter(mentorshipvistfk__facilityfk_id=filters["facility"])
+            if filters["province"]:
+                recorded_mentors = recorded_mentors.filter(mentorshipvistfk__facilityfk__districtfk__provincefk_id=filters["province"])
+            mentor_choices = mentor_choices.filter(pk__in=recorded_mentors.order_by().values("mentor_id"))
+        mentor_options = [{"mentor_id": row["pk"], "mentor": row["name"] or ""}
+                          for row in mentor_choices.values("pk", "name").order_by("name", "pk")]
         thematic_options = [
         {
             "thematic_id": row["id"],

@@ -1,0 +1,11 @@
+<details class="mx-panel"><summary>Mentees by profession <span class="mx-pill">{{ profession_rows|length }} professions</span><small>Unique mentees in the selected mentorship records</small></summary><div class="mx-panel-body">
+<p class="mx-caption">Professions use the mentee's current position. Female, male and unspecified counts are distinct mentees, not mentorship detail instances.</p>
+<div class="mx-scroll"><table class="mx-table"><thead><tr><th>Profession / position</th><th>Unique mentees</th><th>Female</th><th>Male</th><th>Unspecified</th></tr></thead><tbody>
+{% for r in profession_rows %}<tr><td><b>{{ r.profession|default:"Position not entered" }}</b><div class="mx-track"><div class="mx-bar" style="width:{% widthratio r.mentees kpis.distinct_mentees 100 %}%" role="img" aria-label="{{ r.profession }}: {{ r.mentees }} mentees"></div></div></td><td>{{ r.mentees }}</td><td>{{ r.female }}</td><td>{{ r.male }}</td><td>{{ r.unspecified }}</td></tr>{% empty %}<tr><td colspan="5">No mentees match these filters.</td></tr>{% endfor %}
+</tbody></table></div></div></details>
+<section class="mx-section"><div class="mx-heading"><h2>Monthly mentorship visits</h2><span class="mx-pill">Average {{ monthly_average_visits|default_if_none:"—" }} visits / month</span></div>
+<p class="mx-caption">Actual visits use “visit by mentors”: unique date + normalized mentor name. Months with no visits are included between the selected dates, or between the first and last available month.</p>
+<div class="mx-scroll"><table class="mx-table"><thead><tr><th>Month</th><th>MENTORSHIP VISITS</th><th>Mentors with visits</th><th>Average actual / participating mentor</th></tr></thead><tbody>
+{% for r in monthly_visit_rows %}<tr><td><b>{{ r.month_label }}</b></td><td>{{ r.mentor_visits }}<div class="mx-track"><div class="mx-bar" style="width:{% widthratio r.mentor_visits monthly_visit_max 100 %}%" role="img" aria-label="{{ r.month_label }}: {{ r.mentor_visits }} mentorship visits"></div></div></td><td>{{ r.mentors_with_visits }}</td><td>{{ r.average_actual|default_if_none:"—" }}</td></tr>{% empty %}<tr><td colspan="4">No months match the selected scope.</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
