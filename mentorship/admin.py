@@ -211,8 +211,9 @@ class MentorshipdetailsInline(admin.TabularInline):
         if db_field.name == "menteename":
             if parent_obj:
                 kwargs["queryset"] = Staff.objects.filter(
-                    hfname=parent_obj.facilityfk
-                ).order_by("firstname", "lastname")
+                hfname=parent_obj.facilityfk,
+                status=True,
+            ).order_by("firstname", "lastname")
             else:
                 kwargs["queryset"] = Staff.objects.none()
 
