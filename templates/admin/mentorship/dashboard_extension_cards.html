@@ -7,5 +7,9 @@
  <div class="mx-card mx-learning"><span>Average LS to competency</span><strong>{{ learning_stats.average_ls|default_if_none:"—" }}</strong><small>{{ learning_stats.completed_pairs }} completed mentee–topic pairs</small></div>
  <div class="mx-card mx-inactive"><span>Attrition rate</span><strong>{{ attrition_rate|default_if_none:"—" }}{% if attrition_rate != None %}%{% endif %}</strong><small>Current inactive proportion</small></div>
  <div class="mx-card"><span>Mentees at a later facility</span><strong>{{ quality_kpis.later_facility_mentees }}</strong><small>Same ID, later recorded date</small></div>
+ <div class="mx-card mx-active"><span>Health workers with competency</span><strong>{{ competency_kpis.competent_mentees }}</strong><small>Distinct mentees · PC or MC</small></div>
+ <div class="mx-card mx-active"><span>Health workers with competency (%)</span><strong>{{ competency_kpis.competent_percent|default_if_none:"—" }}{% if competency_kpis.competent_percent != None %}%{% endif %}</strong><small>{{ competency_kpis.competent_learning_mentees }} / {{ competency_kpis.learning_mentees }} distinct LS recipients</small></div>
 </div>
 <p class="mx-scope">{{ mentee_status_scope_note }}{% if mentee_status_kpis.unspecified %} <b>Unspecified status: {{ mentee_status_kpis.unspecified }}.</b>{% endif %}</p>
+
+<p class="mx-caption">Competency counts each mentee once for PC or MC in the selected records. Percentage is the share of LS recipients with PC or MC under the same filters. A mentee with both PC and MC counts once; this does not imply completion of all topics.</p>

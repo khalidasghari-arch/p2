@@ -13,6 +13,7 @@ from django.db.models import Count, F, Q
 from .models import MenteeTopicStatus, MentorshipTopics, Staff
 from .dashboard_quality import build_quality_data
 from .dashboard_participation import build_participation_data
+from .dashboard_competency import build_competency_data
 
 
 def mentor_visit_counts(details_qs):
@@ -250,6 +251,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
     learning_rows.sort(key=lambda r: (r['mentee'], r['topic'], r['mentee_id'], r['topic_id']))
     return {
         **quality,
+        **build_competency_data(details_qs),
         **build_participation_data(request, details_qs, filters, province_id),
         'mentor_visit_counts': visit_counts,
         'mentee_status_kpis': counts, 'facility_status_rows': facility_status,
@@ -325,6 +327,7 @@ def append_extension_sheets(workbook, data):
     notes.append(['Stored competency date', 'MenteeTopicStatus.competent_date is displayed for comparison. It has no visit/mentor reference; it is not used to invent an achievement event. An earlier stored date or competent status without a dated PC/MC event triggers review and exclusion from summaries.'])
     notes.append(['MENTORSHIP VISITS / visit by mentors', 'Unique visit date + mentor name (trimmed and lowercased), matching the original visit by mentors export. Missing names/dates excluded. Group counts can overlap across facilities, topics and provinces; do not sum them to obtain the global total.'])
     notes.append(['Monthly actual averages', 'Average per participating mentor = actual visits / distinct normalized mentor names with visits in the month. No participating mentors gives a blank. Overall monthly average = actual visits / displayed months, including zero-visit months within the date range. Partial months use only selected dates.'])
+    notes.append(['Health worker competency', 'Count = distinct mentees with PC OR MC in the filtered records. Repeated assessments and mentees with both PC/MC count once. Percentage = distinct mentees with both LS and PC/MC / distinct mentees with LS, using identical filters and authorization. PC/MC-only mentees count in the first indicator but are outside the LS denominator. With no LS mentees, percentage is blank. Any achieved topic qualifies; not full curriculum competency or first-ever achievement.'])
     notes.append(['LS count', 'Distinct visits for the same mentee/topic strictly before first competency; repeated detail rows in one visit count once.'])
     notes.append(['History and filters', 'All authorized history contributes to LS counts. Filters select first achievement events, not subsequent reassessments. Earlier history outside the user province cannot be used.'])
     notes.append(['Excluded from summaries', 'Pairs with undated history or same-day LS/competency. Zero LS means no earlier LS recorded.'])
@@ -372,6 +375,8 @@ def format_dashboard_workbook(workbook, data):
         ('Average LS before competency', data['learning_stats']['average_ls'], 'Distinct earlier LS visits per completed mentee–topic pair.'),
         ('Median LS before competency', data['learning_stats']['median_ls'], 'Only pairs with usable chronology.'),
         ('Completed mentee–topic pairs', data['learning_stats']['completed_pairs'], 'Usable first dated PC/MC events selected by filters.'),
+        ('Health workers with recorded competency (PC or MC)', data['competency_kpis']['competent_mentees'], 'Distinct mentees with PC OR MC under the current dashboard filters; count once even with both or repeated assessments.'),
+        ('Health workers with competency among LS recipients %', data['competency_kpis']['competent_percent'], f"{data['competency_kpis']['competent_learning_mentees']} / {data['competency_kpis']['learning_mentees']} distinct LS recipients have PC or MC under the same filters. No LS recipients gives a blank."),
         ('Pairs requiring review', data['learning_stats']['review_pairs'], 'Incomplete or uncertain chronology excluded from statistics.'),
     ]:
         overview.append([label, value, note])
