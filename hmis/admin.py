@@ -33,6 +33,7 @@ from hmis.models import (
     IndicatorMetadata,
 )
 from hmis.services.pipeline import run_import
+from hmis.dashboard_filters import HMISDashboardFilterMixin
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -235,7 +236,7 @@ class IndicatorMetadataAdmin(admin.ModelAdmin):
 
 
 @admin.register(HMISDashboard)
-class HMISDashboardAdmin(admin.ModelAdmin):
+class HMISDashboardAdmin(HMISDashboardFilterMixin, admin.ModelAdmin):
     """Read-only dashboard built from HMISMonthlySummary and HMISFact."""
 
     change_list_template = "admin/hmis/hmis_dashboard.html"
@@ -331,56 +332,7 @@ class HMISDashboardAdmin(admin.ModelAdmin):
     def _rate_display(value):
         return "—" if value is None else f"{float(value):,.2f}"
 
-    def _read_filters(self, request):
-        indicator = (request.GET.get("indicator") or "anc1").strip()
-        if indicator not in self.INDICATOR_LABELS:
-            indicator = "anc1"
 
-        facility_group = (request.GET.get("facility_group") or "all").strip()
-        if facility_group not in {"all", "hiva", "non_hiva"}:
-            facility_group = "all"
-
-        year_value = (request.GET.get("year") or "").strip()
-        month_value = (request.GET.get("month") or "").strip()
-
-        try:
-            selected_year = int(year_value) if year_value else None
-        except (TypeError, ValueError):
-            selected_year = None
-
-        try:
-            selected_month = int(month_value) if month_value else None
-        except (TypeError, ValueError):
-            selected_month = None
-        if selected_month not in range(1, 13):
-            selected_month = None
-
-        return {
-            "prov": (request.GET.get("prov") or "").strip(),
-            "dist": (request.GET.get("dist") or "").strip(),
-            "hf": (request.GET.get("hf") or "").strip(),
-            "year": selected_year,
-            "month": selected_month,
-            "facility_group": facility_group,
-            "indicator": indicator,
-        }
-
-    def _filter_queryset(self, queryset, filters):
-        if filters["prov"]:
-            queryset = queryset.filter(prov=filters["prov"])
-        if filters["dist"]:
-            queryset = queryset.filter(dist=filters["dist"])
-        if filters["hf"]:
-            queryset = queryset.filter(hf=filters["hf"])
-        if filters["year"] is not None:
-            queryset = queryset.filter(year=filters["year"])
-        if filters["month"] is not None:
-            queryset = queryset.filter(month=filters["month"])
-        if filters["facility_group"] == "hiva":
-            queryset = queryset.filter(hiva_hfs=True)
-        elif filters["facility_group"] == "non_hiva":
-            queryset = queryset.filter(hiva_hfs=False)
-        return queryset
 
     @staticmethod
     def _apply_facility_group(queryset, facility_group):
@@ -391,110 +343,7 @@ class HMISDashboardAdmin(admin.ModelAdmin):
             return queryset.filter(hiva_hfs=False)
         return queryset
 
-    def _filter_options(self, base_queryset, filters):
-        # Facility Group is the first level of the location cascade:
-        # Facility Group -> Province -> District -> Health Facility.
-        group_queryset = self._apply_facility_group(
-            base_queryset,
-            filters["facility_group"],
-        )
 
-        provinces = list(
-            group_queryset.exclude(prov="")
-            .values_list("prov", flat=True)
-            .distinct()
-            .order_by("prov")
-        )
-
-        district_queryset = group_queryset
-        if filters["prov"]:
-            district_queryset = district_queryset.filter(prov=filters["prov"])
-        districts = list(
-            district_queryset.exclude(dist="")
-            .values_list("dist", flat=True)
-            .distinct()
-            .order_by("dist")
-        )
-
-        facility_queryset = district_queryset
-        if filters["dist"]:
-            facility_queryset = facility_queryset.filter(dist=filters["dist"])
-        facilities = list(
-            facility_queryset.exclude(hf="")
-            .values_list("hf", flat=True)
-            .distinct()
-            .order_by("hf")
-        )
-
-        period_queryset = facility_queryset
-        if filters["hf"]:
-            period_queryset = period_queryset.filter(hf=filters["hf"])
-
-        years = list(
-            period_queryset.values_list("year", flat=True)
-            .distinct()
-            .order_by("-year")
-        )
-
-        month_queryset = period_queryset
-        if filters["year"] is not None:
-            month_queryset = month_queryset.filter(year=filters["year"])
-        month_numbers = list(
-            month_queryset.values_list("month", flat=True)
-            .distinct()
-            .order_by("month")
-        )
-        months = [
-            {"value": value, "label": month_name[value]}
-            for value in month_numbers
-            if value in range(1, 13)
-        ]
-
-        # A compact, distinct hierarchy lets the browser update the dependent
-        # dropdowns immediately without reloading the chart-heavy dashboard.
-        location_cascade = [
-            {
-                "group": "hiva" if row["hiva_hfs"] else "non_hiva",
-                "province": row["prov"],
-                "district": row["dist"],
-                "facility": row["hf"],
-            }
-            for row in (
-                base_queryset.exclude(prov="")
-                .exclude(dist="")
-                .exclude(hf="")
-                .values("hiva_hfs", "prov", "dist", "hf")
-                .distinct()
-                .order_by("hiva_hfs", "prov", "dist", "hf")
-            )
-        ]
-
-        return {
-            "provinces": provinces,
-            "districts": districts,
-            "facilities": facilities,
-            "years": years,
-            "months": months,
-            "location_cascade": location_cascade,
-        }
-
-    def _filter_fact_queryset(self, queryset, filters):
-        """Apply the dashboard filters to the long-format HMIS indicator table."""
-        if filters["prov"]:
-            queryset = queryset.filter(prov=filters["prov"])
-        if filters["dist"]:
-            queryset = queryset.filter(dist=filters["dist"])
-        if filters["hf"]:
-            queryset = queryset.filter(hf=filters["hf"])
-        if filters["year"] is not None:
-            queryset = queryset.filter(year=filters["year"])
-        if filters["month"] is not None:
-            queryset = queryset.filter(month=filters["month"])
-        if filters["facility_group"] == "hiva":
-            queryset = queryset.filter(hiva_hfs=True)
-        elif filters["facility_group"] == "non_hiva":
-            queryset = queryset.filter(hiva_hfs=False)
-        return queryset
 
     def _all_hmis_indicator_trends(self, queryset):
         """Build one monthly trend chart for every indicator in HMISFact."""
@@ -2118,127 +1967,3 @@ class HMISDashboardAdmin(admin.ModelAdmin):
                 os.remove(temp_path)
             raise
 
-    def changelist_view(self, request, extra_context=None):
-        requested_filters = self._read_filters(request)
-        filtered_excel_export = request.GET.get("export") == "xlsx"
-        complete_print = request.GET.get("print") == "all"
-
-        # Export before building chart/table matrices. This keeps the request
-        # lightweight and guarantees that the workbook uses the active filters.
-        if filtered_excel_export:
-            filtered_facts = self._filter_fact_queryset(
-                HMISFact.objects.all(),
-                requested_filters,
-            )
-            detail_row_count = filtered_facts.count()
-            export_limit = self._filtered_excel_row_limit()
-            redirect_params = request.GET.copy()
-            redirect_params.pop("export", None)
-            redirect_url = request.path
-            if redirect_params:
-                redirect_url = f"{request.path}?{redirect_params.urlencode()}"
-
-            if detail_row_count == 0:
-                self.message_user(
-                    request,
-                    (
-                        "Excel export was not started because no HMIS detail rows "
-                        "match the selected filters. Please change one or more "
-                        "filters and try again."
-                    ),
-                    level=messages.WARNING,
-                )
-                return HttpResponseRedirect(redirect_url)
-
-            if detail_row_count > export_limit:
-                self.message_user(
-                    request,
-                    (
-                        "Excel export was not started. The selected filters return "
-                        f"{detail_row_count:,} detail rows, which exceeds the safe "
-                        f"export limit of {export_limit:,} rows. Please narrow the "
-                        "selection by Year, Month, Province, District, or Health "
-                        "Facility, then try again."
-                    ),
-                    level=messages.WARNING,
-                )
-                return HttpResponseRedirect(redirect_url)
-
-            try:
-                return self._export_filtered_excel(
-                    filtered_facts,
-                    requested_filters,
-                    detail_row_count,
-                )
-            except Exception:
-                logger.exception(
-                    "HMIS export build %s: filtered Excel request failed",
-                    HMIS_EXPORT_BUILD,
-                )
-                self.message_user(
-                    request,
-                    (
-                        "The filtered Excel file could not be created. Please "
-                        "narrow the filters and try again. If the problem continues, "
-                        "contact the system administrator and mention export build "
-                        f"{HMIS_EXPORT_BUILD}."
-                    ),
-                    level=messages.ERROR,
-                )
-                return HttpResponseRedirect(redirect_url)
-
-        # Print/PDF intentionally keeps its established complete-data scope.
-        # Excel export above uses requested_filters instead.
-        if complete_print:
-            filters = {
-                "prov": "",
-                "dist": "",
-                "hf": "",
-                "year": None,
-                "month": None,
-                "facility_group": "all",
-                "indicator": "anc1",
-            }
-        else:
-            filters = requested_filters
-
-        base_queryset = HMISMonthlySummary.objects.all()
-        queryset = self._filter_queryset(base_queryset, filters)
-        data = self._build_dashboard_data(queryset, filters["indicator"])
-        fact_queryset = self._filter_fact_queryset(HMISFact.objects.all(), filters)
-        all_indicator_cards, all_indicator_charts = (
-            self._all_hmis_indicator_trends(fact_queryset)
-        )
-        data["all_hmis_indicator_cards"] = all_indicator_cards
-        data["chart_data"]["all_hmis_indicator_trends"] = all_indicator_charts
-        data.update(
-            self._fact_detail_tables(
-                fact_queryset,
-                all_indicator_cards,
-                filters["indicator"],
-            )
-        )
-
-        options = self._filter_options(base_queryset, filters)
-
-        export_params = request.GET.copy()
-        export_params.pop("print", None)
-        export_params["export"] = "xlsx"
-
-        context = {
-            **self.admin_site.each_context(request),
-            "title": "HMIS Performance Dashboard",
-            "opts": self.model._meta,
-            "filters": filters,
-            "filter_options": options,
-            "indicator_options": self.INDICATORS,
-            "export_url": f"?{export_params.urlencode()}",
-            "excel_export_limit_display": f"{self._filtered_excel_row_limit():,}",
-            "print_url": "?print=all",
-            "print_all_mode": complete_print,
-            **data,
-        }
-        if extra_context:
-            context.update(extra_context)
-        request.current_app = self.admin_site.name
-        return TemplateResponse(request, self.change_list_template, context)
