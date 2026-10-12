@@ -11,7 +11,7 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
-from hmis.models import HMISFact, HMISMonthlySummary
+from hmis.models import HMISFact, HMISMonthlySummary, IndicatorMetadata
 
 # Must match slugify(indicator_name) in the supplied import pipeline.
 SUMMARY_CODES = {
@@ -105,8 +105,11 @@ class HMISDashboardFilterMixin:
                 if lower <= value <= upper and value not in values:
                     values.append(value)
             return sorted(values)
+        # Use actual fact codes for every indicator; preserve old summary URLs.
         indicators = list(dict.fromkeys(
-            value for value in request.GET.getlist('indicator') if value in SUMMARY_CODES))
+            SUMMARY_CODES.get(value.strip(), value.strip())
+            for value in request.GET.getlist('indicator')
+            if value.strip() and len(value.strip()) <= 128))
         group = request.GET.get('facility_group', 'all')
         return dict(prov=request.GET.get('prov', '').strip(),
                     dist=request.GET.get('dist', '').strip(), hf=request.GET.get('hf', '').strip(),
@@ -126,7 +129,7 @@ class HMISDashboardFilterMixin:
     def _filter_fact_queryset(self, queryset, filters):
         queryset = self._filter_queryset(queryset, filters)
         if filters['indicator']:
-            queryset = queryset.filter(indicator_code__in=[SUMMARY_CODES[x] for x in filters['indicator']])
+            queryset = queryset.filter(indicator_code__in=filters['indicator'])
         return queryset
 
     def _filter_options(self, rows, filters):
@@ -151,13 +154,36 @@ class HMISDashboardFilterMixin:
                     years=years, months=[{'value': x, 'label': month_name[x]} for x in months],
                     location_cascade=rows)
 
+    def _indicator_catalogue(self, queryset):
+        """All recorded fact indicators, including zero values and future additions."""
+        records = list(queryset.order_by().exclude(indicator_code='')
+                       .filter(value__isnull=False).values('indicator_code')
+                       .annotate(recorded_name=Max('indicator_name')))
+        codes = [record['indicator_code'] for record in records]
+        metadata = {}
+        for item in IndicatorMetadata.objects.filter(indicator_code__in=codes).order_by(
+                '-is_active', 'sort_order', 'indicator_name'):
+            metadata.setdefault(item.indicator_code, item)
+        options = []
+        for record in records:
+            code = record['indicator_code']
+            item = metadata.get(code)
+            label = (item.indicator_name if item and item.indicator_name else
+                     record['recorded_name'] or code)
+            order = item.sort_order if item and item.sort_order is not None else 1_000_000
+            options.append((order, label.casefold(), code, label))
+        options.sort(key=lambda item: (item[0], item[1], item[2]))
+        return [(code, label) for _order, _sort_label, code, label in options]
+
     def _indicator_options(self, filters):
-        summaries = self._filter_queryset(HMISMonthlySummary.objects.all(), filters)
-        facts = self._filter_queryset(HMISFact.objects.all(), filters)
-        codes = set(facts.exclude(value__isnull=True).values_list('indicator_code', flat=True).distinct())
-        counts = summaries.aggregate(**{field: Count(field) for field in SUMMARY_CODES})
-        return [(field, label) for field, label in self.INDICATORS
-                if counts[field] or SUMMARY_CODES[field] in codes]
+        # Apply location/date scope, but never restrict by the selected indicators.
+        return self._indicator_catalogue(
+            self._filter_queryset(HMISFact.objects.all(), filters))
+
+    def _selection_labels(self, filters):
+        labels = dict(self._indicator_catalogue(HMISFact.objects.filter(
+            indicator_code__in=filters['indicator'])))
+        return [labels.get(code, code) for code in filters['indicator']]
 
     def _reporting(self, catalogue, filters):
         # Latest observed location/group per facility; dates never shrink the roster.
@@ -205,7 +231,7 @@ class HMISDashboardFilterMixin:
             if key == 'month':
                 values = [month_name[x] for x in values]
             if key == 'indicator':
-                values = [self.INDICATOR_LABELS[x] for x in values]
+                values = self._selection_labels(filters)
             scope.append([key, self._excel_text(', '.join(map(str, values)) if isinstance(values, list)
                                                else values or 'All') or 'All'])
         scope.append(['Reporting baseline', BASELINE_NOTE])
@@ -263,8 +289,9 @@ class HMISDashboardFilterMixin:
                 return HttpResponseRedirect(request.path + '?' + params.urlencode())
             return self._multi_excel(facts, filters, reporting)
         first = filters['indicator'][0] if filters['indicator'] else 'anc1'
-        data = self._build_dashboard_data(summaries, first)
-        data['selected_indicator_label'] = ', '.join(self.INDICATOR_LABELS[x] for x in filters['indicator']) or 'All HMIS indicators'
+        summary_field = next((field for field, code in SUMMARY_CODES.items() if code == first), 'anc1')
+        data = self._build_dashboard_data(summaries, summary_field)
+        data['selected_indicator_label'] = ', '.join(self._selection_labels(filters)) or 'All HMIS indicators'
         cards, charts = self._all_hmis_indicator_trends(facts)
         data['all_hmis_indicator_cards'] = cards
         data['chart_data']['all_hmis_indicator_trends'] = charts

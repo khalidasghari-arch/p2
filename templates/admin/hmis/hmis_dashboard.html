@@ -969,6 +969,9 @@
     color: #073f36;
 }
 
+
+.hmis-multi-options label[hidden] { display:none !important; }
+.hmis-multi-options input[type="search"] { width:100% !important; }
 </style>
 
 
@@ -1131,7 +1134,7 @@
 
                 <div class="hmis-field">
 
-                    <label for="id_indicator">Selected Summary Indicator</label>
+                    <label for="id_indicator">Selected HMIS Indicators</label>
 
                     <select id="id_indicator" name="indicator" multiple size="4">
 
@@ -1165,7 +1168,7 @@
 
         <span><strong>Selected reporting period:</strong> {{ period_range }}</span>
 
-        <span><strong>Summary analysis indicator:</strong> {{ selected_indicator_label }}</span>
+        <span><strong>Selected HMIS indicators:</strong> {{ selected_indicator_label }}</span>
 
     </div>
 
@@ -1596,17 +1599,32 @@
     function values(control) { return Array.from(control.selectedOptions).map(o => o.value).filter(v => v && v !== "all"); }
     function refreshWidget(select) {
         const widget = widgets.get(select); if (!widget) return;
-        const list = widget.querySelector(".hmis-multi-options"); list.replaceChildren();
+        const list = widget.querySelector(".hmis-multi-options");
+        const oldSearch=list.querySelector('input[type="search"]');
+        const searchTerm=oldSearch ? oldSearch.value : '';
+        list.replaceChildren();
         const clear = document.createElement("button"); clear.type="button"; clear.textContent="All / clear selection";
-        clear.addEventListener("click", () => { Array.from(select.options).forEach(o => o.selected=false); select.dispatchEvent(new Event("change")); });
+        clear.addEventListener("click", () => { Array.from(select.options).forEach(o => o.selected=false); select.dispatchEvent(new Event("change", {bubbles:true})); });
         list.append(clear);
+        let search;
+        if (select.id === 'id_indicator') {
+            search=document.createElement('input'); search.type='search'; search.placeholder='Search HMIS indicators...';
+            search.value=searchTerm; search.setAttribute('aria-label','Search HMIS indicator options'); search.style.cssText='width:100%;padding:8px;margin:5px 0';
+            list.append(search);
+            search.addEventListener('input',()=>list.querySelectorAll('label').forEach(label=>{
+                label.hidden=!label.textContent.toLowerCase().includes(search.value.trim().toLowerCase());
+            }));
+        }
         Array.from(select.options).forEach(option => {
             const label = document.createElement("label"); const check=document.createElement("input"); check.type="checkbox"; check.checked=option.selected;
-            check.addEventListener("change", () => { option.selected=check.checked; select.dispatchEvent(new Event("change")); });
-            label.append(check, document.createTextNode(option.textContent)); list.append(label);
+            check.addEventListener("change", () => { option.selected=check.checked; select.dispatchEvent(new Event("change", {bubbles:true})); });
+            label.append(check, document.createTextNode(option.textContent)); label.hidden=!!searchTerm && !option.textContent.toLowerCase().includes(searchTerm.trim().toLowerCase()); list.append(label);
         });
         const chosen=Array.from(select.selectedOptions).map(o=>o.textContent);
-        widget.querySelector("summary").textContent=chosen.length ? chosen.join(", ") : "All available";
+        const summary=widget.querySelector("summary");
+        summary.textContent=chosen.length ? (select.id === 'id_indicator' && chosen.length > 2
+            ? chosen.length + ' indicators selected' : chosen.join(', ')) : 'All available';
+        summary.title=chosen.join(', ');
     }
     ["year", "month", "indicator"].forEach(name => {
         const select=document.getElementById("id_"+name); if (!select) return;
