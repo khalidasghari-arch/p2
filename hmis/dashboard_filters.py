@@ -2,6 +2,7 @@
 import os
 import tempfile
 from calendar import month_name
+from decimal import Decimal, ROUND_HALF_UP
 from django.contrib import messages
 from django.db.models import Q, Sum, Count, Max
 from django.http import FileResponse, HttpResponseRedirect
@@ -20,6 +21,74 @@ SUMMARY_CODES = {
     'a_delivery': 'a-delivery', 'c_section': 'c-section',
     'lbw': 'lbw', 'stillbirth': 'stillbirth',
 }
+COMPOSITE_INDICATORS = (
+    ('lbw', 'LBW (% of live births)'),
+    ('babies-breastfed-1st-hour', 'Breastfed 1st Hour (% of live births)'),
+    ('newborn-resuscitated', 'NB Resuscitated (% of live births)'),
+    ('premature', 'Premature (% of live births)'),
+)
+LIVE_BIRTH_CODE = 'newbornalive'
+COMPOSITE_NOTE = (
+    'Each percentage = the recorded numerator ÷ Newborn Alive × 100 for matching '
+    'facility-months. Only pairs with a nonblank, nonnegative numerator and a '
+    'positive denominator contribute to both totals. Recorded zero numerators '
+    'are included; missing values are not treated as zero. Combined rates use '
+    'summed counts, not an average of percentages. These measures use the selected '
+    'location and dates and remain available regardless of the indicator dropdown. '
+    'NB Resuscitated is a share of live births, not a resuscitation success rate '
+    'or coverage among babies needing resuscitation. Numerators must refer to '
+    'the same live-born population as Newborn Alive; out-of-facility or referred '
+    'cases can make that comparison inappropriate.'
+)
+
+
+def calculate_composites(pairs):
+    """Calculate four independent rates without combining overlapping categories."""
+    result = []
+    for code, label in COMPOSITE_INDICATORS:
+        numerator = Decimal('0')
+        denominator = Decimal('0')
+        matched = excluded = above = 0
+        missing_numerator = missing_denominator = zero_denominator = negative = 0
+        for values in pairs.values():
+            n, d = values.get(code), values.get(LIVE_BIRTH_CODE)
+            if n is None or d is None:
+                excluded += 1
+                missing_numerator += n is None
+                missing_denominator += d is None
+                continue
+            if n < 0 or d < 0:
+                excluded += 1
+                negative += 1
+                continue
+            if d == 0:
+                excluded += 1
+                zero_denominator += 1
+                continue
+            numerator += n
+            denominator += d
+            matched += 1
+            above += n > d
+        rate = (numerator / denominator * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if matched else None
+        messages = []
+        if not matched:
+            messages.append('No matched data')
+        if excluded:
+            messages.append(f'{excluded} facility-months excluded')
+        if above:
+            messages.append(f'Numerator exceeds live births in {above} facility-months')
+        result.append(dict(code=code, label=label,
+            numerator=numerator if matched else None, denominator=denominator if matched else None,
+            rate=rate, rate_display=f'{rate:.2f}%' if rate is not None else '—',
+            numerator_display=f'{numerator:,.0f}' if matched else '—',
+            denominator_display=f'{denominator:,.0f}' if matched else '—',
+            matched=matched, excluded=excluded, above=above,
+            missing_numerator=missing_numerator, missing_denominator=missing_denominator,
+            zero_denominator=zero_denominator, negative=negative,
+            status='; '.join(messages) or 'Available', warning=bool(above or negative)))
+    return result
+
+
 BASELINE_NOTE = (
     'Baseline: distinct facilities observed anywhere in HMIS history, limited by '
     'the selected facility group and location. This assumes those facilities are '
@@ -205,6 +274,24 @@ class HMISDashboardFilterMixin:
             facts.order_by().values_list('hf', 'periodcode'))
         return reporting_rows(roster, submissions, periods)
 
+    def _composite_data(self, filters):
+        codes = [code for code, _label in COMPOSITE_INDICATORS] + [LIVE_BIRTH_CODE]
+        facts = self._filter_queryset(HMISFact.objects.all(), filters).filter(indicator_code__in=codes)
+        grouped = facts.order_by().values('hf', 'periodcode', 'indicator_code').annotate(
+            total=Sum('value'), nonblank=Count('value'))
+        pairs = {}
+        monthly_pairs = {}
+        for record in grouped.iterator(chunk_size=2000):
+            key = (record['hf'], record['periodcode'])
+            value = record['total'] if record['nonblank'] else None
+            pairs.setdefault(key, {})[record['indicator_code']] = value
+            monthly_pairs.setdefault(record['periodcode'], {}).setdefault(key, {})[record['indicator_code']] = value
+        monthly = []
+        for period in sorted(monthly_pairs):
+            for row in calculate_composites(monthly_pairs[period]):
+                monthly.append(dict(row, periodcode=period, period=self._period_label(period)))
+        return dict(rows=calculate_composites(pairs), monthly=monthly, note=COMPOSITE_NOTE)
+
     @staticmethod
     def _msh_header(worksheet, headers, widths=None):
         worksheet.freeze_panes = 'A2'
@@ -219,7 +306,7 @@ class HMISDashboardFilterMixin:
             worksheet.column_dimensions[get_column_letter(index)].width = widths[index - 1] if widths else 20
         worksheet.append(cells)
 
-    def _multi_excel(self, facts, filters, reporting):
+    def _multi_excel(self, facts, filters, reporting, composite):
         workbook = Workbook(write_only=True)
         scope = workbook.create_sheet('Summary')
         title = WriteOnlyCell(scope, value='MSH | IQoC-MNH | HMIS filtered export')
@@ -254,6 +341,20 @@ class HMISDashboardFilterMixin:
             monthly.append([row['period'], row['expected'], row['reported'], row['missing_count'], row['rate']])
             for facility in row['missing']:
                 missing.append([self._excel_text(x) for x in (row['period'], facility['prov'], facility['dist'], facility['hf'], facility['group'])])
+        composite_sheet = workbook.create_sheet('Composite Indicators')
+        headers = ('Scope', 'Indicator', 'Numerator', 'Newborn Alive (matched)', 'Rate (%)',
+                   'Matched Facility-Months', 'Excluded Facility-Months', 'Status')
+        self._msh_header(composite_sheet, headers, (24,44,18,26,18,26,26,65))
+        for row in composite['rows']:
+            composite_sheet.append([self._excel_text(x) for x in (
+                'Selected period', row['label'], row['numerator'], row['denominator'], row['rate'],
+                row['matched'], row['excluded'], row['status'])])
+        for row in composite['monthly']:
+            composite_sheet.append([self._excel_text(x) for x in (
+                row['period'], row['label'], row['numerator'], row['denominator'], row['rate'],
+                row['matched'], row['excluded'], row['status'])])
+        composite_sheet.append([])
+        composite_sheet.append(['Calculation', COMPOSITE_NOTE])
         path = None
         try:
             with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as handle:
@@ -281,13 +382,14 @@ class HMISDashboardFilterMixin:
         summaries = self._filter_queryset(HMISMonthlySummary.objects.all(), filters)
         facts = self._filter_fact_queryset(HMISFact.objects.all(), filters)
         reporting = self._reporting(catalogue, filters)
+        composite = self._composite_data(filters)
         if request.GET.get('export') == 'xlsx':
             if facts.count() > self._filtered_excel_row_limit():
                 self.message_user(request, 'Please narrow the filters: the Excel detail row limit was exceeded.', level=messages.WARNING)
                 params = request.GET.copy()
                 params.pop('export', None)
                 return HttpResponseRedirect(request.path + '?' + params.urlencode())
-            return self._multi_excel(facts, filters, reporting)
+            return self._multi_excel(facts, filters, reporting, composite)
         first = filters['indicator'][0] if filters['indicator'] else 'anc1'
         summary_field = next((field for field, code in SUMMARY_CODES.items() if code == first), 'anc1')
         data = self._build_dashboard_data(summaries, summary_field)
@@ -319,6 +421,7 @@ class HMISDashboardFilterMixin:
                    'title': 'HMIS Performance Dashboard', 'opts': self.model._meta,
                    'filters': filters, 'filter_options': options, 'indicator_options': indicator_options,
                    'reporting_rows': reporting, 'reporting_note': BASELINE_NOTE,
+                   'composite': composite,
                    'export_url': '?' + export_params.urlencode(), 'print_url': '?' + print_params.urlencode(),
                    'excel_export_limit_display': f'{self._filtered_excel_row_limit():,}',
                    'print_all_mode': for_print}
