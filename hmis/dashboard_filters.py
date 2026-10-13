@@ -43,40 +43,74 @@ COMPOSITE_NOTE = (
 
 
 def calculate_composites(pairs):
-    """Calculate four independent rates without combining overlapping categories."""
+    """Rates plus facility/month follow-up, without changing eligibility rules."""
     result = []
     for code, label in COMPOSITE_INDICATORS:
-        numerator = Decimal('0')
-        denominator = Decimal('0')
+        short_name = label.split(' (')[0]
+        numerator = denominator = Decimal('0')
         matched = excluded = above = 0
         missing_numerator = missing_denominator = zero_denominator = negative = 0
-        for values in pairs.values():
+        issues = []
+        for (facility, periodcode), values in sorted(pairs.items()):
             n, d = values.get(code), values.get(LIVE_BIRTH_CODE)
+            reason = action = ''
+            included = False
             if n is None or d is None:
                 excluded += 1
                 missing_numerator += n is None
                 missing_denominator += d is None
-                continue
-            if n < 0 or d < 0:
+                if n is None and d is None:
+                    reason = f'{short_name} and Newborn Alive values are missing from imported data'
+                elif n is None:
+                    reason = f'{short_name} value is missing from imported data'
+                else:
+                    reason = 'Newborn Alive value is missing from imported data'
+                action = 'Check the facility report for this month. Confirm the missing value; record zero only if verified, then import the corrected report.'
+            elif n < 0 or d < 0:
                 excluded += 1
                 negative += 1
-                continue
-            if d == 0:
+                reason = 'A recorded count is negative'
+                action = 'Compare the counts with the source register. Correct any entry or import error and re-import the report.'
+            elif d == 0:
                 excluded += 1
                 zero_denominator += 1
-                continue
-            numerator += n
-            denominator += d
-            matched += 1
-            above += n > d
+                if n == 0:
+                    reason = 'Newborn Alive is zero; a percentage cannot be calculated'
+                    action = 'Confirm that no live births occurred. If both counts are correct, leave the percentage unavailable; no correction is needed.'
+                else:
+                    reason = f'{short_name} is recorded, but Newborn Alive is zero'
+                    action = 'Check the live-birth count and whether the indicator includes referred or outborn babies. Correct confirmed errors and re-import.'
+            else:
+                numerator += n
+                denominator += d
+                matched += 1
+                included = True
+                if n > d:
+                    above += 1
+                    reason = f'{short_name} count exceeds Newborn Alive'
+                    action = 'Compare both counts with the source register. Check duplicate entries and whether both counts cover the same babies. Correct confirmed errors and re-import.'
+            if reason:
+                period = str(periodcode)
+                period_label = (f'{month_name[int(period[4:])]} {period[:4]}'
+                                if len(period) == 6 and period.isdigit() and 1 <= int(period[4:]) <= 12 else period)
+                issues.append(dict(facility=facility, periodcode=period, period=period_label,
+                    numerator=n, denominator=d,
+                    numerator_display=f'{n:,.0f}' if n is not None else 'Not recorded',
+                    denominator_display=f'{d:,.0f}' if d is not None else 'Not recorded',
+                    reason=reason, action=action, included=included,
+                    calculation_status='Included — count review required' if included else 'Not used in this percentage'))
         rate = (numerator / denominator * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if matched else None
         messages = []
         if not matched:
-            messages.append('No matched data')
+            messages.append('No percentage available')
         if excluded:
-            messages.append(f'{excluded} facility-months excluded')
+            unit = 'facility-month' if excluded == 1 else 'facility-months'
+            messages.append(f'{excluded} {unit} not used — check missing, zero or invalid counts')
         if above:
-            messages.append(f'Numerator exceeds live births in {above} facility-months')
+            unit = 'facility-month' if above == 1 else 'facility-months'
+            messages.append(f'{above} {unit} needs count review')
+        if not pairs:
+            messages.append('Check whether the newborn indicators were imported for this selection')
         result.append(dict(code=code, label=label,
             numerator=numerator if matched else None, denominator=denominator if matched else None,
             rate=rate, rate_display=f'{rate:.2f}%' if rate is not None else '—',
@@ -85,7 +119,9 @@ def calculate_composites(pairs):
             matched=matched, excluded=excluded, above=above,
             missing_numerator=missing_numerator, missing_denominator=missing_denominator,
             zero_denominator=zero_denominator, negative=negative,
-            status='; '.join(messages) or 'Available', warning=bool(above or negative)))
+            issues=issues, issue_count=len(issues),
+            status='; '.join(messages) or 'No issues detected in matched records',
+            warning=bool(issues)))
     return result
 
 
@@ -355,6 +391,16 @@ class HMISDashboardFilterMixin:
                 row['matched'], row['excluded'], row['status'])])
         composite_sheet.append([])
         composite_sheet.append(['Calculation', COMPOSITE_NOTE])
+        checks = workbook.create_sheet('Composite Data Checks')
+        self._msh_header(checks,
+            ('Indicator', 'Facility', 'Month', 'Indicator Count', 'Newborn Alive',
+             'Issue', 'Suggested Action', 'Calculation Treatment'),
+            (38,42,24,20,20,65,90,38))
+        for row in composite['rows']:
+            for issue in row['issues']:
+                checks.append([self._excel_text(value) for value in (
+                    row['label'], issue['facility'], issue['period'], issue['numerator'],
+                    issue['denominator'], issue['reason'], issue['action'], issue['calculation_status'])])
         path = None
         try:
             with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as handle:

@@ -972,6 +972,12 @@
 
 .hmis-multi-options label[hidden] { display:none !important; }
 .hmis-multi-options input[type="search"] { width:100% !important; }
+
+.hmis-check-link { color:#00746d; text-decoration:underline; display:inline-block; margin-top:5px; font-size:12px; }
+.hmis-composite-check { border:1px solid #d2e2dc; border-radius:7px; padding:10px 12px; scroll-margin-top:20px; }
+.hmis-composite-check > summary { font-weight:600; padding:5px 0; }
+.hmis-check-description { white-space:normal; min-width:240px; max-width:420px; }
+@media print { .hmis-check-link { display:none; } .hmis-composite-check > div { display:block !important; } }
 </style>
 
 
@@ -1223,8 +1229,18 @@
 <table class="hmis-table"><thead><tr><th>Indicator</th><th>Numerator</th><th>Newborn Alive<br>(matched records)</th><th>Percentage</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
 <tbody>{% for row in composite.rows %}<tr>
 <td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td>
-<td><strong>{{ row.rate_display }}</strong></td><td>{{ row.matched }}</td><td class="text-left {% if row.warning %}hmis-missing{% endif %}">{{ row.status }}</td>
+<td><strong>{{ row.rate_display }}</strong></td><td>{{ row.matched }}</td><td class="text-left {% if row.warning %}hmis-missing{% endif %}">{{ row.status }}{% if row.issues %}<br><a href="#composite-check-{{ row.code }}" class="hmis-check-link" data-composite-check="composite-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td>
 </tr>{% endfor %}</tbody></table></div>
+<div id="hmisCompositeFollowup">
+{% for row in composite.rows %}{% if row.issues %}
+<details class="hmis-composite-check hmis-more" id="composite-check-{{ row.code }}">
+<summary>{{ row.label }} — {{ row.issue_count }} facility-month check{{ row.issue_count|pluralize }}</summary>
+<div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Facility follow-up for {{ row.label }}">
+<table class="hmis-table"><thead><tr><th>Facility</th><th>Month</th><th>Indicator count</th><th>Newborn Alive</th><th>What needs checking?</th><th>Suggested action</th><th>Calculation treatment</th></tr></thead>
+<tbody>{% for issue in row.issues %}<tr><td class="text-left">{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td class="text-left">{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div>
+</details>{% endif %}{% endfor %}
+</div>
+<p class="hmis-filter-hint">“Missing” means no value is available in the imported data; it does not confirm that the facility failed to submit a report. Check the source report before changing values.</p>
 <details class="hmis-more" id="hmisCompositeMethod"><summary>Calculation and data checks</summary><p>{{ composite.note }}</p>
 <p>LBW: LBW ÷ Newborn Alive × 100. Breastfed 1st Hour: Babies-breastfed-1st-hour ÷ Newborn Alive × 100. NB Resuscitated: Newborn-resuscitated ÷ Newborn Alive × 100. Premature: Premature ÷ Newborn Alive × 100.</p>
 <p>These are four separate derived rates. They are not added into a single score because the categories can overlap. Rates above 100% remain visible and are flagged for review.</p>
@@ -1232,7 +1248,7 @@
 <details class="hmis-more" id="hmisCompositeMonthly"><summary>View monthly composite results</summary>
 <div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Monthly newborn composite indicators">
 <table class="hmis-table"><thead><tr><th>Month</th><th>Indicator</th><th>Numerator</th><th>Newborn Alive</th><th>Percentage</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
-<tbody>{% for row in composite.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.matched }}</td><td class="text-left {% if row.warning %}hmis-missing{% endif %}">{{ row.status }}</td></tr>
+<tbody>{% for row in composite.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.matched }}</td><td class="text-left {% if row.warning %}hmis-missing{% endif %}">{{ row.status }}{% if row.issues %}<br><a href="#composite-check-{{ row.code }}" class="hmis-check-link" data-composite-check="composite-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td></tr>
 {% empty %}<tr><td colspan="7">No newborn indicator records match the selected location and dates.</td></tr>{% endfor %}</tbody></table></div>
 </details></section>
 
@@ -1695,6 +1711,9 @@
             document.getElementById("hmisApplyFilters").focus();
         }
     }));
+    document.querySelectorAll('[data-composite-check]').forEach(link=>link.addEventListener('click',()=>{
+        const detail=document.getElementById(link.dataset.compositeCheck); if(detail) detail.open=true;
+    }));
     const sections = Array.from(document.querySelectorAll(".hmis-anchor"));
     const navLinks = Array.from(document.querySelectorAll(".hmis-section-nav a"));
     navLinks.forEach(link => link.addEventListener("click", () => {
@@ -1734,6 +1753,7 @@
     missingSearch.addEventListener("input",findMissingReports); findMissingReports();
     // Print every selected result, including collapsed extra cards and missing reports.
     window.addEventListener("beforeprint",()=>{
+        document.querySelectorAll(".hmis-composite-check").forEach(detail=>detail.open=true);
         document.getElementById("hmisCompositeMonthly").open=true;
         document.getElementById("hmisCompositeMethod").open=true;
         const moreMeasures=document.getElementById("hmisAdditionalMeasures"); if(moreMeasures) moreMeasures.open=true;
