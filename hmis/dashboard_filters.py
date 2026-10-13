@@ -37,9 +37,10 @@ IMPACT_INDICATORS = (
      ('newbornalive', 'stillbirth'), 1000, 'per 1,000 total births'),
 )
 IMPACT_NOTE = (
-    'Rates use matching facility-months with a recorded nonnegative numerator '
-    'and all required nonnegative denominator counts, with a positive combined '
-    'denominator. Zero deaths are included; missing values are not assumed zero. '
+    'For observed reporting facility-months, blank death, stillbirth and live-birth '
+    'counts are treated as confirmed zeros under the project reporting rule. '
+    'All valid positive birth denominators are retained, including months with '
+    'blank death counts. A zero birth denominator cannot produce a rate. '
     'Totals are summed before calculating rates. Neonatal deaths use only '
     'Total-number-of-Neonatal-deaths; cause-specific death counts are not added '
     'to that total. Maternal deaths use Maternal-deaths-at-the-clinics. '
@@ -59,19 +60,19 @@ def calculate_impact(pairs):
     rows = []
     for key, label, numerator_code, denominator_codes, scale, unit in IMPACT_INDICATORS:
         numerator = denominator = Decimal('0')
-        matched = 0
+        matched = zero_filled = 0
         issues = []
-        for (facility, period), values in sorted(pairs.items()):
+        for (facility, period), raw_values in sorted(pairs.items()):
             required = list(dict.fromkeys((numerator_code,) + denominator_codes))
-            missing = [code for code in required if values.get(code) is None]
-            n = values.get(numerator_code)
-            d = sum((values[code] for code in denominator_codes), Decimal('0')) if all(values.get(code) is not None for code in denominator_codes) else None
+            blank_zero = any(raw_values.get(code) is None for code in required)
+            # The import pipeline omits blank cells; the user confirms these are zeros.
+            values = {code: (raw_values.get(code) if raw_values.get(code) is not None else Decimal('0'))
+                      for code in required}
+            n = values[numerator_code]
+            d = sum((values[code] for code in denominator_codes), Decimal('0'))
             included = False
             reason = action = ''
-            if missing:
-                reason = 'Missing imported value: ' + ', '.join(labels[code] for code in missing)
-                action = 'Check the source facility report for this month. Confirm missing counts, including verified zero deaths, then import the corrected report.'
-            elif any(values[code] < 0 for code in required):
+            if any(values[code] < 0 for code in required):
                 reason = 'A required birth or death count is negative'
                 action = 'Verify birth and death counts against the source register. Correct confirmed entry or import errors.'
             elif d == 0:
@@ -80,6 +81,7 @@ def calculate_impact(pairs):
                           'Verify birth reporting and whether deaths include referred or readmitted patients. Correct confirmed errors; do not invent a birth denominator.')
             else:
                 matched += 1
+                zero_filled += int(blank_zero)
                 numerator += n
                 denominator += d
                 included = True
@@ -101,11 +103,11 @@ def calculate_impact(pairs):
             numerator_display=f'{numerator:,.0f}' if matched else '—',
             denominator_display=f'{denominator:,.0f}' if matched else '—',
             rate=rate, rate_display=f'{rate:,.2f}' if rate is not None else '—',
-            matched=matched, excluded=excluded, issues=issues, issue_count=len(issues),
+            matched=matched, excluded=excluded, zero_filled=zero_filled, issues=issues, issue_count=len(issues),
             denominator_label='Total births (live + stillbirths)' if key=='stillbirth' else 'Live births',
             formula=f"{labels[numerator_code]} ÷ {'(Newborn Alive + Stillbirths)' if key=='stillbirth' else 'Newborn Alive'} × {scale:,}",
             status=(f'{len(issues)} facility-month checks — view details' if issues else
-                    'No issues detected in matched records' if matched else 'No rate available — check imported data'))
+                    (f'Confirmed blank zeros included for {zero_filled} facility-month' + ('s' if zero_filled != 1 else '') if zero_filled else 'No issues detected in matched records') if matched else 'No rate available — check imported data'))
         rows.append(row)
     return rows
 
@@ -412,15 +414,23 @@ class HMISDashboardFilterMixin:
 
     def _impact_data(self, filters):
         codes = {'total-number-of-neonatal-deaths', 'maternal-deaths-at-the-clinics', 'newbornalive', 'stillbirth'}
-        queryset = self._filter_queryset(HMISFact.objects.all(), filters).filter(indicator_code__in=codes)
-        pairs = {}
+        source_facts = self._filter_queryset(HMISFact.objects.all(), filters)
+        summaries = self._filter_queryset(HMISMonthlySummary.objects.all(), filters)
+        # Observe reports across all fields, not only death fields; never create reports
+        # for roster-only facility-months with no stored reporting record.
+        observed = summaries.order_by().values_list('hf','periodcode').union(
+            source_facts.order_by().values_list('hf','periodcode'))
+        pairs = {key: {} for key in observed}
         monthly_pairs = {}
-        for record in queryset.order_by().values('hf','periodcode','indicator_code').annotate(
+        for key in pairs:
+            monthly_pairs.setdefault(key[1], {})[key] = pairs[key]
+        for record in source_facts.filter(indicator_code__in=codes).order_by().values(
+                'hf','periodcode','indicator_code').annotate(
                 total=Sum('value'), nonblank=Count('value')).iterator(chunk_size=2000):
             key = (record['hf'], record['periodcode'])
             value = record['total'] if record['nonblank'] else None
             pairs.setdefault(key,{})[record['indicator_code']] = value
-            monthly_pairs.setdefault(record['periodcode'],{}).setdefault(key,{})[record['indicator_code']] = value
+            monthly_pairs.setdefault(record['periodcode'],{}).setdefault(key,pairs[key])[record['indicator_code']] = value
         monthly = [dict(row,periodcode=period,period=self._period_label(period))
                    for period in sorted(monthly_pairs)
                    for row in calculate_impact(monthly_pairs[period])]

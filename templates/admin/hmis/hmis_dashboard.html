@@ -1225,7 +1225,7 @@
 <section class="hmis-card hmis-anchor" id="hmis-impact">
 <p class="hmis-eyebrow">Impact</p>
 <h2 class="hmis-section-title">Reduced maternal and neonatal mortality and morbidity</h2>
-<p class="hmis-section-note">Facility mortality measures for the selected location and dates. Compare equivalent periods to assess change; these figures alone do not establish a reduction.</p>
+<p class="hmis-section-note">Facility mortality measures for the selected location and dates. Blank counts in observed reports are confirmed zeros; live births from zero-death months are included. Compare equivalent periods to assess change.</p>
 <div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Facility impact indicators"><table class="hmis-table">
 <thead><tr><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
 <tbody>{% for row in impact.rows %}<tr><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}<br><small>{{ row.denominator_label }}</small></td><td><strong>{{ row.rate_display }}</strong></td><td>{{ row.unit }}</td><td>{{ row.matched }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
