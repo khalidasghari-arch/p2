@@ -28,6 +28,88 @@ COMPOSITE_INDICATORS = (
     ('premature', 'Premature (% of live births)'),
 )
 LIVE_BIRTH_CODE = 'newbornalive'
+IMPACT_INDICATORS = (
+    ('neonatal', 'Facility neonatal mortality rate', 'total-number-of-neonatal-deaths',
+     ('newbornalive',), 1000, 'per 1,000 live births'),
+    ('maternal', 'Facility maternal mortality ratio', 'maternal-deaths-at-the-clinics',
+     ('newbornalive',), 100000, 'per 100,000 live births'),
+    ('stillbirth', 'Stillbirth rate', 'stillbirth',
+     ('newbornalive', 'stillbirth'), 1000, 'per 1,000 total births'),
+)
+IMPACT_NOTE = (
+    'Rates use matching facility-months with a recorded nonnegative numerator '
+    'and all required nonnegative denominator counts, with a positive combined '
+    'denominator. Zero deaths are included; missing values are not assumed zero. '
+    'Totals are summed before calculating rates. Neonatal deaths use only '
+    'Total-number-of-Neonatal-deaths; cause-specific death counts are not added '
+    'to that total. Maternal deaths use Maternal-deaths-at-the-clinics. '
+    'Live births use NewbornAlive. Total births = NewbornAlive + Stillbirth. '
+    'These are facility-based monitoring measures, not population mortality '
+    'estimates or proof of project impact. Verify the death definitions and '
+    'coverage in the source reports, including referral/readmission cases and '
+    'neonatal deaths within the first 28 days. Reduction requires a comparable '
+    'baseline and follow-up period with consistent reporting.'
+)
+
+
+def calculate_impact(pairs):
+    labels = {'newbornalive': 'Newborn Alive', 'stillbirth': 'Stillbirths',
+              'total-number-of-neonatal-deaths': 'Total neonatal deaths',
+              'maternal-deaths-at-the-clinics': 'Maternal deaths'}
+    rows = []
+    for key, label, numerator_code, denominator_codes, scale, unit in IMPACT_INDICATORS:
+        numerator = denominator = Decimal('0')
+        matched = 0
+        issues = []
+        for (facility, period), values in sorted(pairs.items()):
+            required = list(dict.fromkeys((numerator_code,) + denominator_codes))
+            missing = [code for code in required if values.get(code) is None]
+            n = values.get(numerator_code)
+            d = sum((values[code] for code in denominator_codes), Decimal('0')) if all(values.get(code) is not None for code in denominator_codes) else None
+            included = False
+            reason = action = ''
+            if missing:
+                reason = 'Missing imported value: ' + ', '.join(labels[code] for code in missing)
+                action = 'Check the source facility report for this month. Confirm missing counts, including verified zero deaths, then import the corrected report.'
+            elif any(values[code] < 0 for code in required):
+                reason = 'A required birth or death count is negative'
+                action = 'Verify birth and death counts against the source register. Correct confirmed entry or import errors.'
+            elif d == 0:
+                reason = 'The birth denominator is zero; no rate can be calculated'
+                action = ('Confirm there were no births; if the counts are correct, leave the rate unavailable.' if n == 0 else
+                          'Verify birth reporting and whether deaths include referred or readmitted patients. Correct confirmed errors; do not invent a birth denominator.')
+            else:
+                matched += 1
+                numerator += n
+                denominator += d
+                included = True
+                if n > d:
+                    reason = 'The death count exceeds the matched birth denominator'
+                    action = 'Review both counts and their population coverage, including referral/readmission cases. Correct confirmed duplicates or reporting errors.'
+            if reason:
+                period = str(period)
+                period_label = (f'{month_name[int(period[4:])]} {period[:4]}' if len(period)==6 and period.isdigit() and 1<=int(period[4:])<=12 else period)
+                issues.append(dict(facility=facility, period=period_label, numerator=n, denominator=d,
+                    numerator_display=f'{n:,.0f}' if n is not None else 'Not recorded',
+                    denominator_display=f'{d:,.0f}' if d is not None else 'Not recorded',
+                    reason=reason, action=action,
+                    calculation_status='Included — review population coverage' if included else 'Not used in this rate'))
+        rate = (numerator / denominator * scale).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if matched else None
+        excluded = sum(issue['calculation_status']=='Not used in this rate' for issue in issues)
+        row = dict(code=key, label=label, unit=unit, scale=scale,
+            numerator=numerator if matched else None, denominator=denominator if matched else None,
+            numerator_display=f'{numerator:,.0f}' if matched else '—',
+            denominator_display=f'{denominator:,.0f}' if matched else '—',
+            rate=rate, rate_display=f'{rate:,.2f}' if rate is not None else '—',
+            matched=matched, excluded=excluded, issues=issues, issue_count=len(issues),
+            denominator_label='Total births (live + stillbirths)' if key=='stillbirth' else 'Live births',
+            formula=f"{labels[numerator_code]} ÷ {'(Newborn Alive + Stillbirths)' if key=='stillbirth' else 'Newborn Alive'} × {scale:,}",
+            status=(f'{len(issues)} facility-month checks — view details' if issues else
+                    'No issues detected in matched records' if matched else 'No rate available — check imported data'))
+        rows.append(row)
+    return rows
+
+
 COMPOSITE_NOTE = (
     'Each percentage = the recorded numerator ÷ Newborn Alive × 100 for matching '
     'facility-months. Only pairs with a nonblank, nonnegative numerator and a '
@@ -328,6 +410,22 @@ class HMISDashboardFilterMixin:
                 monthly.append(dict(row, periodcode=period, period=self._period_label(period)))
         return dict(rows=calculate_composites(pairs), monthly=monthly, note=COMPOSITE_NOTE)
 
+    def _impact_data(self, filters):
+        codes = {'total-number-of-neonatal-deaths', 'maternal-deaths-at-the-clinics', 'newbornalive', 'stillbirth'}
+        queryset = self._filter_queryset(HMISFact.objects.all(), filters).filter(indicator_code__in=codes)
+        pairs = {}
+        monthly_pairs = {}
+        for record in queryset.order_by().values('hf','periodcode','indicator_code').annotate(
+                total=Sum('value'), nonblank=Count('value')).iterator(chunk_size=2000):
+            key = (record['hf'], record['periodcode'])
+            value = record['total'] if record['nonblank'] else None
+            pairs.setdefault(key,{})[record['indicator_code']] = value
+            monthly_pairs.setdefault(record['periodcode'],{}).setdefault(key,{})[record['indicator_code']] = value
+        monthly = [dict(row,periodcode=period,period=self._period_label(period))
+                   for period in sorted(monthly_pairs)
+                   for row in calculate_impact(monthly_pairs[period])]
+        return dict(rows=calculate_impact(pairs),monthly=monthly,note=IMPACT_NOTE)
+
     @staticmethod
     def _msh_header(worksheet, headers, widths=None):
         worksheet.freeze_panes = 'A2'
@@ -342,7 +440,7 @@ class HMISDashboardFilterMixin:
             worksheet.column_dimensions[get_column_letter(index)].width = widths[index - 1] if widths else 20
         worksheet.append(cells)
 
-    def _multi_excel(self, facts, filters, reporting, composite):
+    def _multi_excel(self, facts, filters, reporting, composite, impact):
         workbook = Workbook(write_only=True)
         scope = workbook.create_sheet('Summary')
         title = WriteOnlyCell(scope, value='MSH | IQoC-MNH | HMIS filtered export')
@@ -401,6 +499,26 @@ class HMISDashboardFilterMixin:
                 checks.append([self._excel_text(value) for value in (
                     row['label'], issue['facility'], issue['period'], issue['numerator'],
                     issue['denominator'], issue['reason'], issue['action'], issue['calculation_status'])])
+        impact_sheet = workbook.create_sheet('Impact Indicators')
+        self._msh_header(impact_sheet, ('Scope','Indicator','Death Count','Matched Birth Denominator','Rate','Unit','Matched Facility-Months','Data Check'),
+                         (24,42,18,28,18,28,26,65))
+        for row in impact['rows']:
+            impact_sheet.append([self._excel_text(value) for value in (
+                'Selected period',row['label'],row['numerator'],row['denominator'],row['rate'],row['unit'],row['matched'],row['status'])])
+        for row in impact['monthly']:
+            impact_sheet.append([self._excel_text(value) for value in (
+                row['period'],row['label'],row['numerator'],row['denominator'],row['rate'],row['unit'],row['matched'],row['status'])])
+        impact_sheet.append([])
+        impact_sheet.append(['Methodology',IMPACT_NOTE])
+        for row in impact['rows']:
+            impact_sheet.append([row['label'],row['formula']])
+        impact_checks = workbook.create_sheet('Impact Data Checks')
+        self._msh_header(impact_checks, ('Indicator','Facility','Month','Death Count','Birth Denominator','Issue','Suggested Action','Calculation Treatment'),
+                         (42,42,24,18,24,65,90,40))
+        for row in impact['rows']:
+            for issue in row['issues']:
+                impact_checks.append([self._excel_text(value) for value in (
+                    row['label'],issue['facility'],issue['period'],issue['numerator'],issue['denominator'],issue['reason'],issue['action'],issue['calculation_status'])])
         path = None
         try:
             with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as handle:
@@ -429,13 +547,14 @@ class HMISDashboardFilterMixin:
         facts = self._filter_fact_queryset(HMISFact.objects.all(), filters)
         reporting = self._reporting(catalogue, filters)
         composite = self._composite_data(filters)
+        impact = self._impact_data(filters)
         if request.GET.get('export') == 'xlsx':
             if facts.count() > self._filtered_excel_row_limit():
                 self.message_user(request, 'Please narrow the filters: the Excel detail row limit was exceeded.', level=messages.WARNING)
                 params = request.GET.copy()
                 params.pop('export', None)
                 return HttpResponseRedirect(request.path + '?' + params.urlencode())
-            return self._multi_excel(facts, filters, reporting, composite)
+            return self._multi_excel(facts, filters, reporting, composite, impact)
         first = filters['indicator'][0] if filters['indicator'] else 'anc1'
         summary_field = next((field for field, code in SUMMARY_CODES.items() if code == first), 'anc1')
         data = self._build_dashboard_data(summaries, summary_field)
@@ -467,7 +586,7 @@ class HMISDashboardFilterMixin:
                    'title': 'HMIS Performance Dashboard', 'opts': self.model._meta,
                    'filters': filters, 'filter_options': options, 'indicator_options': indicator_options,
                    'reporting_rows': reporting, 'reporting_note': BASELINE_NOTE,
-                   'composite': composite,
+                   'composite': composite, 'impact': impact,
                    'export_url': '?' + export_params.urlencode(), 'print_url': '?' + print_params.urlencode(),
                    'excel_export_limit_display': f'{self._filtered_excel_row_limit():,}',
                    'print_all_mode': for_print}

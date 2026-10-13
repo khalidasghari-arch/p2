@@ -1011,7 +1011,7 @@
 
 
 <nav class="hmis-section-nav" aria-label="HMIS dashboard sections">
-<a href="#hmis-overview" class="is-active">Overview</a><a href="#hmis-reporting">Reporting completeness</a><a href="#hmis-composites">Composite indicators</a><a href="#hmis-trends">Indicator trends</a><a href="#hmis-results">Detailed results</a><a href="#hmis-filters">Filters</a>
+<a href="#hmis-overview" class="is-active">Overview</a><a href="#hmis-reporting">Reporting completeness</a><a href="#hmis-impact">Impact indicators</a><a href="#hmis-composites">Composite indicators</a><a href="#hmis-trends">Indicator trends</a><a href="#hmis-results">Detailed results</a><a href="#hmis-filters">Filters</a>
 </nav>
     {% if print_all_mode %}
 
@@ -1222,6 +1222,18 @@
 </tbody></table></div></div></div>
 {% endif %}{% endfor %}
 </section>
+<section class="hmis-card hmis-anchor" id="hmis-impact">
+<p class="hmis-eyebrow">Impact</p>
+<h2 class="hmis-section-title">Reduced maternal and neonatal mortality and morbidity</h2>
+<p class="hmis-section-note">Facility mortality measures for the selected location and dates. Compare equivalent periods to assess change; these figures alone do not establish a reduction.</p>
+<div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Facility impact indicators"><table class="hmis-table">
+<thead><tr><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
+<tbody>{% for row in impact.rows %}<tr><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}<br><small>{{ row.denominator_label }}</small></td><td><strong>{{ row.rate_display }}</strong></td><td>{{ row.unit }}</td><td>{{ row.matched }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+{% for row in impact.rows %}{% if row.issues %}<details class="hmis-composite-check hmis-more" id="impact-check-{{ row.code }}"><summary>{{ row.label }} — facility follow-up</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Follow-up for {{ row.label }}"><table class="hmis-table"><thead><tr><th>Facility</th><th>Month</th><th>Death count</th><th>Birth denominator</th><th>Issue</th><th>Suggested action</th><th>Calculation treatment</th></tr></thead><tbody>{% for issue in row.issues %}<tr><td>{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td>{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}{% endfor %}
+<details class="hmis-more" id="hmisImpactMethod"><summary>Formulas and interpretation</summary><p>{{ impact.note }}</p><ul>{% for row in impact.rows %}<li><strong>{{ row.label }}:</strong> {{ row.formula }}</li>{% endfor %}</ul><p>The maternal measure is a live-birth ratio. It is not a mortality rate among women of reproductive age, a case-fatality rate among admitted mothers, or a rate per deliveries. The source data must use consistent maternal and neonatal death definitions.</p></details>
+<details class="hmis-more" id="hmisImpactMonthly"><summary>View monthly impact indicators</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Monthly impact indicators"><table class="hmis-table"><thead><tr><th>Month</th><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Data check</th></tr></thead><tbody>{% for row in impact.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.unit }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View details</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">No impact-indicator records are available for this selection.</td></tr>{% endfor %}</tbody></table></div></details>
+</section>
+
 <section class="hmis-card hmis-anchor" id="hmis-composites">
 <h2 class="hmis-section-title">Composite Indicators — Newborn Outcomes</h2>
 <p class="hmis-section-note">Percentages calculated against <strong>Newborn Alive</strong> for the selected location and period. Each measure has its own matching numerator and denominator records.</p>
@@ -1754,6 +1766,8 @@
     // Print every selected result, including collapsed extra cards and missing reports.
     window.addEventListener("beforeprint",()=>{
         document.querySelectorAll(".hmis-composite-check").forEach(detail=>detail.open=true);
+        document.getElementById("hmisImpactMonthly").open=true;
+        document.getElementById("hmisImpactMethod").open=true;
         document.getElementById("hmisCompositeMonthly").open=true;
         document.getElementById("hmisCompositeMethod").open=true;
         const moreMeasures=document.getElementById("hmisAdditionalMeasures"); if(moreMeasures) moreMeasures.open=true;
