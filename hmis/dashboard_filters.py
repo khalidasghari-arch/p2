@@ -4,7 +4,8 @@ import tempfile
 from calendar import month_name
 from decimal import Decimal, ROUND_HALF_UP
 from django.contrib import messages
-from django.db.models import Q, Sum, Count, Max
+from django.db.models import Q, Sum, Count, Max, F
+from django.core.paginator import Paginator
 from django.http import FileResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.utils import timezone
@@ -545,6 +546,110 @@ class HMISDashboardFilterMixin:
                 os.remove(path)
             raise
 
+    @staticmethod
+    def _page_link(request, key, number, anchor):
+        params = request.GET.copy()
+        params.pop('print', None)
+        params.pop('export', None)
+        params[key] = number
+        if anchor == 'hmis-results':
+            params['detail_tab'] = key.replace('_page','')+'-panel'
+        return '?' + params.urlencode() + '#' + anchor
+
+    def _page(self, request, objects, key, size, anchor, complete=False):
+        paginator = Paginator(objects, size)
+        page = paginator.get_page(request.GET.get(key, '1'))
+        info = dict(number=page.number, pages=paginator.num_pages, total=paginator.count,
+                    start=page.start_index(), end=page.end_index(),
+                    previous=self._page_link(request,key,page.previous_page_number(),anchor) if page.has_previous() else '',
+                    next=self._page_link(request,key,page.next_page_number(),anchor) if page.has_next() else '')
+        if complete:
+            info.update(number=1,pages=1,start=1 if paginator.count else 0,end=paginator.count,previous='',next='')
+            return list(objects), info
+        return list(page.object_list), info
+
+    def _paged_detail_tables(self, request, queryset, cards, selected, complete=False):
+        """Aggregate only the geography/month groups displayed on this page."""
+        codes = [card['indicator_code'] for card in cards]
+        indexes = {code: index for index,code in enumerate(codes)}
+        output = {'detailed_indicator_count':len(cards)}
+        search = request.GET.get('facility_search','').strip()[:200]
+        for kind, fields, size in (
+            ('monthly',('periodcode',),24),
+            ('province',('prov',),25),
+            ('facility',('prov','hf','hiva_hfs'),25)):
+            scope = queryset
+            if kind == 'facility' and search and not complete:
+                scope = scope.filter(Q(hf__icontains=search)|Q(prov__icontains=search))
+            groups = scope.order_by().values(*fields)
+            if kind != 'monthly' and selected in indexes:
+                groups = groups.annotate(sort_total=Sum('value',filter=Q(indicator_code=selected))).order_by(
+                    F('sort_total').desc(nulls_last=True),*fields)
+            else:
+                groups = groups.distinct().order_by(*fields)
+            chosen, pager = self._page(request,groups,kind+'_page',size,'hmis-results',complete)
+            keys = [tuple(group[field] for field in fields) for group in chosen]
+            rows = {key:dict(key=key,raw_values=[None]*len(codes)) for key in keys}
+            condition = Q(pk__in=[])
+            for key in keys:
+                condition |= Q(**dict(zip(fields,key)))
+            detail_scope = scope if complete else scope.filter(condition)
+            grouped = detail_scope.order_by().values(*fields,'indicator_code').annotate(
+                total=Sum('value'), nonblank=Count('value'))
+            for record in grouped.iterator(chunk_size=1000):
+                code = record['indicator_code'] or 'Not coded'
+                index = indexes.get(code)
+                if index is not None:
+                    key = tuple(record[field] for field in fields)
+                    rows[key]['raw_values'][index] = float(record['total']) if record['nonblank'] and record['total'] is not None else None
+            for key,row in rows.items():
+                row['indicator_values'] = [dict(raw=value,display=self._number_display(value)) for value in row['raw_values']]
+                if kind == 'monthly':
+                    row.update(periodcode=key[0],period=self._period_label(key[0]))
+                elif kind == 'province':
+                    row['province']=key[0] or 'Not specified'
+                else:
+                    row.update(province=key[0] or 'Not specified',facility=key[1] or 'Not specified',
+                               hiva_hfs=bool(key[2]),facility_group='HIVA HF' if key[2] else 'Non-HIVA HF')
+            output['detailed_'+kind+'_rows']=list(rows.values())
+            output[kind+'_pager']=pager
+        output['facility_search']=search
+        output['facility_search_params']=[(key,value) for key,values in request.GET.lists()
+            if key not in ('facility_search','facility_page','detail_tab','print','export') for value in values]
+        requested_tab=request.GET.get('detail_tab')
+        output['detail_active_tab']=(requested_tab if requested_tab in ('monthly-panel','province-panel','facility-panel') else
+                                    'facility-panel' if search or request.GET.get('facility_page') else
+                                    'province-panel' if request.GET.get('province_page') else 'monthly-panel')
+        return output
+
+    def _screen_details(self, request, reporting, composite, impact, complete=False):
+        """Copies for presentation: exports and full totals keep the complete lists."""
+        report_page, report_pager = self._page(request,reporting,'reporting_page',12,'hmis-reporting',complete)
+        visible_reporting=[]
+        for row in report_page:
+            missing, pager = self._page(request,row['missing'],'missing_'+row['periodcode'],10,'hmis-reporting',complete)
+            visible_reporting.append(dict(row,missing=missing,missing_pager=pager))
+        visible_metrics={}
+        for name,source in (('composite',composite),('impact',impact)):
+            rows=[]
+            for row in source['rows']:
+                issues,pager=self._page(request,row['issues'],'checks_'+name+'_'+row['code'],10,
+                                       ('composite-check-' if name=='composite' else 'impact-check-')+row['code'],complete)
+                rows.append(dict(row,issues=issues,issue_pager=pager))
+            monthly,pager=self._page(request,source['monthly'],name+'_month_page',24,
+                                    'hmis-composites' if name=='composite' else 'hmis-impact',complete)
+            visible_metrics[name]=dict(source,rows=rows,monthly=monthly,monthly_pager=pager)
+        return dict(reporting_rows=visible_reporting,reporting_pager=report_pager,**visible_metrics)
+
+    @staticmethod
+    def _print_cost(facts, cards, reporting, composite, impact):
+        group_rows=sum(facts.order_by().values(*fields).distinct().count() for fields in
+                       (('periodcode',),('prov',),('prov','hf','hiva_hfs')))
+        missing=sum(row['missing_count'] for row in reporting)
+        checks=sum(len(row['issues']) for data in (composite,impact) for row in data['rows'])
+        monthly=sum(len(data['monthly']) for data in (composite,impact))
+        return group_rows*max(1,len(cards))+missing*4+(checks+monthly)*8
+
     def changelist_view(self, request, extra_context=None):
         if not self.has_view_permission(request):
             from django.core.exceptions import PermissionDenied
@@ -572,7 +677,16 @@ class HMISDashboardFilterMixin:
         cards, charts = self._all_hmis_indicator_trends(facts)
         data['all_hmis_indicator_cards'] = cards
         data['chart_data']['all_hmis_indicator_trends'] = charts
-        data.update(self._fact_detail_tables(facts, cards, first))
+        for_print = bool(request.GET.get('print'))
+        if for_print and self._print_cost(facts,cards,reporting,composite,impact) > 5000:
+            self.message_user(request,
+                'PDF was not started because this selection contains too many detail rows. '
+                'Select fewer months, facilities or indicators, or use Excel for the full filtered data.',
+                level=messages.WARNING)
+            params=request.GET.copy()
+            params.pop('print',None)
+            return HttpResponseRedirect(request.path+'?'+params.urlencode())
+        data.update(self._paged_detail_tables(request,facts,cards,first,complete=for_print))
         expected = sum(r['expected'] for r in reporting)
         reported = sum(r['reported'] for r in reporting)
         data['kpis'].insert(0, dict(label='Monthly Reporting Completeness',
@@ -595,8 +709,8 @@ class HMISDashboardFilterMixin:
         context = {**self.admin_site.each_context(request), **data,
                    'title': 'HMIS Performance Dashboard', 'opts': self.model._meta,
                    'filters': filters, 'filter_options': options, 'indicator_options': indicator_options,
-                   'reporting_rows': reporting, 'reporting_note': BASELINE_NOTE,
-                   'composite': composite, 'impact': impact,
+                   **self._screen_details(request,reporting,composite,impact,complete=for_print),
+                   'reporting_note': BASELINE_NOTE,
                    'export_url': '?' + export_params.urlencode(), 'print_url': '?' + print_params.urlencode(),
                    'excel_export_limit_display': f'{self._filtered_excel_row_limit():,}',
                    'print_all_mode': for_print}

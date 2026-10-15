@@ -978,6 +978,11 @@
 .hmis-composite-check > summary { font-weight:600; padding:5px 0; }
 .hmis-check-description { white-space:normal; min-width:240px; max-width:420px; }
 @media print { .hmis-check-link { display:none; } .hmis-composite-check > div { display:block !important; } }
+
+.hmis-server-pages { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 0; font-size:12px; }
+.hmis-server-pages .hmis-btn { color:white; background:#073f36; }
+.hmis-facility-search { display:flex; gap:6px; flex-wrap:wrap; }
+@media print { .hmis-server-pages,.hmis-facility-search { display:none !important; } }
 </style>
 
 
@@ -1170,7 +1175,7 @@
 
 
 
-    <div class="hmis-period-banner">
+    <p class="hmis-filter-hint">Large detail lists are paged to keep this dashboard responsive. Expand and search controls apply to the rows shown; Previous / Next loads more records. Totals and rates use the full selection.</p><div class="hmis-period-banner">
 
         <span><strong>Selected reporting period:</strong> {{ period_range }}</span>
 
@@ -1213,13 +1218,13 @@
 <td class="{% if row.missing_count %}hmis-missing{% endif %}">{{ row.missing_count }}</td><td>{{ row.rate_display }}{% if row.rate != None %}<progress class="hmis-progress" value="{{ row.rate }}" max="100" aria-label="Reporting completeness for {{ row.period }}">{{ row.rate_display }}</progress>{% endif %}</td>
 </tr>{% empty %}<tr><td colspan="5">No reporting periods are available.</td></tr>{% endfor %}</tbody>
 </table></div>
-<div class="hmis-report-tools"><label for="missingReportSearch" class="visually-hidden">Search facilities with missing reports</label><input id="missingReportSearch" class="hmis-search" type="search" placeholder="Find a missing report by facility, province or month"><button type="button" class="hmis-btn" id="expandMissingReports">Expand all</button><button type="button" class="hmis-btn" id="collapseMissingReports">Collapse all</button></div><p id="missingReportStatus" role="status" class="hmis-filter-hint" aria-live="polite"></p>{% for row in reporting_rows %}{% if row.missing_count %}
+{% with pager=reporting_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}<div class="hmis-report-tools"><label for="missingReportSearch" class="visually-hidden">Search facilities with missing reports</label><input id="missingReportSearch" class="hmis-search" type="search" placeholder="Search missing reports on this page"><button type="button" class="hmis-btn" id="expandMissingReports">Expand all</button><button type="button" class="hmis-btn" id="collapseMissingReports">Collapse all</button></div><p id="missingReportStatus" role="status" class="hmis-filter-hint" aria-live="polite"></p>{% for row in reporting_rows %}{% if row.missing_count %}
 <div class="hmis-report-detail" data-period="{{ row.period }}">
 <button type="button" class="hmis-missing" aria-expanded="false" >{{ row.period }} — {{ row.missing_count }} facilities with no recorded report ▾</button>
 <div {% if not print_all_mode %}hidden{% endif %}><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Scrollable results table"><table class="hmis-table">
 <thead><tr><th>Province</th><th>District</th><th>Facility</th><th>Group</th></tr></thead><tbody>
 {% for facility in row.missing %}<tr class="missing-facility-row"><td>{{ facility.prov }}</td><td>{{ facility.dist }}</td><td class="text-left">{{ facility.hf }}</td><td>{{ facility.group }}</td></tr>{% endfor %}
-</tbody></table></div></div></div>
+</tbody></table></div>{% with pager=row.missing_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}</div></div>
 {% endif %}{% endfor %}
 </section>
 <section class="hmis-card hmis-anchor" id="hmis-impact">
@@ -1229,9 +1234,9 @@
 <div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Facility impact indicators"><table class="hmis-table">
 <thead><tr><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
 <tbody>{% for row in impact.rows %}<tr><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}<br><small>{{ row.denominator_label }}</small></td><td><strong>{{ row.rate_display }}</strong></td><td>{{ row.unit }}</td><td>{{ row.matched }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
-{% for row in impact.rows %}{% if row.issues %}<details class="hmis-composite-check hmis-more" id="impact-check-{{ row.code }}"><summary>{{ row.label }} — facility follow-up</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Follow-up for {{ row.label }}"><table class="hmis-table"><thead><tr><th>Facility</th><th>Month</th><th>Death count</th><th>Birth denominator</th><th>Issue</th><th>Suggested action</th><th>Calculation treatment</th></tr></thead><tbody>{% for issue in row.issues %}<tr><td>{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td>{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}{% endfor %}
+{% for row in impact.rows %}{% if row.issues %}<details class="hmis-composite-check hmis-more" id="impact-check-{{ row.code }}"><summary>{{ row.label }} — facility follow-up</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Follow-up for {{ row.label }}"><table class="hmis-table"><thead><tr><th>Facility</th><th>Month</th><th>Death count</th><th>Birth denominator</th><th>Issue</th><th>Suggested action</th><th>Calculation treatment</th></tr></thead><tbody>{% for issue in row.issues %}<tr><td>{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td>{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div>{% with pager=row.issue_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}</details>{% endif %}{% endfor %}
 <details class="hmis-more" id="hmisImpactMethod"><summary>Formulas and interpretation</summary><p>{{ impact.note }}</p><ul>{% for row in impact.rows %}<li><strong>{{ row.label }}:</strong> {{ row.formula }}</li>{% endfor %}</ul><p>The maternal measure is a live-birth ratio. It is not a mortality rate among women of reproductive age, a case-fatality rate among admitted mothers, or a rate per deliveries. The source data must use consistent maternal and neonatal death definitions.</p></details>
-<details class="hmis-more" id="hmisImpactMonthly"><summary>View monthly impact indicators</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Monthly impact indicators"><table class="hmis-table"><thead><tr><th>Month</th><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Data check</th></tr></thead><tbody>{% for row in impact.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.unit }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View details</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">No impact-indicator records are available for this selection.</td></tr>{% endfor %}</tbody></table></div></details>
+<details class="hmis-more" id="hmisImpactMonthly"><summary>View monthly impact indicators</summary><div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Monthly impact indicators"><table class="hmis-table"><thead><tr><th>Month</th><th>Indicator</th><th>Death count</th><th>Matched birth denominator</th><th>Rate / ratio</th><th>Unit</th><th>Data check</th></tr></thead><tbody>{% for row in impact.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.unit }}</td><td class="text-left">{{ row.status }}{% if row.issues %}<br><a class="hmis-check-link" href="#impact-check-{{ row.code }}" data-composite-check="impact-check-{{ row.code }}">View details</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">No impact-indicator records are available for this selection.</td></tr>{% endfor %}</tbody></table></div>{% with pager=impact.monthly_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}</details>
 </section>
 
 <section class="hmis-card hmis-anchor" id="hmis-composites">
@@ -1249,7 +1254,7 @@
 <summary>{{ row.label }} — {{ row.issue_count }} facility-month check{{ row.issue_count|pluralize }}</summary>
 <div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Facility follow-up for {{ row.label }}">
 <table class="hmis-table"><thead><tr><th>Facility</th><th>Month</th><th>Indicator count</th><th>Newborn Alive</th><th>What needs checking?</th><th>Suggested action</th><th>Calculation treatment</th></tr></thead>
-<tbody>{% for issue in row.issues %}<tr><td class="text-left">{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td class="text-left">{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div>
+<tbody>{% for issue in row.issues %}<tr><td class="text-left">{{ issue.facility }}</td><td>{{ issue.period }}</td><td>{{ issue.numerator_display }}</td><td>{{ issue.denominator_display }}</td><td class="text-left hmis-check-description">{{ issue.reason }}</td><td class="text-left hmis-check-description">{{ issue.action }}</td><td class="text-left">{{ issue.calculation_status }}</td></tr>{% endfor %}</tbody></table></div>{% with pager=row.issue_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}
 </details>{% endif %}{% endfor %}
 </div>
 <p class="hmis-filter-hint">“Missing” means no value is available in the imported data; it does not confirm that the facility failed to submit a report. Check the source report before changing values.</p>
@@ -1261,7 +1266,7 @@
 <div class="hmis-table-wrap" tabindex="0" role="region" aria-label="Monthly newborn composite indicators">
 <table class="hmis-table"><thead><tr><th>Month</th><th>Indicator</th><th>Numerator</th><th>Newborn Alive</th><th>Percentage</th><th>Matched facility-months</th><th>Data check</th></tr></thead>
 <tbody>{% for row in composite.monthly %}<tr><td>{{ row.period }}</td><td class="text-left">{{ row.label }}</td><td>{{ row.numerator_display }}</td><td>{{ row.denominator_display }}</td><td>{{ row.rate_display }}</td><td>{{ row.matched }}</td><td class="text-left {% if row.warning %}hmis-missing{% endif %}">{{ row.status }}{% if row.issues %}<br><a href="#composite-check-{{ row.code }}" class="hmis-check-link" data-composite-check="composite-check-{{ row.code }}">View facility and month details ({{ row.issue_count }})</a>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="7">No newborn indicator records match the selected location and dates.</td></tr>{% endfor %}</tbody></table></div>
+{% empty %}<tr><td colspan="7">No newborn indicator records match the selected location and dates.</td></tr>{% endfor %}</tbody></table></div>{% with pager=composite.monthly_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}
 </details></section>
 
     {% if all_hmis_indicator_cards %}
@@ -1366,7 +1371,7 @@
 
 
         <div class="hmis-section hmis-anchor" id="hmis-results">
-<h2 class="hmis-section-title">Detailed results</h2>
+<h2 class="hmis-section-title">Detailed results</h2><p class="hmis-section-note">Detail rows use server-side pages. KPI totals and rates include the full filtered selection. Use Excel for complete filtered detail exports.</p>
 
             <p class="hmis-section-note">
 
@@ -1440,7 +1445,7 @@
 
                     </table>
 
-                </div>
+                </div>{% with pager=monthly_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}
 
             </div>
 
@@ -1496,7 +1501,7 @@
 
                     </table>
 
-                </div>
+                </div>{% with pager=province_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}
 
             </div>
 
@@ -1506,9 +1511,9 @@
 
                 <div class="hmis-table-tools">
 
-                    <input id="facilitySearch" class="hmis-search" type="search" placeholder="Search province, facility, or group...">
+                    <form method="get" action="#hmis-results" class="hmis-facility-search"><input type="hidden" name="detail_tab" value="facility-panel">{% for key,value in facility_search_params %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}<input type="search" name="facility_search" value="{{ facility_search }}" class="hmis-search" placeholder="Search all facility results by name or province" aria-label="Search all facility results"><button class="hmis-btn" type="submit">Search</button></form>
 
-                    <span id="facilityCount" class="hmis-table-count"></span>
+                    <span class="hmis-table-count">{{ facility_pager.total }} facility result{{ facility_pager.total|pluralize }}</span>
 
                 </div>
 
@@ -1582,15 +1587,7 @@
 
                 </div>
 
-                <div class="hmis-pagination">
-
-                    <button id="facilityPrev" type="button">Previous</button>
-
-                    <span id="facilityPage"></span>
-
-                    <button id="facilityNext" type="button">Next</button>
-
-                </div>
+{% with pager=facility_pager %}{% if pager.pages > 1 %}<nav class="hmis-server-pages" aria-label="Result pages">{% if pager.previous %}<a class="hmis-btn" href="{{ pager.previous }}">Previous</a>{% endif %}<span>Rows {{ pager.start }}–{{ pager.end }} of {{ pager.total }} · Page {{ pager.number }} of {{ pager.pages }}</span>{% if pager.next %}<a class="hmis-btn" href="{{ pager.next }}">Next</a>{% endif %}</nav>{% endif %}{% endwith %}
 
             </div>
 
@@ -1760,7 +1757,7 @@
             section.hidden=matches===0; count+=matches;
             if(term&&matches) expandReport(section,true);
         });
-        missingStatus.textContent=count.toLocaleString()+" missing facility-month reports"+(term ? " match your search" : " in this selection");
+        missingStatus.textContent=count.toLocaleString()+" missing facility-month reports shown on this page"+(term ? " match your search" : " in this selection");
     }
     missingSearch.addEventListener("input",findMissingReports); findMissingReports();
     // Print every selected result, including collapsed extra cards and missing reports.
@@ -2105,105 +2102,17 @@
         if(event.key==='End') next=resultTabs.length-1;
         if(next!==undefined) { event.preventDefault(); resultTabs[next].focus(); resultTabs[next].click(); }
     }));
-    const searchInput = document.getElementById("facilitySearch");
-
-    const allRows = Array.from(document.querySelectorAll("#facilityTable tbody .facility-row"));
-
-    const prevButton = document.getElementById("facilityPrev");
-
-    const nextButton = document.getElementById("facilityNext");
-
-    const pageLabel = document.getElementById("facilityPage");
-
-    const countLabel = document.getElementById("facilityCount");
-
-    const pageSize = 25;
-
-    let currentPage = 1;
-
-
-
-    function filteredFacilityRows() {
-
-        const term = searchInput ? searchInput.value.trim().toLowerCase() : "";
-
-        if (!term) return allRows;
-
-        return allRows.filter(row => row.textContent.toLowerCase().includes(term));
-
+    const initialTab=document.querySelector('[data-tab="{{ detail_active_tab|escapejs }}"]');
+    if(initialTab) initialTab.click();
+    const anchor=window.location.hash.slice(1);
+    const anchoredDetail=document.getElementById(anchor);
+    if(anchoredDetail && anchoredDetail.tagName==='DETAILS') anchoredDetail.open=true;
+    if(anchor==='hmis-impact') document.getElementById('hmisImpactMonthly').open=true;
+    if(anchor==='hmis-composites') document.getElementById('hmisCompositeMonthly').open=true;
+    const missingParams=new URLSearchParams(window.location.search);
+    if(Array.from(missingParams.keys()).some(key=>key.startsWith('missing_'))) {
+        document.querySelectorAll('.hmis-report-detail').forEach(section=>expandReport(section,true));
     }
-
-
-
-    function renderFacilityRows() {
-
-        if (!allRows.length) return;
-
-        const rows = filteredFacilityRows();
-
-        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-
-        currentPage = Math.min(Math.max(currentPage, 1), totalPages);
-
-        const start = (currentPage - 1) * pageSize;
-
-        const end = start + pageSize;
-
-        allRows.forEach(row => { row.style.display = "none"; });
-
-        rows.slice(start, end).forEach(row => { row.style.display = "table-row"; });
-
-        if (pageLabel) pageLabel.textContent = "Page " + currentPage + " of " + totalPages;
-
-        if (countLabel) countLabel.textContent = rows.length.toLocaleString() + " facilities";
-
-        if (prevButton) prevButton.disabled = currentPage <= 1;
-
-        if (nextButton) nextButton.disabled = currentPage >= totalPages;
-
-    }
-
-
-
-    if (searchInput) {
-
-        searchInput.addEventListener("input", function () {
-
-            currentPage = 1;
-
-            renderFacilityRows();
-
-        });
-
-    }
-
-    if (prevButton) {
-
-        prevButton.addEventListener("click", function () {
-
-            currentPage -= 1;
-
-            renderFacilityRows();
-
-        });
-
-    }
-
-    if (nextButton) {
-
-        nextButton.addEventListener("click", function () {
-
-            currentPage += 1;
-
-            renderFacilityRows();
-
-        });
-
-    }
-
-    renderFacilityRows();
-
-
 
 })();
 
