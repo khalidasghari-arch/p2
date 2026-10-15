@@ -568,21 +568,53 @@ class HMISDashboardFilterMixin:
             return list(objects), info
         return list(page.object_list), info
 
-    def _paged_detail_tables(self, request, queryset, cards, selected, complete=False):
-        """Aggregate only the geography/month groups displayed on this page."""
+    def _paged_detail_tables(self, request, queryset, cards, selected, complete=False, charts=(), catalogue=()):
+        """Reuse monthly chart totals; query only the opened geography tab."""
         codes = [card['indicator_code'] for card in cards]
         indexes = {code: index for index,code in enumerate(codes)}
         output = {'detailed_indicator_count':len(cards)}
         search = request.GET.get('facility_search','').strip()[:200]
+        requested_tab=request.GET.get('detail_tab')
+        active=(requested_tab if requested_tab in ('monthly-panel','province-panel','facility-panel') else
+                'facility-panel' if search or request.GET.get('facility_page') else
+                'province-panel' if request.GET.get('province_page') else 'monthly-panel')
+        output['detail_active_tab']=active
+        params=request.GET.copy()
+        params.pop('print',None)
+        params.pop('export',None)
+        params['detail_tab']='monthly-panel'
+        output['monthly_tab_url']='?'+params.urlencode()+'#hmis-results'
+        output['monthly_loaded']=True
+        # The trend query already computed these exact sums. Do not aggregate them twice.
+        labels=charts[0]['labels'] if charts else []
+        chart_values={card['indicator_code']: chart['datasets'][0]['data']
+                      for card,chart in zip(cards,charts)}
+        period_lookup={self._period_label(row['periodcode']):row['periodcode'] for row in catalogue}
+        monthly=[]
+        for index,label in enumerate(labels):
+            values=[chart_values[code][index] for code in codes]
+            monthly.append(dict(period=label,periodcode=period_lookup.get(label,label),raw_values=values,
+                indicator_values=[dict(raw=value,display=self._number_display(value)) for value in values]))
+        output['detailed_monthly_rows'],output['monthly_pager']=self._page(
+            request,monthly,'monthly_page',24,'hmis-results',complete)
         for kind, fields, size in (
-            ('monthly',('periodcode',),24),
             ('province',('prov',),25),
             ('facility',('prov','hf','hiva_hfs'),25)):
+            params=request.GET.copy()
+            params.pop('print',None)
+            params.pop('export',None)
+            params['detail_tab']=kind+'-panel'
+            output[kind+'_tab_url']='?'+params.urlencode()+'#hmis-results'
+            loaded=complete or active==kind+'-panel'
+            output[kind+'_loaded']=loaded
+            if not loaded:
+                output['detailed_'+kind+'_rows']=[]
+                continue
             scope = queryset
             if kind == 'facility' and search and not complete:
                 scope = scope.filter(Q(hf__icontains=search)|Q(prov__icontains=search))
             groups = scope.order_by().values(*fields)
-            if kind != 'monthly' and selected in indexes:
+            if selected in indexes:
                 groups = groups.annotate(sort_total=Sum('value',filter=Q(indicator_code=selected))).order_by(
                     F('sort_total').desc(nulls_last=True),*fields)
             else:
@@ -593,7 +625,14 @@ class HMISDashboardFilterMixin:
             condition = Q(pk__in=[])
             for key in keys:
                 condition |= Q(**dict(zip(fields,key)))
-            detail_scope = scope if complete else scope.filter(condition)
+            # An indexed facility predicate bounds the OR groups before aggregation.
+            # Retain the exact tuple predicate so historical province/group changes do not merge.
+            if complete:
+                detail_scope=scope
+            elif kind=='facility':
+                detail_scope=scope.filter(hf__in=[key[1] for key in keys]).filter(condition)
+            else:
+                detail_scope=scope.filter(prov__in=[key[0] for key in keys])
             grouped = detail_scope.order_by().values(*fields,'indicator_code').annotate(
                 total=Sum('value'), nonblank=Count('value'))
             for record in grouped.iterator(chunk_size=1000):
@@ -604,9 +643,7 @@ class HMISDashboardFilterMixin:
                     rows[key]['raw_values'][index] = float(record['total']) if record['nonblank'] and record['total'] is not None else None
             for key,row in rows.items():
                 row['indicator_values'] = [dict(raw=value,display=self._number_display(value)) for value in row['raw_values']]
-                if kind == 'monthly':
-                    row.update(periodcode=key[0],period=self._period_label(key[0]))
-                elif kind == 'province':
+                if kind == 'province':
                     row['province']=key[0] or 'Not specified'
                 else:
                     row.update(province=key[0] or 'Not specified',facility=key[1] or 'Not specified',
@@ -616,10 +653,6 @@ class HMISDashboardFilterMixin:
         output['facility_search']=search
         output['facility_search_params']=[(key,value) for key,values in request.GET.lists()
             if key not in ('facility_search','facility_page','detail_tab','print','export') for value in values]
-        requested_tab=request.GET.get('detail_tab')
-        output['detail_active_tab']=(requested_tab if requested_tab in ('monthly-panel','province-panel','facility-panel') else
-                                    'facility-panel' if search or request.GET.get('facility_page') else
-                                    'province-panel' if request.GET.get('province_page') else 'monthly-panel')
         return output
 
     def _screen_details(self, request, reporting, composite, impact, complete=False):
@@ -686,7 +719,7 @@ class HMISDashboardFilterMixin:
             params=request.GET.copy()
             params.pop('print',None)
             return HttpResponseRedirect(request.path+'?'+params.urlencode())
-        data.update(self._paged_detail_tables(request,facts,cards,first,complete=for_print))
+        data.update(self._paged_detail_tables(request,facts,cards,first,complete=for_print,charts=charts,catalogue=catalogue))
         expected = sum(r['expected'] for r in reporting)
         reported = sum(r['reported'] for r in reporting)
         data['kpis'].insert(0, dict(label='Monthly Reporting Completeness',

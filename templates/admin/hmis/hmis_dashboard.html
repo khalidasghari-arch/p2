@@ -1379,17 +1379,17 @@
 
                 charts appear in each tab below. The chart headings and the three table
 
-                headings are generated from the same HMISFact indicator catalogue.
+                headings are generated from the same HMISFact indicator catalogue. Province and facility results load when you open their tab.
 
             </p>
 
             <div class="hmis-tabs" role="tablist" aria-label="Detailed results grouping">
 
-                <button class="hmis-tab-button active" type="button" role="tab" aria-selected="true" aria-controls="monthly-panel" data-tab="monthly-panel">Monthly Results</button>
+                <button class="hmis-tab-button active" type="button" role="tab" aria-selected="true" aria-controls="monthly-panel" data-tab="monthly-panel" data-url="{{ monthly_tab_url }}" data-loaded="{% if monthly_loaded %}true{% else %}false{% endif %}">Monthly Results</button>
 
-                <button class="hmis-tab-button" type="button" role="tab" aria-selected="false" aria-controls="province-panel" data-tab="province-panel">Province Results</button>
+                <button class="hmis-tab-button" type="button" role="tab" aria-selected="false" aria-controls="province-panel" data-tab="province-panel" data-url="{{ province_tab_url }}" data-loaded="{% if province_loaded %}true{% else %}false{% endif %}">Province Results</button>
 
-                <button class="hmis-tab-button" type="button" role="tab" aria-selected="false" aria-controls="facility-panel" data-tab="facility-panel">Facility Results</button>
+                <button class="hmis-tab-button" type="button" role="tab" aria-selected="false" aria-controls="facility-panel" data-tab="facility-panel" data-url="{{ facility_tab_url }}" data-loaded="{% if facility_loaded %}true{% else %}false{% endif %}">Facility Results</button>
 
             </div>
 
@@ -2077,6 +2077,12 @@
 
         button.addEventListener("click", function () {
 
+            if (button.dataset.loaded === 'false') {
+                button.disabled=true;
+                button.textContent='Loading results…';
+                window.location.assign(button.dataset.url);
+                return;
+            }
             document.querySelectorAll(".hmis-tab-button").forEach(item => { item.classList.remove("active"); item.setAttribute("aria-selected","false"); });
 
             document.querySelectorAll(".hmis-tab-panel").forEach(item => item.classList.remove("active"));
