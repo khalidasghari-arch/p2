@@ -3780,8 +3780,10 @@ class CSectionSafeSurgeryAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 # Facility Admin
 # ============================================================
 
+from .facility_dashboard import FacilityDashboardMixin
+
 @admin.register(Facility)
-class FacilityAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+class FacilityAdmin(FacilityDashboardMixin, ProvinceRestrictedAdminMixin, admin.ModelAdmin):
     list_display = [
         "id", "get_province", "districtfk", "name", "hfcode",
         "facilitytypefk", "skilllab", "aim", "aimphase", "safesurgery",
