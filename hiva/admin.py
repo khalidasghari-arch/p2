@@ -111,6 +111,8 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from decimal import Decimal
+from .models import HQIPProgressDashboard
+from .hqip_progress import progress_context, export_progress
 
 # ============================================================
 # Admin Branding
@@ -6697,6 +6699,19 @@ class HQIPAssessmentDashboardAdmin(
                 worksheet.column_dimensions[column_letter].width = min(
                     max(max_length + 2, 12), 45
                 )
+
+@admin.register(HQIPProgressDashboard)
+class HQIPProgressDashboardAdmin(HQIPAssessmentDashboardAdmin):
+    """Reuse established scoring, permissions and province restrictions."""
+    def changelist_view(self, request, extra_context=None):
+        data = progress_context(self, request)
+        if request.GET.get('export') == 'excel':
+            return export_progress(data)
+        context = {**self.admin_site.each_context(request), **data,
+                   'title': 'HQIP assessment progress', 'opts': self.model._meta,
+                   'has_view_permission': True, 'request': request}
+        return TemplateResponse(request, 'admin/hiva/hqip_progress_dashboard.html', context)
+    
 @admin.register(HQIPContentDashboard)
 class HQIPContentDashboardAdmin(
     ProvinceRestrictedAdminMixin,

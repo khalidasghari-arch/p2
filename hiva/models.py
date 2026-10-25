@@ -306,6 +306,13 @@ class HQIPAssessmentDashboard(HQIPAssessmentHeader):
         verbose_name = "HQIP DASHBOARD"
         verbose_name_plural = "HQIP DASHBOARD"
 
+# Append below HQIPAssessmentHeader in hiva/models.py.
+class HQIPProgressDashboard(HQIPAssessmentHeader):
+    class Meta:
+        proxy = True
+        verbose_name = 'HQIP PROGRESS DASHBOARD'
+        verbose_name_plural = 'HQIP PROGRESS DASHBOARD'
+
 class HQIPContentDashboard(HQIPAssessmentHeader):
     """Read-only proxy used for the detailed HQIP content dashboard."""
 
