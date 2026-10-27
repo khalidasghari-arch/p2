@@ -78,7 +78,7 @@ def progress_context(admin, request):
               {'key':'section','title':'Progress by section','label':'Sections','detail':True,'rows':[]},
               {'key':'standard','title':'Progress by standard','label':'Standards','detail':True,'rows':[]},
               {'key':'criterion','title':'Progress by verification criterion','label':'Verification criteria','detail':True,'rows':[]}]
-    data = {**detail_options,'assessment_rows':[],'narrative_rows':[],'criterion_evidence':[], 'filters':filters, 'province_options':provinces,'district_options':districts,
+    data = {**detail_options,'assessment_rows':[],'narrative_rows':[],'narrative_max_facilities':1,'criterion_evidence':[], 'filters':filters, 'province_options':provinces,'district_options':districts,
             'type_options':facility_types,'facility_options':facilities,'area_options':areas,
             'round_options':rounds,'selected_rounds':selected_rounds,'selected_count':len(selected_rounds),
             'all_rounds_mode':not requested,'round_coverage':[], 'chart_payload':{'rounds':selected_rounds,'groups':[]},'baseline':baseline,'comparison':comparison,'errors':errors,
@@ -164,11 +164,15 @@ def progress_context(admin, request):
         gain = admin._hqip_change(values[-1], values[0]) if len(values)>1 else None
         criterion_group['rows'].append({'id':cid,'name':' / '.join([ref['area'],ref['section'],ref['standard'],ref['criterion']]),
                 'values':values,'baseline':values[0],'comparison':values[-1],'gain':gain,
-                'facilities':max(e['facilities'] for e in evidence),'evidence':evidence})
+                'facilities':max(e['facilities'] for e in evidence),'evidence':evidence,'decline':gain is not None and gain<0})
     criterion_group['rows'].sort(key=lambda r:r['name'])
     thematic = groups[0]['rows']
     data['largest_gain'] = max(thematic,key=lambda r:r['gain']) if thematic and len(selected_rounds)>1 else None
     data['highest_score'] = max(thematic,key=lambda r:r['comparison']) if thematic else None
+    for group in groups:
+        for row in group['rows']:
+            row['scores']=[{'round':r['name'],'round_id':r['id'],'value':value,'width':str(value or 0),
+                            'index':i} for i,(r,value) in enumerate(zip(selected_rounds,row['values']))]
     data['chart_payload'] = {'rounds':selected_rounds,'groups':[{'key':g['key'],'title':g['title'],'rows':[{k:r[k] for k in ('id','name','values')} for r in g['rows']]} for g in groups],'overall':overall_values}
     return data
 
@@ -195,7 +199,7 @@ def export_progress(data):
         for r in group['rows']: sheet.append([r['name']]+r['values']+[r['gain'],r['facilities']])
     for title,key,columns in [
         ('Assessment details','assessment_rows',('round','province','district','facility_type','facility','area','start_date','end_date','assessor','team','implementor','rca','last_updated','comparison_status')),
-        ('Assessment narrative','narrative_rows',('round','narrative','team_entries','assessors','implementors')),
+        ('Assessment narrative','narrative_rows',('round','narrative','team_entries','assessors','implementors','facilities','headers','rca_yes','rca_no','rca_unspecified','team_entered','team_missing','team_percent')),
         ('Criteria evidence','criterion_evidence',('area','section','standard','criterion_id','criterion','round','yes','no','na','missing','applicable','score','facilities')),
     ]:
         sheet=wb.create_sheet(title);sheet.append([c.replace('_',' ').title() for c in columns])
@@ -293,5 +297,14 @@ def assessment_details(headers, rounds):
               f"{sum(x['rca']=='No' for x in items)} and not recorded in {sum(x['rca']=='Not recorded' for x in items)}. "
               f"Assessment team information was missing in {missing} headers. "
               f"Start or end dates were missing in {sum(not x['start_date'] or not x['end_date'] for x in items)} headers.")
-        narratives.append({'round':r['name'],'narrative':text,'team_entries':teams,'assessors':assessors,'implementors':implementors})
-    return {'assessment_rows':rows,'narrative_rows':narratives}
+        narratives.append({'round':r['name'],'narrative':text,'team_entries':teams,'assessors':assessors,'implementors':implementors,
+            'facilities':len({x['facility_id'] for x in items}),'headers':len(items),
+            'rca_yes':sum(x['rca']=='Yes' for x in items),'rca_no':sum(x['rca']=='No' for x in items),
+            'rca_unspecified':sum(x['rca']=='Not recorded' for x in items),
+            'team_entered':len(items)-missing,'team_missing':missing,
+            'team_percent':round(100*(len(items)-missing)/len(items),2),
+            'team_width':str(100*(len(items)-missing)/len(items)),
+            'rca_yes_width':str(100*sum(x['rca']=='Yes' for x in items)/len(items)),
+            'rca_no_width':str(100*sum(x['rca']=='No' for x in items)/len(items)),
+            'rca_unspecified_width':str(100*sum(x['rca']=='Not recorded' for x in items)/len(items))})
+    return {'assessment_rows':rows,'narrative_rows':narratives,'narrative_max_facilities':max([n['facilities'] for n in narratives]+[1])}
