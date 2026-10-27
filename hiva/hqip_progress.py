@@ -44,7 +44,7 @@ def progress_context(admin, request):
         lines = HQIPAssessment.objects.filter(header__in=headers, criteriafk__standardfk__sectionfk__areafk_id=F('header__areafk_id'))
         if key != 'section' and filters['section']: lines = lines.filter(criteriafk__standardfk__sectionfk_id=filters['section'])
         if key == 'criterion' and filters['standard']: lines = lines.filter(criteriafk__standardfk_id=filters['standard'])
-        detail_options[key+'_options'] = options(lines,path)
+        detail_options[key+'_options'] = sort_hierarchy(options(lines,path), key)
         # Apply earlier choices to dependent option lists; full selection below.
         if filters[key]:
             headers = headers.filter(pk__in=lines.filter(**{path+'_id':filters[key]}).values('header_id'))
@@ -165,7 +165,10 @@ def progress_context(admin, request):
         criterion_group['rows'].append({'id':cid,'name':' / '.join([ref['area'],ref['section'],ref['standard'],ref['criterion']]),
                 'values':values,'baseline':values[0],'comparison':values[-1],'gain':gain,
                 'facilities':max(e['facilities'] for e in evidence),'evidence':evidence,'decline':gain is not None and gain<0})
-    criterion_group['rows'].sort(key=lambda r:r['name'])
+    for group in groups:
+        if group['key'] in ('section','standard','criterion'):
+            sort_hierarchy(group['rows'], group['key'])
+    data['criterion_evidence'] = [e for row in criterion_group['rows'] for e in row['evidence']]
     thematic = groups[0]['rows']
     data['largest_gain'] = max(thematic,key=lambda r:r['gain']) if thematic and len(selected_rounds)>1 else None
     data['highest_score'] = max(thematic,key=lambda r:r['comparison']) if thematic else None
@@ -308,3 +311,33 @@ def assessment_details(headers, rounds):
             'rca_no_width':str(100*sum(x['rca']=='No' for x in items)/len(items)),
             'rca_unspecified_width':str(100*sum(x['rca']=='Not recorded' for x in items)/len(items))})
     return {'assessment_rows':rows,'narrative_rows':narratives,'narrative_max_facilities':max([n['facilities'] for n in narratives]+[1])}
+
+
+def natural_key(value):
+    """Numeric-aware code/name order, including Unicode digits and dotted codes."""
+    import re
+    import unicodedata
+    text=unicodedata.normalize('NFKC',str(value or '')).strip().casefold()
+    return tuple((1,int(part)) if part.isdecimal() else (0,part) for part in re.split(r'(\d+)',text) if part)
+
+
+def sort_hierarchy(rows, level):
+    """Keep siblings in code order within their actual FK hierarchy."""
+    from .models import Section,Standards,Criteria
+    model={'section':Section,'standard':Standards,'criterion':Criteria}[level]
+    related={'section':'areafk','standard':'sectionfk__areafk','criterion':'standardfk__sectionfk__areafk'}[level]
+    objects=model.objects.filter(pk__in=[row['id'] for row in rows]).select_related(related)
+    def component(obj):
+        if obj is None:return (natural_key(''),natural_key(''),0)
+        return (natural_key(getattr(obj,'shortname','') or obj.name),natural_key(obj.name),obj.pk)
+    ranks={}
+    for obj in objects:
+        if level=='section':chain=[obj.areafk,obj]
+        elif level=='standard':chain=[getattr(obj.sectionfk,'areafk',None),obj.sectionfk,obj]
+        else:
+            standard=obj.standardfk
+            section=getattr(standard,'sectionfk',None)
+            chain=[getattr(section,'areafk',None),section,standard,obj]
+        ranks[obj.pk]=tuple(component(parent) for parent in chain)
+    rows.sort(key=lambda row:ranks.get(row['id'],(component(None),)))
+    return rows
