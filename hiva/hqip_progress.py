@@ -78,7 +78,12 @@ def progress_context(admin, request):
               {'key':'section','title':'Progress by section','label':'Sections','detail':True,'rows':[]},
               {'key':'standard','title':'Progress by standard','label':'Standards','detail':True,'rows':[]},
               {'key':'criterion','title':'Progress by verification criterion','label':'Verification criteria','detail':True,'rows':[]}]
-    data = {**detail_options,'assessment_rows':[],'narrative_rows':[],'narrative_max_facilities':1,'criterion_evidence':[], 'filters':filters, 'province_options':provinces,'district_options':districts,
+    valid_tabs={'thematic','province','facility_type','facility','section','standard','criterion','cross','narration'}
+    active_tab=request.GET.get('active_tab','thematic')
+    if active_tab not in valid_tabs:active_tab='thematic'
+    full_export=request.GET.get('export')=='excel'
+    loaded_tabs=sorted(valid_tabs) if full_export else [active_tab]
+    data = {'active_tab':active_tab,'loaded_tabs':loaded_tabs,**detail_options,'assessment_rows':[],'narrative_rows':[],'narrative_max_facilities':1,'criterion_evidence':[], 'filters':filters, 'province_options':provinces,'district_options':districts,
             'type_options':facility_types,'facility_options':facilities,'area_options':areas,
             'round_options':rounds,'selected_rounds':selected_rounds,'selected_count':len(selected_rounds),
             'cross_level':request.GET.get('cross_level','thematic') if request.GET.get('cross_level','thematic') in ('thematic','section','standard','criterion') else 'thematic',
@@ -91,7 +96,7 @@ def progress_context(admin, request):
     if errors:
         return data
     selected = headers.filter(assessmenttype_id__in=[r['id'] for r in selected_rounds])
-    data.update(assessment_details(selected,selected_rounds))
+    if full_export or active_tab=='narration':data.update(assessment_details(selected,selected_rounds))
     raw = admin._hqip_standard_rows(selected)
     if filters['section']:raw = [r for r in raw if str(r['section_id'])==filters['section']]
     if filters['standard']:raw = [r for r in raw if str(r['standard_id'])==filters['standard']]
@@ -129,7 +134,7 @@ def progress_context(admin, request):
     data['baseline_score'], data['comparison_score'] = overall_values[0], overall_values[-1]
     data['gain'] = admin._hqip_change(data['comparison_score'],data['baseline_score']) if len(selected_rounds)>1 else None
     for group in groups:
-        if group['key']=='criterion':continue
+        if group['key']=='criterion' or group['key'] not in loaded_tabs:continue
         key = 'area' if group['key']=='thematic' else group['key']
         buckets = defaultdict(lambda:defaultdict(list))
         names = {}
@@ -146,7 +151,7 @@ def progress_context(admin, request):
                                   'values':values,'baseline_width':str(av or 0),'comparison_width':str(bv or 0),
                                   'facilities':len({r['facility_id'] for r in buckets[gid][baseline['id']]}),
                                   'decline':gain is not None and gain<0})
-    criterion_rows = criterion_counts(selected, filters, matched)
+    criterion_rows = criterion_counts(selected, filters, matched) if 'criterion' in loaded_tabs else []
     cbuckets = defaultdict(dict)
     for row in criterion_rows:
         cbuckets[row['criterion_id']][row['round_id']] = row
@@ -177,7 +182,8 @@ def progress_context(admin, request):
         for row in group['rows']:
             row['scores']=[{'round':r['name'],'round_id':r['id'],'value':value,'width':str(value or 0),
                             'index':i} for i,(r,value) in enumerate(zip(selected_rounds,row['values']))]
-    data.update(build_cross_comparison(admin,selected,kept,meta,filters,selected_rounds,matched,data['cross_level'],request.GET.get('cross_item','')))
+    if 'cross' in loaded_tabs:
+        data.update(build_cross_comparison(admin,selected,kept,meta,filters,selected_rounds,matched,data['cross_level'],request.GET.get('cross_item','')))
     data['chart_payload'] = {'rounds':selected_rounds,'groups':[{'key':g['key'],'title':g['title'],'rows':[{k:r[k] for k in ('id','name','values')} for r in g['rows']]} for g in groups],'overall':overall_values}
     return data
 
@@ -408,34 +414,45 @@ def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,
     """The same content ID within a single facility type, split by province/round."""
     from .models import Facility
     from django.db.models import F
-    if level=='criterion':
-        source=criterion_counts(headers,filters,matched,by_facility=True)
-        source=[{**row,**meta[row['facility_id']]} for row in source]
-    else:
-        source=[row for rows in kept.values() for row in rows]
+    common=[row for rows in kept.values() for row in rows]
     key='area' if level=='thematic' else level
+    provinces={row['province_id']:{'id':row['province_id'],'name':row['province']} for row in common}
+    kinds={row['facility_type_id']:{'id':row['facility_type_id'],'name':row['facility_type']} for row in common}
     items={}
-    provinces={}
-    kinds={}
-    for row in source:
-        iid=row[key+'_id']
-        parts=[row['area']]
-        if level in ('section','standard','criterion'):parts.append(row['section'])
-        if level in ('standard','criterion'):parts.append(row['standard'])
-        if level=='criterion':parts.append(row['criterion'])
-        items[iid]={'id':iid,'name':' / '.join(parts)}
-        provinces[row['province_id']]={'id':row['province_id'],'name':row['province']}
-        kinds[row['facility_type_id']]={'id':row['facility_type_id'],'name':row['facility_type']}
+    if level=='criterion':
+        # Load lightweight criterion identities, not every criterion/facility/round aggregate.
+        from .models import HQIPAssessment
+        from django.db.models import Q
+        catalog=HQIPAssessment.objects.filter(header__in=headers,criteriafk__standardfk__sectionfk__areafk_id=F('header__areafk_id'))
+        for fkey,path in (('section','criteriafk__standardfk__sectionfk_id'),('standard','criteriafk__standardfk_id'),('criterion','criteriafk_id')):
+            if filters.get(fkey):catalog=catalog.filter(**{path:filters[fkey]})
+        by_area=defaultdict(set)
+        for fid,aid in matched:by_area[aid].add(fid)
+        condition=Q(pk__in=[])
+        for aid,fids in by_area.items():condition |= Q(header__areafk_id=aid,header__facilityfk_id__in=fids)
+        for cid,area,section,standard,name in catalog.filter(condition).order_by().values_list('criteriafk_id','criteriafk__standardfk__sectionfk__areafk__name','criteriafk__standardfk__sectionfk__name','criteriafk__standardfk__name','criteriafk__name').distinct():
+            items[cid]={'id':cid,'name':' / '.join([area,section,standard,name])}
+    else:
+        for row in common:
+            parts=[row['area']]
+            if level in ('section','standard'):parts.append(row['section'])
+            if level=='standard':parts.append(row['standard'])
+            items[row[key+'_id']]={'id':row[key+'_id'],'name':' / '.join(parts)}
     item_options=list(items.values())
     if level in ('section','standard','criterion'):sort_hierarchy(item_options,level)
     else:item_options.sort(key=lambda r:natural_key(r['name']))
     province_options=sorted(provinces.values(),key=lambda r:natural_key(r['name']))
-    # Invalid item choices fail closed rather than widening the requested comparison.
     item_id=int(selected_item) if selected_item.isdigit() else None
     if selected_item and item_id not in items:
         return {'cross_types':[],'cross_provinces':province_options,'cross_item_options':item_options,'cross_item':selected_item,'cross_notice':'This comparison item is unavailable under the current filters. Choose All items.'}
     chosen=[r for r in item_options if item_id is None or r['id']==item_id]
-    if item_id is not None:source=[row for row in source if row[key+'_id']==item_id]
+    if level=='criterion':
+        query_filters={**filters}
+        if item_id is not None:query_filters['criterion']=str(item_id)
+        source=criterion_counts(headers,query_filters,matched,by_facility=True)
+        source=[{**row,**meta[row['facility_id']]} for row in source]
+    else:
+        source=common if item_id is None else [row for row in common if row[key+'_id']==item_id]
     facility_meta={r['id']:r for r in Facility.objects.filter(pk__in={row['facility_id'] for row in source}).values('id','name',province_id=F('districtfk__provincefk_id'),province=F('districtfk__provincefk__name'))}
     buckets=defaultdict(list);facility_buckets=defaultdict(list);facility_members=defaultdict(set)
     for row in source:
