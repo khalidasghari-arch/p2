@@ -327,10 +327,9 @@ def sort_hierarchy(rows, level):
     model={'section':Section,'standard':Standards,'criterion':Criteria}[level]
     related={'section':'areafk','standard':'sectionfk__areafk','criterion':'standardfk__sectionfk__areafk'}[level]
     objects=model.objects.filter(pk__in=[row['id'] for row in rows]).select_related(related)
-    def component(obj):
-        if obj is None:return (natural_key(''),natural_key(''),0)
-        return (natural_key(getattr(obj,'shortname','') or obj.name),natural_key(obj.name),obj.pk)
+    component=tool_component
     ranks={}
+    labels={}
     for obj in objects:
         if level=='section':chain=[obj.areafk,obj]
         elif level=='standard':chain=[getattr(obj.sectionfk,'areafk',None),obj.sectionfk,obj]
@@ -339,5 +338,50 @@ def sort_hierarchy(rows, level):
             section=getattr(standard,'sectionfk',None)
             chain=[getattr(section,'areafk',None),section,standard,obj]
         ranks[obj.pk]=tuple(component(parent) for parent in chain)
+        levels=('Thematic area','Section','Standard','Verification criterion')
+        labels[obj.pk]=[{'level':label,'text':parent.name} for label,parent in zip(levels,chain) if parent is not None]
     rows.sort(key=lambda row:ranks.get(row['id'],(component(None),)))
+    for row in rows:row['hierarchy']=labels.get(row['id'],[])
     return rows
+
+
+def tool_sequence(value, named_section=False):
+    """Read explicit tool numbers, including SECTION ONE/FOUR and Roman labels."""
+    import re
+    import unicodedata
+    text=unicodedata.normalize('NFKC',str(value or '')).strip().casefold()
+    if not text:return None
+    words={'one':1,'first':1,'two':2,'second':2,'three':3,'third':3,'four':4,'fourth':4,
+           'five':5,'fifth':5,'six':6,'sixth':6,'seven':7,'seventh':7,'eight':8,'eighth':8,
+           'nine':9,'ninth':9,'ten':10,'tenth':10,'eleven':11,'eleventh':11,'twelve':12,
+           'twelfth':12,'thirteen':13,'thirteenth':13,'fourteen':14,'fourteenth':14,
+           'fifteen':15,'fifteenth':15,'sixteen':16,'sixteenth':16,'seventeen':17,
+           'seventeenth':17,'eighteen':18,'eighteenth':18,'nineteen':19,'nineteenth':19,
+           'twenty':20,'twentieth':20}
+    roman={'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10,
+           'xi':11,'xii':12,'xiii':13,'xiv':14,'xv':15,'xvi':16,'xvii':17,'xviii':18,'xix':19,'xx':20}
+    match=re.match(r'^section\s*[:.\-]?\s+([a-z]+|\d+)(?=\W|$)',text)
+    if match:
+        token=match.group(1)
+        if token.isdecimal():return (int(token),)
+        if token in words:return (words[token],)
+        if token in roman:return (roman[token],)
+    if named_section:return None
+    # Numeric/dotted prefixes in descriptions, or numeric components in short codes.
+    match=re.match(r'^(?:(?:standard|criterion|criteria)\s*[:.\-]?\s*)?(\d+(?:[.\-]\d+)*)',text)
+    if match:return tuple(int(n) for n in re.findall(r'\d+',match.group(1)))
+    return None
+
+
+def tool_component(obj):
+    """Prefer explicit section sequence; otherwise use numeric codes/name prefixes."""
+    if obj is None:return (2,(),natural_key(''),0)
+    import re
+    code=(getattr(obj,'shortname','') or '').strip()
+    sequence=tool_sequence(obj.name,named_section=True)
+    if sequence is None and code:
+        sequence=tool_sequence(code)
+        if sequence is None and re.search(r'\d',code):sequence=tuple(int(n) for n in re.findall(r'\d+',code))
+    if sequence is None:sequence=tool_sequence(obj.name)
+    if sequence is not None:return (0,sequence,natural_key(obj.name),obj.pk)
+    return (1,natural_key(code or obj.name),natural_key(obj.name),obj.pk)
