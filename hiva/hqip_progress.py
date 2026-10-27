@@ -81,7 +81,8 @@ def progress_context(admin, request):
     data = {**detail_options,'assessment_rows':[],'narrative_rows':[],'narrative_max_facilities':1,'criterion_evidence':[], 'filters':filters, 'province_options':provinces,'district_options':districts,
             'type_options':facility_types,'facility_options':facilities,'area_options':areas,
             'round_options':rounds,'selected_rounds':selected_rounds,'selected_count':len(selected_rounds),
-            'all_rounds_mode':not requested,'round_coverage':[], 'chart_payload':{'rounds':selected_rounds,'groups':[]},'baseline':baseline,'comparison':comparison,'errors':errors,
+            'cross_level':request.GET.get('cross_level','thematic') if request.GET.get('cross_level','thematic') in ('thematic','section','standard','criterion') else 'thematic',
+            'cross_types':[],'cross_provinces':[],'cross_item_options':[],'cross_item':'','all_rounds_mode':not requested,'round_coverage':[], 'chart_payload':{'rounds':selected_rounds,'groups':[]},'baseline':baseline,'comparison':comparison,'errors':errors,
             'groups':groups,'baseline_score':None,'comparison_score':None,'gain':None,
             'matched_facilities':0,'matched_pairs':0,'excluded_baseline_pairs':0,'excluded_comparison_pairs':0,
             'baseline_headers':0,'comparison_headers':0,'duplicate_header_groups':0,
@@ -176,6 +177,7 @@ def progress_context(admin, request):
         for row in group['rows']:
             row['scores']=[{'round':r['name'],'round_id':r['id'],'value':value,'width':str(value or 0),
                             'index':i} for i,(r,value) in enumerate(zip(selected_rounds,row['values']))]
+    data.update(build_cross_comparison(admin,selected,kept,meta,filters,selected_rounds,matched,data['cross_level'],request.GET.get('cross_item','')))
     data['chart_payload'] = {'rounds':selected_rounds,'groups':[{'key':g['key'],'title':g['title'],'rows':[{k:r[k] for k in ('id','name','values')} for r in g['rows']]} for g in groups],'overall':overall_values}
     return data
 
@@ -190,6 +192,9 @@ def export_progress(data):
     ws.append(['HQIP assessment progress','Value'])
     for label,value in [('Baseline round',data['baseline']['name'] if data['baseline'] else ''),('Comparison round',data['comparison']['name'] if data['comparison'] else ''),('Baseline score %',data['baseline_score']),('Comparison score %',data['comparison_score']),('Gain (percentage points)',data['gain']),('Matched facilities',data['matched_facilities']),('Matched facility-thematic pairs',data['matched_pairs']),('Excluded baseline pairs',data['excluded_baseline_pairs']),('Excluded comparison pairs',data['excluded_comparison_pairs']),('Repeated facility-area-round header groups',data['duplicate_header_groups']),('Scoring',data['methodology']),('Coverage','Only facility-thematic pairs with applicable scores in all selected rounds are compared. Underlying standards may differ. Repeated headers are pooled following the existing dashboard.'),('Source','MNHIMS')]:
         ws.append([label,value])
+    ws.append(['Cross-province comparison level',data['cross_level']])
+    ws.append(['Cross-province item',data['cross_item'] or 'All items'])
+    if data.get('cross_notice'):ws.append(['Cross-province notice',data['cross_notice']])
     ws.append(['Selected rounds', ' | '.join(r['name'] for r in data['selected_rounds'])])
     ws.append(['Round mode', 'All available rounds (includes new rounds)' if data['all_rounds_mode'] else 'Selected rounds only'])
     for r in data['round_coverage']:
@@ -214,6 +219,18 @@ def export_progress(data):
                 if hasattr(value,'utcoffset') and value.utcoffset() is not None:value=value.isoformat()
                 values.append(value)
             sheet.append(values)
+    cross_sheet=wb.create_sheet('Cross province scores')
+    cross_sheet.append(['Level','Facility type','Item','Province','Round','Score %','Facilities with applicable scores','YES','NO','N/A','Missing score'])
+    facility_sheet=wb.create_sheet('Cross facility details')
+    facility_sheet.append(['Level','Facility type','Item','Province','Facility','Round','Score %','YES','NO','N/A','Missing score'])
+    for kind in data['cross_types']:
+        for item in kind['items']:
+            for province in item['provinces']:
+                for point in province['points']:
+                    cross_sheet.append([data['cross_level'],kind['name'],item['name'],province['name'],point['round'],point['value'],point['facilities'],point['yes'],point['no'],point['na'],point['missing']])
+            for facility in item['facilities']:
+                for point in facility['points']:
+                    facility_sheet.append([data['cross_level'],kind['name'],item['name'],facility['province'],facility['name'],point['round'],point['value'],point['yes'],point['no'],point['na'],point['missing']])
     header_font=Font(name='Calibri',bold=True,color='FFFFFF'); body=Font(name='Calibri',size=11,color='173C35')
     green=PatternFill('solid',fgColor='083D33'); pale=PatternFill('solid',fgColor='F0F7F4')
     for sheet in wb:
@@ -235,7 +252,7 @@ def export_progress(data):
     return response
 
 
-def criterion_counts(headers, filters, matched):
+def criterion_counts(headers, filters, matched, by_facility=False):
     """SQL aggregates; unknown scores follow the existing ID-based rules."""
     from .models import HQIPAssessment
     from .admin import SCORE_YES_ID, SCORE_NO_ID, SCORE_NA_ID
@@ -256,7 +273,7 @@ def criterion_counts(headers, filters, matched):
             'standard_id':'criteriafk__standardfk_id','standard':'criteriafk__standardfk__name',
             'criterion_id':'criteriafk_id','criterion':'criteriafk__name'}
     # When filtering a single criterion, facility-level rows are needed for cohort matching.
-    if not filters.get('criterion') or matched is not None:
+    if not by_facility and (not filters.get('criterion') or matched is not None):
         fields.pop('facility_id');fields.pop('facility')
         fields.pop('province_id');fields.pop('province')
     rows=qs.order_by().values(**{key:F(path) for key,path in fields.items()}).annotate(
@@ -385,3 +402,68 @@ def tool_component(obj):
     if sequence is None:sequence=tool_sequence(obj.name)
     if sequence is not None:return (0,sequence,natural_key(obj.name),obj.pk)
     return (1,natural_key(code or obj.name),natural_key(obj.name),obj.pk)
+
+
+def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,selected_item):
+    """The same content ID within a single facility type, split by province/round."""
+    from .models import Facility
+    from django.db.models import F
+    if level=='criterion':
+        source=criterion_counts(headers,filters,matched,by_facility=True)
+        source=[{**row,**meta[row['facility_id']]} for row in source]
+    else:
+        source=[row for rows in kept.values() for row in rows]
+    key='area' if level=='thematic' else level
+    items={}
+    provinces={}
+    kinds={}
+    for row in source:
+        iid=row[key+'_id']
+        parts=[row['area']]
+        if level in ('section','standard','criterion'):parts.append(row['section'])
+        if level in ('standard','criterion'):parts.append(row['standard'])
+        if level=='criterion':parts.append(row['criterion'])
+        items[iid]={'id':iid,'name':' / '.join(parts)}
+        provinces[row['province_id']]={'id':row['province_id'],'name':row['province']}
+        kinds[row['facility_type_id']]={'id':row['facility_type_id'],'name':row['facility_type']}
+    item_options=list(items.values())
+    if level in ('section','standard','criterion'):sort_hierarchy(item_options,level)
+    else:item_options.sort(key=lambda r:natural_key(r['name']))
+    province_options=sorted(provinces.values(),key=lambda r:natural_key(r['name']))
+    # Invalid item choices fail closed rather than widening the requested comparison.
+    item_id=int(selected_item) if selected_item.isdigit() else None
+    if selected_item and item_id not in items:
+        return {'cross_types':[],'cross_provinces':province_options,'cross_item_options':item_options,'cross_item':selected_item,'cross_notice':'This comparison item is unavailable under the current filters. Choose All items.'}
+    chosen=[r for r in item_options if item_id is None or r['id']==item_id]
+    if item_id is not None:source=[row for row in source if row[key+'_id']==item_id]
+    facility_meta={r['id']:r for r in Facility.objects.filter(pk__in={row['facility_id'] for row in source}).values('id','name',province_id=F('districtfk__provincefk_id'),province=F('districtfk__provincefk__name'))}
+    buckets=defaultdict(list);facility_buckets=defaultdict(list);facility_members=defaultdict(set)
+    for row in source:
+        buckets[(row['facility_type_id'],row[key+'_id'],row['province_id'],row['round_id'])].append(row)
+        facility_buckets[(row['facility_type_id'],row[key+'_id'],row['facility_id'],row['round_id'])].append(row)
+        facility_members[(row['facility_type_id'],row[key+'_id'])].add(row['facility_id'])
+    def point(rows,rd):
+        counts={k:sum(row[k] for row in rows) for k in ('yes','no','na','missing','applicable')}
+        value=admin._pct(counts['yes'],counts['applicable']) if level=='criterion' else admin._hqip_rollup_from_standard_rows(rows)['overall_percent'] if rows else None
+        return {'round':rd['name'],'round_id':rd['id'],'value':value,'width':str(value or 0),
+                'alpha':str(.07+(value or 0)*.003),'facilities':len({row['facility_id'] for row in rows if row['applicable']}),**counts}
+    result=[]
+    for kind in sorted(kinds.values(),key=lambda r:natural_key(r['name'])):
+        group={**kind,'items':[]}
+        for item in chosen:
+            row={**item,'provinces':[],'facilities':[]}
+            present=False
+            for province in province_options:
+                points=[point(buckets[(kind['id'],item['id'],province['id'],rd['id'])],rd) for rd in rounds]
+                present |= any(p['yes']+p['no']+p['na']+p['missing'] for p in points)
+                row['provinces'].append({**province,'points':points,'gain':admin._hqip_change(points[-1]['value'],points[0]['value']) if len(points)>1 else None})
+            if not present:continue
+            facility_ids=facility_members[(kind['id'],item['id'])]
+            for fid in sorted(facility_ids,key=lambda pk:(natural_key(facility_meta[pk]['province']),natural_key(facility_meta[pk]['name']),pk)):
+                fm=facility_meta[fid]
+                points=[point(facility_buckets[(kind['id'],item['id'],fid,rd['id'])],rd) for rd in rounds]
+                row['facilities'].append({**fm,'points':points})
+            group['items'].append(row)
+        if group['items']:result.append(group)
+    return {'cross_types':result,'cross_provinces':province_options,'cross_item_options':item_options,
+            'cross_item':selected_item,'cross_notice':''}
