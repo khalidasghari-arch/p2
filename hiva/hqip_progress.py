@@ -87,7 +87,7 @@ def progress_context(admin, request):
             'type_options':facility_types,'facility_options':facilities,'area_options':areas,
             'round_options':rounds,'selected_rounds':selected_rounds,'selected_count':len(selected_rounds),
             'cross_level':request.GET.get('cross_level','thematic') if request.GET.get('cross_level','thematic') in ('thematic','section','standard','criterion') else 'thematic',
-            'cross_types':[],'cross_provinces':[],'cross_item_options':[],'cross_item':'','all_rounds_mode':not requested,'round_coverage':[], 'chart_payload':{'rounds':selected_rounds,'groups':[]},'baseline':baseline,'comparison':comparison,'errors':errors,
+            'cross_types':[],'cross_provinces':[],'cross_item_options':[],'cross_item':'','cross_q':'','cross_pagination':None,'all_rounds_mode':not requested,'round_coverage':[], 'chart_payload':{'rounds':selected_rounds,'groups':[]},'baseline':baseline,'comparison':comparison,'errors':errors,
             'groups':groups,'baseline_score':None,'comparison_score':None,'gain':None,
             'matched_facilities':0,'matched_pairs':0,'excluded_baseline_pairs':0,'excluded_comparison_pairs':0,
             'baseline_headers':0,'comparison_headers':0,'duplicate_header_groups':0,
@@ -183,7 +183,14 @@ def progress_context(admin, request):
             row['scores']=[{'round':r['name'],'round_id':r['id'],'value':value,'width':str(value or 0),
                             'index':i} for i,(r,value) in enumerate(zip(selected_rounds,row['values']))]
     if 'cross' in loaded_tabs:
-        data.update(build_cross_comparison(admin,selected,kept,meta,filters,selected_rounds,matched,data['cross_level'],request.GET.get('cross_item','')))
+        data.update(build_cross_comparison(admin,selected,kept,meta,filters,selected_rounds,matched,data['cross_level'],request.GET.get('cross_item',''),request.GET.get('cross_page','1'),request.GET.get('cross_q','')))
+        pager=data.get('cross_pagination')
+        if pager and pager['enabled']:
+            def page_link(number):
+                query=request.GET.copy();query['active_tab']='cross';query['cross_page']=str(number);query.pop('export',None)
+                return '?'+query.urlencode()
+            pager['previous_url']=page_link(pager['page']-1) if pager['page']>1 else ''
+            pager['next_url']=page_link(pager['page']+1) if pager['page']<pager['pages'] else ''
     data['chart_payload'] = {'rounds':selected_rounds,'groups':[{'key':g['key'],'title':g['title'],'rows':[{k:r[k] for k in ('id','name','values')} for r in g['rows']]} for g in groups],'overall':overall_values}
     return data
 
@@ -200,6 +207,9 @@ def export_progress(data):
         ws.append([label,value])
     ws.append(['Cross-province comparison level',data['cross_level']])
     ws.append(['Cross-province item',data['cross_item'] or 'All items'])
+    if data.get('cross_pagination') and data['cross_pagination']['enabled']:
+        p=data['cross_pagination'];ws.append(['Cross-province sheets scope',f"Page {p['page']} of {p['pages']}: criteria {p['start']}–{p['end']} of {p['total']} matching criteria. Other analysis sheets retain their normal scope."])
+    if data.get('cross_q'):ws.append(['Cross-province search',data['cross_q']])
     if data.get('cross_notice'):ws.append(['Cross-province notice',data['cross_notice']])
     ws.append(['Selected rounds', ' | '.join(r['name'] for r in data['selected_rounds'])])
     ws.append(['Round mode', 'All available rounds (includes new rounds)' if data['all_rounds_mode'] else 'Selected rounds only'])
@@ -272,6 +282,7 @@ def criterion_counts(headers, filters, matched, by_facility=False):
         condition=Q(pk__in=[])
         for aid,facilities in by_area.items():condition |= Q(header__areafk_id=aid,header__facilityfk_id__in=facilities)
         qs=qs.filter(condition)
+    if filters.get('_criterion_ids') is not None:qs=qs.filter(criteriafk_id__in=filters['_criterion_ids'])
     fields={'facility_id':'header__facilityfk_id','facility':'header__facilityfk__name','round_id':'header__assessmenttype_id',
             'province_id':'header__facilityfk__districtfk__provincefk_id','province':'header__facilityfk__districtfk__provincefk__name',
             'area_id':'criteriafk__standardfk__sectionfk__areafk_id','area':'criteriafk__standardfk__sectionfk__areafk__name',
@@ -353,6 +364,7 @@ def sort_hierarchy(rows, level):
     component=tool_component
     ranks={}
     labels={}
+    search_text={}
     for obj in objects:
         if level=='section':chain=[obj.areafk,obj]
         elif level=='standard':chain=[getattr(obj.sectionfk,'areafk',None),obj.sectionfk,obj]
@@ -362,9 +374,12 @@ def sort_hierarchy(rows, level):
             chain=[getattr(section,'areafk',None),section,standard,obj]
         ranks[obj.pk]=tuple(component(parent) for parent in chain)
         levels=('Thematic area','Section','Standard','Verification criterion')
+        search_text[obj.pk]=' '.join(str(getattr(parent,'shortname','') or '')+' '+str(parent.name) for parent in chain if parent is not None)
         labels[obj.pk]=[{'level':label,'text':parent.name} for label,parent in zip(levels,chain) if parent is not None]
     rows.sort(key=lambda row:ranks.get(row['id'],(component(None),)))
-    for row in rows:row['hierarchy']=labels.get(row['id'],[])
+    for row in rows:
+        row['hierarchy']=labels.get(row['id'],[])
+        row['search_text']=search_text.get(row['id'],row['name'])
     return rows
 
 
@@ -410,7 +425,7 @@ def tool_component(obj):
     return (1,natural_key(code or obj.name),natural_key(obj.name),obj.pk)
 
 
-def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,selected_item):
+def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,selected_item,page='1',search=''):
     """The same content ID within a single facility type, split by province/round."""
     from .models import Facility
     from django.db.models import F
@@ -445,10 +460,20 @@ def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,
     item_id=int(selected_item) if selected_item.isdigit() else None
     if selected_item and item_id not in items:
         return {'cross_types':[],'cross_provinces':province_options,'cross_item_options':item_options,'cross_item':selected_item,'cross_notice':'This comparison item is unavailable under the current filters. Choose All items.'}
+    search=search.strip()[:200]
     chosen=[r for r in item_options if item_id is None or r['id']==item_id]
+    if search and item_id is None:chosen=[r for r in chosen if search.casefold() in r.get('search_text',r['name']).casefold()]
+    total=len(chosen);enabled=level=='criterion' and item_id is None
+    size=10 if enabled else max(total,1)
+    pages=max(1,(total+size-1)//size)
+    number=min(max(int(page) if page.isdigit() else 1,1),pages) if enabled else 1
+    chosen=chosen[(number-1)*size:number*size]
+    pager={'enabled':enabled,'total':total,'catalog_total':len(item_options),'page':number,'pages':pages,'size':size,
+           'start':(number-1)*size+1 if total else 0,'end':min(number*size,total)}
     if level=='criterion':
         query_filters={**filters}
         if item_id is not None:query_filters['criterion']=str(item_id)
+        else:query_filters['_criterion_ids']=[row['id'] for row in chosen]
         source=criterion_counts(headers,query_filters,matched,by_facility=True)
         source=[{**row,**meta[row['facility_id']]} for row in source]
     else:
@@ -483,4 +508,4 @@ def build_cross_comparison(admin,headers,kept,meta,filters,rounds,matched,level,
             group['items'].append(row)
         if group['items']:result.append(group)
     return {'cross_types':result,'cross_provinces':province_options,'cross_item_options':item_options,
-            'cross_item':selected_item,'cross_notice':''}
+            'cross_item':selected_item,'cross_q':search,'cross_pagination':pager,'cross_notice':''}
