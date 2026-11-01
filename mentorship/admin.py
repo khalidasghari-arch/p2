@@ -1199,26 +1199,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "mentorshipvistfk__visitdate",
             "id",
         )
-        mentee_ids = list(
-            detail_records.exclude(menteename_id__isnull=True)
-            .values_list("menteename_id", flat=True)
-            .distinct()
-        )
-        topic_status_map = {}
-        if mentee_ids:
-            status_rows = MenteeTopicStatus.objects.filter(
-                mentee_id__in=mentee_ids
-            ).values(
-                "mentee_id",
-                "topic_id",
-                "status",
-                "consecutive_ls",
-                "last_session_type",
-                "last_date",
-                "competent_date",
-            )
-            for s in status_rows:
-                topic_status_map[(s["mentee_id"], s["topic_id"])] = s
         def safe_text(value):
             return str(value).strip() if value is not None else ""
         def get_gender_text(value):
@@ -1277,9 +1257,6 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 profile["competent_topics"].add(topic_name)
             if d.mc:
                 profile["mc_topics"].add(topic_name)
-                profile["competent_topics"].add(topic_name)
-            status = topic_status_map.get((mentee.id, topic.id if topic else None))
-            if status and status.get("status") == "COMPETENT":
                 profile["competent_topics"].add(topic_name)
         mentee_profile_rows = []
         for _key, profile in mentee_profiles.items():
@@ -1615,7 +1592,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ws7.append(["LS / PC / MC interpretation", data["methodology_note"]])
         ws7.append([
             "Graduation logic",
-            "A topic is counted as competent/graduated when PC or MC is recorded, or when MenteeTopicStatus is COMPETENT.",
+            "A topic is counted as competent only when PC or MC is recorded in Mentorshipdetails within the selected filters. Saved topic status is not used. Repeated PC/MC on the same topic count once in the profile; prior LS is not required.",
         ])
         append_extension_sheets(wb, data)
         format_dashboard_workbook(wb, data)

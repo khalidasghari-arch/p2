@@ -10,7 +10,7 @@ from statistics import mean, median
 from django.conf import settings
 from django.db.models import Count, F, Q
 
-from .models import MenteeTopicStatus, MentorshipTopics, Staff
+from .models import MentorshipTopics, Staff
 from .dashboard_quality import build_quality_data
 from .dashboard_participation import build_participation_data
 from .dashboard_competency import build_competency_data
@@ -51,14 +51,13 @@ def mentor_visit_counts(details_qs):
     return {'total': len(global_keys), **{group: {bucket: len(keys) for bucket, keys in buckets.items()} for group, buckets in sets.items()}}
 
 
-def summarize_learning_history(events, selected_pairs, filters, status_map=None):
+def summarize_learning_history(events, selected_pairs, filters):
     """Count distinct LS visits before first dated PC/MC, per mentee/topic.
 
     Same-day LS/competency chronology is unknown from dates alone. Such pairs,
     and pairs with undated records, are reported but excluded from statistics.
     Duplicate detail lines in one visit count as one learning session.
     """
-    status_map = status_map or {}
     groups = defaultdict(list)
     for event in events:
         pair = (event['mentee_id'], event['topic_id'])
@@ -85,21 +84,13 @@ def summarize_learning_history(events, selected_pairs, filters, status_map=None)
                 for e in first
             ):
                 continue
-        recorded_status = status_map.get(pair, {})
-        stored_date = recorded_status.get('competent_date')
-        earlier_status_date = bool(stored_date and first_date and stored_date < first_date)
-        status_without_event = bool(recorded_status.get('status') == 'COMPETENT' and not first_date)
         missing_date = any(e['date'] is None for e in history)
         same_day = bool(first_date and any(e['ls'] and e['date'] == first_date for e in history))
         ls_visits = {
             e['visit_id'] for e in history
             if e['ls'] and e['date'] and (first_date is None or e['date'] < first_date)
         }
-        if earlier_status_date:
-            status = 'Stored competency predates PC/MC history — review required'
-        elif status_without_event:
-            status = 'Status says competent; dated PC/MC missing — review required'
-        elif missing_date:
+        if missing_date:
             status = 'Undated history — review required'
         elif same_day:
             status = 'Same-day sequence unknown — review required'
@@ -110,10 +101,8 @@ def summarize_learning_history(events, selected_pairs, filters, status_map=None)
         results.append({
             'mentee_id': pair[0], 'topic_id': pair[1],
             'first_competency_date': first_date,
-            'stored_competency_date': stored_date,
-            'current_topic_status': {'NOT_STARTED': 'Not started', 'IN_PROGRESS': 'In progress', 'COMPETENT': 'Competent'}.get(recorded_status.get('status'), 'Not recorded'),
             'learning_sessions': len(ls_visits), 'status': status,
-            'included': bool(first_date and not missing_date and not same_day and not earlier_status_date),
+            'included': bool(first_date and not missing_date and not same_day),
         })
     values = [r['learning_sessions'] for r in results if r['included']]
     return results, {
@@ -224,12 +213,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
         thematic_id=F('thematicname_id'), visit_round=F('mentorshipvistfk__visitround'),
     ).values('mentee_id', 'topic_id', 'date', 'visit_id', 'province_id',
              'facility_id', 'thematic_id', 'visit_round', 'ls', 'pc', 'mc', 'mentor_id')
-    statuses = MenteeTopicStatus.objects.filter(
-        mentee_id__in={p[0] for p in pairs}, topic_id__in={p[1] for p in pairs})
-    if not request.user.is_superuser:
-        statuses = statuses.filter(mentee__hfname__districtfk__provincefk_id=province_id) if province_id is not None else statuses.none()
-    status_map = {(r['mentee_id'], r['topic_id']): r for r in statuses.values('mentee_id', 'topic_id', 'status', 'competent_date')}
-    learning_rows, learning_stats, distribution = summarize_learning_history(history.iterator(chunk_size=2000), pairs, filters, status_map)
+    learning_rows, learning_stats, distribution = summarize_learning_history(history.iterator(chunk_size=2000), pairs, filters)
     names = {
         pk: ' '.join(part for part in (first, last) if part)
         for pk, first, last in Staff.objects.filter(pk__in={p[0] for p in pairs}).values_list('pk', 'firstname', 'lastname')
@@ -279,7 +263,7 @@ def append_extension_sheets(workbook, data):
         ('Gender', 'gender_rows', [(key.title(), key) for key in ('gender', 'mentees', 'mentor_visits', 'visits', 'records', 'ls', 'pc', 'mc')]),
         ('Thematic_Detail', 'thematic_detail_rows', [(key.title(), key) for key in ('thematic_id', 'thematic', 'mentees', 'topics', 'mentor_visits', 'visits', 'records', 'ls', 'pc', 'mc')]),
         ('Topic_Definitions', 'topic_detail_rows', [(key.title(), key) for key in ('thematic_id', 'thematic', 'topic_id', 'topic', 'definition', 'definition_language', 'mentees', 'mentor_visits', 'visits', 'records', 'ls', 'pc', 'mc')]),
-        ('Learning_To_Competency', 'learning_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'topic_id', 'topic', 'learning_sessions', 'first_competency_date', 'stored_competency_date', 'current_topic_status', 'status', 'included')]),
+        ('Learning_To_Competency', 'learning_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'topic_id', 'topic', 'learning_sessions', 'first_competency_date', 'status', 'included')]),
         ('Mentee_Professions', 'profession_rows', [(key.title(), key) for key in ('profession_id', 'profession', 'mentees', 'female', 'male', 'unspecified')]),
         ('Monthly_Mentor_Visits', 'monthly_visit_rows', [(key.title(), key) for key in ('month', 'mentor_visits', 'mentors_with_visits', 'average_actual')]),
         ('Name_Quality_Review', 'quality_rows', [(key.title(), key) for key in ('mentee_id', 'mentee', 'fathername', 'facility', 'issues', 'recorded_values', 'suggested_values')]),
@@ -324,7 +308,7 @@ def append_extension_sheets(workbook, data):
     notes.append(['Measure', 'Explanation'])
     notes.append(['Current staff status', data['mentee_status_scope_note']])
     notes.append(['Competency unit', 'Mentee-topic pair, first dated Patient Competent or Model Competent.'])
-    notes.append(['Stored competency date', 'MenteeTopicStatus.competent_date is displayed for comparison. It has no visit/mentor reference; it is not used to invent an achievement event. An earlier stored date or competent status without a dated PC/MC event triggers review and exclusion from summaries.'])
+    notes.append(['Competency evidence', 'Only PC or MC in Mentorshipdetails establishes competency. Mentee profiles use the selected activity filters. Learning-to-competency uses the first dated PC/MC in authorized history; saved topic statuses and dates are not consulted.'])
     notes.append(['MENTORSHIP VISITS / visit by mentors', 'Unique visit date + mentor name (trimmed and lowercased), matching the original visit by mentors export. Missing names/dates excluded. Group counts can overlap across facilities, topics and provinces; do not sum them to obtain the global total.'])
     notes.append(['Monthly actual averages', 'Average per participating mentor = actual visits / distinct normalized mentor names with visits in the month. No participating mentors gives a blank. Overall monthly average = actual visits / displayed months, including zero-visit months within the date range. Partial months use only selected dates.'])
     notes.append(['Health worker competency', 'Count = distinct mentees with PC OR MC in the filtered records. Repeated assessments and mentees with both PC/MC count once. Percentage = distinct mentees with both LS and PC/MC / distinct mentees with LS, using identical filters and authorization. PC/MC-only mentees count in the first indicator but are outside the LS denominator. With no LS mentees, percentage is blank. Any achieved topic qualifies; not full curriculum competency or first-ever achievement.'])
