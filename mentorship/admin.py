@@ -69,7 +69,7 @@ class MentorshipTopicsAdmin(admin.ModelAdmin):
 class StaffAdmin(admin.ModelAdmin):
     list_display = ("id", "hfname", "tazkiranumber", "firstname", "lastname", "fathername", "position", "gender", "status")
     list_filter = ("hfname", "status", "position")
-    search_fields = ("firstname", "lastname", "tazkiranumber")
+    search_fields = ("firstname", "lastname", "tazkiranumber", "id")
 
     def _facility_id_from_popup_context(self, request):
         """
