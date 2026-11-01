@@ -577,7 +577,7 @@ MentorshipDashboardMixin, admin.ModelAdmin):
     )
 
     #list_filter = ("visitdate", "facilityfk")
-    search_fields = ("facilityfk__name", "facilityfk__hfcode")
+    search_fields = ("facilityfk__name", "facilityfk__hfcode", "id")
     readonly_fields = ("ai_recommendation",)
     list_per_page = 10
     inlines = (MentorshipdetailsInline,)
