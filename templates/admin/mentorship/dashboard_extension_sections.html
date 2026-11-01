@@ -32,7 +32,7 @@
 <p id="mxTopicNoResults" hidden>No topics match your search.</p></div></details>
 <section class="mx-section"><h2>Learning sessions before first competency</h2><p class="mx-caption">One mentee–topic pair; first recorded Patient Competent or Model Competent event.</p>
 <div class="mx-stat-grid">
-<div><span>Median LS</span><b>{{ learning_stats.median_ls|default_if_none:"—" }}</b></div><div><span>LS range</span><b>{{ learning_stats.minimum_ls|default_if_none:"—" }}–{{ learning_stats.maximum_ls|default_if_none:"—" }}</b></div><div><span>Completed pairs</span><b>{{ learning_stats.completed_pairs }}</b></div><div><span>Need review</span><b>{{ learning_stats.review_pairs }}</b></div><div><span>No dated PC/MC</span><b>{{ learning_stats.no_competency_pairs }}</b></div>
+<div><span>Median LS</span><b>{{ learning_stats.median_ls|default_if_none:"—" }}</b></div><div><span>LS range</span><b>{{ learning_stats.minimum_ls|default_if_none:"—" }}–{{ learning_stats.maximum_ls|default_if_none:"—" }}</b></div><div><span>Competent pairs with prior LS</span><b>{{ learning_stats.completed_pairs }}</b></div><div><span>Need review</span><b>{{ learning_stats.review_pairs }}</b></div><div><span>PC/MC with zero prior LS</span><b>{{ learning_stats.zero_prior_ls_pairs }}</b></div><div><span>No dated PC/MC</span><b>{{ learning_stats.no_competency_pairs }}</b></div>
 </div>
 <div class="mx-chart">{% for r in learning_distribution %}<div class="mx-chart-row"><span>{{ r.sessions }} LS before competency</span><b>{{ r.pairs }} pairs</b><div class="mx-track"><div class="mx-bar" style="width:{% widthratio r.pairs learning_stats.completed_pairs 100 %}%" role="img" aria-label="{{ r.sessions }} learning sessions: {{ r.pairs }} mentee topic pairs"></div></div></div>{% empty %}<p>No completed pairs with usable chronology.</p>{% endfor %}</div>
 <details class="mx-detail"><summary>Mentee–topic learning details <span class="mx-pill">{{ learning_rows|length }} pairs</span></summary>
@@ -42,5 +42,5 @@
 </tbody></table></div></details>
 <details class="mx-detail"><summary>How learning-to-competency is calculated</summary>
 <p>One distinct visit with LS counts once for each mentee and topic. Only LS dates before the first dated PC or MC are counted. Full authorized history includes learning before the selected start date; filters select the first competency event, not subsequent assessments.</p>
-<p>Only PC/MC recorded in Mentorshipdetails establishes competency; saved topic status and competency dates are not used. Same-day LS/competency or undated history requires review and is excluded from the statistics. Zero LS means no earlier LS was recorded; it does not prevent a recorded PC/MC from counting as competency.</p>
+<p>Only PC/MC recorded in Mentorshipdetails establishes competency; saved topic status and competency dates are not used. Same-day LS/competency or undated history requires review and is excluded from the statistics. Zero LS means no earlier LS was recorded. Such pairs remain recorded competencies but are excluded from these learning-session averages and require LS verification.</p>
 </details></section>

@@ -735,7 +735,7 @@
         </div>
         <div class="mh-note">
             <strong>Interpretation:</strong>
-            “Needs graduation / follow-up” means the mentee has LS, PC, or MC activity recorded for a topic, but the topic is not yet counted as competent/graduated based on PC or MC recorded in Mentorshipdetails under the selected filters. Saved topic status is not used.
+            “Needs graduation / follow-up” means the mentee has LS, PC, or MC activity recorded for a topic, but the topic is not yet counted as competent/graduated based on PC or MC recorded in Mentorshipdetails under the selected filters. Saved topic status is not used. Prior-LS checks use mentee/topic IDs and available authorized history through the selected end date, including earlier sessions and other facilities. Expand Learning sequence for reasons. The prior-LS and verification columns sum to recorded competent topics. Neither proves full-curriculum graduation.
         </div>
         <div class="table-scroll">
             <table class="mh-table mentee-profile-table" id="menteeProfileTable">
@@ -748,11 +748,12 @@
                         <th>Position</th>
                         <th>Gender</th>
                         <th>Topics</th>
-                        <th>LS Count</th>
-                        <th>PC Count</th>
-                        <th>MC Count</th>
-                        <th>Competent</th>
-                        <th>Needs Graduation</th>
+                        <th>Topics with LS</th>
+                        <th>Topics with PC</th>
+                        <th>Topics with MC</th>
+                        <th>Recorded competent topics</th>
+                        <th>Topics awaiting competency</th>
+                        <th>Competent with prior LS</th><th>Competent needing LS verification</th><th>Learning sequence</th>
                         <th>LS Topics</th>
                         <th>PC Topics</th>
                         <th>MC Topics</th>
@@ -783,6 +784,9 @@
                                     <span class="badge badge-green">0</span>
                                 {% endif %}
                             </td>
+                            <td><span class="badge badge-green">{{ r.competent_prior_ls_count }}</span></td>
+                            <td>{% if r.competent_verify_ls_count %}<span class="badge badge-orange">{{ r.competent_verify_ls_count }}</span>{% else %}0{% endif %}</td>
+                            <td class="topic-list-cell">{% if r.competency_sequence_text %}<details class="mh-topic-list"><summary>Review {{ r.competent_count }} topics</summary>{{ r.competency_sequence_text|linebreaksbr }}</details>{% else %}—{% endif %}</td>
                             <td class="topic-list-cell">
                                 {% if r.ls_topics_text %}
                                     <details class="mh-topic-list"><summary>{{ r.ls_count }} topics</summary>{{ r.ls_topics_text|linebreaksbr }}</details>
@@ -831,7 +835,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="19">No mentee profile records found for the selected filters.</td>
+                            <td colspan="22">No mentee profile records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

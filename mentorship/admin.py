@@ -1098,7 +1098,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             elif r["competency_instances"] > r["ls"]:
                 r["interpretation"] = "Competency assessment activity was higher than LS."
             elif r["ls"] > r["competency_instances"]:
-                r["interpretation"] = "LS activity was higher; follow-up PC/MC may be needed."
+                r["interpretation"] = "More LS records than PC/MC records; review topic-level evidence. This difference is not a competency backlog."
             else:
                 r["interpretation"] = "Balanced LS and competency activity."
         facility_driver_rows = sorted(
@@ -1235,6 +1235,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                     "position": safe_text(mentee.position),
                     "gender": get_gender_text(mentee.gender),
                     "visits": set(),
+                    "topic_labels": {},
                     "topics_all": set(),
                     "ls_topics": set(),
                     "pc_topics": set(),
@@ -1249,15 +1250,17 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 if visit.visitdate:
                     if not profile["last_visit_date"] or visit.visitdate > profile["last_visit_date"]:
                         profile["last_visit_date"] = visit.visitdate
-            profile["topics_all"].add(topic_name)
+            topic_key = topic.pk if topic else None
+            profile["topic_labels"][topic_key] = topic_name
+            profile["topics_all"].add(topic_key)
             if d.ls:
-                profile["ls_topics"].add(topic_name)
+                profile["ls_topics"].add(topic_key)
             if d.pc:
-                profile["pc_topics"].add(topic_name)
-                profile["competent_topics"].add(topic_name)
+                profile["pc_topics"].add(topic_key)
+                profile["competent_topics"].add(topic_key)
             if d.mc:
-                profile["mc_topics"].add(topic_name)
-                profile["competent_topics"].add(topic_name)
+                profile["mc_topics"].add(topic_key)
+                profile["competent_topics"].add(topic_key)
         mentee_profile_rows = []
         for _key, profile in mentee_profiles.items():
             active_topics = (
@@ -1266,18 +1269,31 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 | profile["mc_topics"]
             )
             profile["needs_graduation_topics"] = active_topics - profile["competent_topics"]
-            ls_topics = sorted(profile["ls_topics"])
-            pc_topics = sorted(profile["pc_topics"])
-            mc_topics = sorted(profile["mc_topics"])
-            competent_topics = sorted(profile["competent_topics"])
-            needs_topics = sorted(profile["needs_graduation_topics"])
+            ls_topics = sorted(profile["topic_labels"][tid] for tid in profile["ls_topics"])
+            pc_topics = sorted(profile["topic_labels"][tid] for tid in profile["pc_topics"])
+            mc_topics = sorted(profile["topic_labels"][tid] for tid in profile["mc_topics"])
+            competent_topics = sorted(profile["topic_labels"][tid] for tid in profile["competent_topics"])
+            needs_topics = sorted(profile["topic_labels"][tid] for tid in profile["needs_graduation_topics"])
             needs_count = len(needs_topics)
             competent_count = len(competent_topics)
-            if needs_count > 0:
+            sequence = []
+            for tid in profile["competent_topics"]:
+                check = extensions["sequence_checks"].get((_key[0], _key[1], tid))
+                sequence.append(check or {"topic_id": tid, "topic": profile["topic_labels"][tid],
+                    "confirmed": False, "interpretation": "Missing topic/history — verify", "prior_ls_other_facility": False})
+            sequence.sort(key=lambda row: (str(row["topic"]), row["topic_id"] or 0))
+            confirmed_count = sum(row["confirmed"] for row in sequence)
+            verification = [row for row in sequence if not row["confirmed"]]
+            sequence_text = "\n".join(str(row["topic"]) + " [ID " + str(row["topic_id"]) + "]: " +
+                row["interpretation"] + ("; prior LS at another facility" if row["prior_ls_other_facility"] else "") for row in sequence)
+            if verification:
+                overall_status = "Recorded competency—LS verification required"
+                status_badge = "warning"
+            elif needs_count > 0:
                 overall_status = "Needs graduation / follow-up"
                 status_badge = "warning"
             elif competent_count > 0:
-                overall_status = "Competent / graduated"
+                overall_status = "Recorded competency with prior LS"
                 status_badge = "success"
             else:
                 overall_status = "No competency progress recorded"
@@ -1300,6 +1316,9 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "pc_count": len(pc_topics),
                 "mc_count": len(mc_topics),
                 "competent_count": competent_count,
+                "competent_prior_ls_count": confirmed_count,
+                "competent_verify_ls_count": len(verification),
+                "competency_sequence_text": sequence_text,
                 "needs_count": needs_count,
                 "ls_topics_text": "\n".join(ls_topics),
                 "pc_topics_text": "\n".join(pc_topics),
@@ -1536,11 +1555,12 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ws5.append([
             "Province", "District", "Facility", "HF Code",
             "Mentee", "Father name", "Mentee Facility", "Position", "Gender",
-            "MENTORSHIP VISITS (visit by mentors)", "Distinct visit IDs (reference)", "Topic Count", "LS Count", "PC Count", "MC Count",
+            "MENTORSHIP VISITS (visit by mentors)", "Distinct visit IDs (reference)", "Topic Count", "Topics with LS", "Topics with PC", "Topics with MC",
             "Competent Count", "Needs Graduation Count",
             "LS Topics", "PC Topics", "MC Topics",
             "Competent Topics", "Topics Needing Graduation",
             "Last Visit Date", "Overall Status",
+            "Competent topics with prior LS", "Competent topics needing LS verification", "Competency sequence details",
         ])
         for r in data["mentee_profile_rows"]:
             ws5.append([
@@ -1568,6 +1588,9 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("needs_topics_text"),
                 r.get("last_visit_date"),
                 r.get("overall_status"),
+                r.get("competent_prior_ls_count"),
+                r.get("competent_verify_ls_count"),
+                r.get("competency_sequence_text"),
             ])
         ws6 = wb.create_sheet("Story_Candidates")
         ws6.append([

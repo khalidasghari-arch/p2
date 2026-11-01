@@ -14,6 +14,7 @@ from .models import MentorshipTopics, Staff
 from .dashboard_quality import build_quality_data
 from .dashboard_participation import build_participation_data
 from .dashboard_competency import build_competency_data
+from .dashboard_sequence import build_sequence_data
 
 
 def mentor_visit_counts(details_qs):
@@ -94,15 +95,17 @@ def summarize_learning_history(events, selected_pairs, filters):
             status = 'Undated history — review required'
         elif same_day:
             status = 'Same-day sequence unknown — review required'
+        elif first_date and not ls_visits:
+            status = 'No earlier LS recorded — review required'
         elif first_date:
-            status = 'First competency recorded'
+            status = 'First competency with earlier LS recorded'
         else:
             status = 'No dated competency recorded'
         results.append({
             'mentee_id': pair[0], 'topic_id': pair[1],
             'first_competency_date': first_date,
             'learning_sessions': len(ls_visits), 'status': status,
-            'included': bool(first_date and not missing_date and not same_day),
+            'included': bool(first_date and ls_visits and not missing_date and not same_day),
         })
     values = [r['learning_sessions'] for r in results if r['included']]
     return results, {
@@ -113,6 +116,7 @@ def summarize_learning_history(events, selected_pairs, filters):
         'maximum_ls': max(values) if values else None,
         'review_pairs': sum('review required' in r['status'] for r in results),
         'no_competency_pairs': sum(not r['first_competency_date'] for r in results),
+        'zero_prior_ls_pairs': sum(bool(r['first_competency_date']) and r['learning_sessions'] == 0 for r in results),
     }, [{'sessions': n, 'pairs': count} for n, count in sorted(Counter(values).items())]
 
 
@@ -237,6 +241,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
         **quality,
         **build_competency_data(details_qs),
         **build_participation_data(request, details_qs, filters, province_id),
+        **build_sequence_data(details_qs, scoped_history_qs, filters),
         'mentor_visit_counts': visit_counts,
         'mentee_status_kpis': counts, 'facility_status_rows': facility_status,
         'mentee_status_rows': roster_rows,
@@ -314,7 +319,8 @@ def append_extension_sheets(workbook, data):
     notes.append(['Health worker competency', 'Count = distinct mentees with PC OR MC in the filtered records. Repeated assessments and mentees with both PC/MC count once. Percentage = distinct mentees with both LS and PC/MC / distinct mentees with LS, using identical filters and authorization. PC/MC-only mentees count in the first indicator but are outside the LS denominator. With no LS mentees, percentage is blank. Any achieved topic qualifies; not full curriculum competency or first-ever achievement.'])
     notes.append(['LS count', 'Distinct visits for the same mentee/topic strictly before first competency; repeated detail rows in one visit count once.'])
     notes.append(['History and filters', 'All authorized history contributes to LS counts. Filters select first achievement events, not subsequent reassessments. Earlier history outside the user province cannot be used.'])
-    notes.append(['Excluded from summaries', 'Pairs with undated history or same-day LS/competency. Zero LS means no earlier LS recorded.'])
+    notes.append(['Profile learning sequence', 'Recorded competent topics = distinct topic IDs with PC/MC in filtered activity. With-prior-LS + needing-verification = recorded competent topics. Check first PC/MC against earlier authorized LS by mentee/topic ID through selected end date; date_from, facility and mentor filters do not hide prior authorized history. Another-facility LS is flagged. No-LS, later-LS, same-day-only and undated histories require review. Profile topic counts use IDs, not labels.'])
+    notes.append(['Excluded from summaries', 'Pairs with undated history or same-day LS/competency. Zero LS means no earlier LS recorded and is excluded from LS-before-competency averages.'])
     notes.append(['Attrition (current-status proxy)', 'Inactive / (Active + Inactive) × 100. Unspecified status excluded; no exit dates or baseline cohort exist, so this is not a period dropout rate.'])
     notes.append(['Facility history', 'Same Staff ID observed in multiple authorized facilities through the selected end date. Later-facility events must match the filtered details; repeated rows are deduplicated by mentee/date/facility. Same-day multi-facility order is not inferred.'])
     notes.append(['Data quality', 'Review scope is selected current roster plus participants in matching visits. Name-case display is standardized without changing database values. Duplicate candidates are not confirmed duplicates.'])
@@ -356,9 +362,9 @@ def format_dashboard_workbook(workbook, data):
         ('Patient competent details', kpis['total_pc'], 'PC detail instances; not unique mentees.'),
         ('Model competent details', kpis['total_mc'], 'MC detail instances; not unique mentees.'),
         ('Average monthly mentorship visits', data['monthly_average_visits'], 'Total visit-by-mentors count divided by displayed months, including zero months.'),
-        ('Average LS before competency', data['learning_stats']['average_ls'], 'Distinct earlier LS visits per completed mentee–topic pair.'),
+        ('Average LS before competency', data['learning_stats']['average_ls'], 'Distinct earlier LS visits per mentee–topic pair with confirmed prior LS.'),
         ('Median LS before competency', data['learning_stats']['median_ls'], 'Only pairs with usable chronology.'),
-        ('Completed mentee–topic pairs', data['learning_stats']['completed_pairs'], 'Usable first dated PC/MC events selected by filters.'),
+        ('Competent pairs with prior LS', data['learning_stats']['completed_pairs'], 'Usable first dated PC/MC events with at least one earlier LS; selected by filters.'),
         ('Health workers with recorded competency (PC or MC)', data['competency_kpis']['competent_mentees'], 'Distinct mentees with PC OR MC under the current dashboard filters; count once even with both or repeated assessments.'),
         ('Health workers with competency among LS recipients %', data['competency_kpis']['competent_percent'], f"{data['competency_kpis']['competent_learning_mentees']} / {data['competency_kpis']['learning_mentees']} distinct LS recipients have PC or MC under the same filters. No LS recipients gives a blank."),
         ('Pairs requiring review', data['learning_stats']['review_pairs'], 'Incomplete or uncertain chronology excluded from statistics.'),
