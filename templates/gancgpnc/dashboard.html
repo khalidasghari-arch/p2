@@ -119,23 +119,139 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
 @media(max-width:500px) { .ganc-dashboard .ganc-dashboard-header { padding:18px; } .ganc-dashboard .ganc-dashboard-header h1 { font-size:21px; } .ganc-dashboard .followup-nav { gap:7px; } }
 
 </style>
+
+<style>
+/* MSH-inspired palette: green, white and charcoal; scoped to this dashboard. */
+body.ganc-workspace-page { --msh-green:#006b49; --msh-dark:#064b38; --msh-lime:#a5c84b; --msh-ink:#183c31; --msh-line:#d9e6dd; background:#f4f7f4; }
+body.ganc-workspace-page #content { width:100%; max-width:none; padding:14px 18px 24px; box-sizing:border-box; }
+body.ganc-workspace-page #content-main,body.ganc-workspace-page #main,body.ganc-workspace-page .main,body.ganc-workspace-page .content { min-width:0; max-width:none; }
+body.ganc-workspace-page #nav-sidebar,body.ganc-workspace-page #toggle-nav-sidebar { display:none; }
+body.ganc-workspace-page #main.shifted > #content { max-width:none; margin-left:0; }
+.ganc-dashboard { width:100%; max-width:none!important; margin:0!important; padding:0!important; color:#183c31; font-family:Arial,Helvetica,sans-serif; }
+.ganc-dashboard *, .ganc-dashboard *::before,.ganc-dashboard *::after { box-sizing:border-box; }
+.msh-workspace { display:grid; grid-template-columns:210px minmax(0,1fr); gap:18px; align-items:start; }
+.msh-main { min-width:0; }
+.msh-sidebar { position:sticky; top:12px; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); overflow:auto; background:#fff; border:1px solid #d9e6dd; border-radius:12px; }
+.msh-brand { display:flex; align-items:center; gap:10px; padding:18px 15px; color:#fff; background:#006b49; border-bottom:4px solid #a5c84b; }
+.msh-brand strong { display:block; font-size:18px; letter-spacing:.5px; }
+.msh-brand small { display:block; font-size:11px; color:#e5f3e8; margin-top:3px; }
+.msh-brand-mark { width:32px; height:32px; border:1px solid #ffffff80; border-radius:8px; display:grid; place-items:center; font-size:25px; }
+.msh-section-nav { display:flex; flex-direction:column; gap:3px; padding:12px 9px; }
+.msh-section-nav a { display:block; min-height:42px; padding:11px 12px; border-radius:6px; font-size:12px; line-height:1.4; color:#315848!important; text-decoration:none!important; border-left:3px solid transparent; }
+.msh-section-nav a:hover { background:#edf5ef; }
+.msh-section-nav a[aria-current="location"] { background:#e6f1e9; border-left-color:#006b49; color:#004f36!important; font-weight:700; }
+.msh-export-panel { padding:13px 12px 16px; border-top:1px solid #d9e6dd; }
+.msh-export-button,.msh-menu-toggle { appearance:none; -webkit-appearance:none; border:0; border-radius:7px; font:inherit; cursor:pointer; min-height:44px; }
+.msh-export-button { width:100%; padding:11px 9px; color:#fff; background:#006b49; font-size:12px; font-weight:700; }
+.msh-export-button:hover { background:#064b38; }
+.msh-export-button:disabled { opacity:.65; cursor:wait; }
+.msh-export-panel p,.msh-export-help,#msh-export-status { font-size:11px; line-height:1.6; color:#526b5d; margin:9px 0 0; }
+.msh-export-help summary { cursor:pointer; color:#006b49; }
+#msh-export-status { display:block; }
+.msh-menu-toggle { display:none; }
+.ganc-dashboard .ganc-section { padding:18px; border-radius:10px; border-color:#d9e6dd; box-shadow:0 2px 6px #173b3b05; margin-bottom:16px; scroll-margin-top:18px; }
+.ganc-dashboard .ganc-section h2 { font-size:18px; color:#005b3e; margin:0 0 14px; }
+.ganc-dashboard .ganc-filter-panel { margin:0 0 16px; padding:14px; border-radius:10px; border-top:3px solid #006b49; }
+.ganc-dashboard .ganc-filter-grid { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; }
+.ganc-dashboard .ganc-filter-grid select,.ganc-dashboard input[type="search"] { min-height:44px; font-size:14px; max-width:100%; background:#fff; color:#183c31; border:1px solid #c6d7cc; }
+.ganc-dashboard .ganc-filter-actions .button { min-height:44px; background:#006b49; }
+.ganc-dashboard .ganc-filter-actions a.button { background:#e8f1eb; color:#005b3e; }
+.ganc-dashboard .ganc-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px; margin-bottom:16px; }
+.ganc-dashboard .ganc-kpi-card { min-width:0; background:#fff; border:1px solid #d9e6dd; border-top:3px solid #006b49; border-radius:9px; padding:13px; }
+.ganc-dashboard .ganc-kpi-label { color:#526b5d; font-size:12px; line-height:1.4; }
+.ganc-dashboard .ganc-kpi-value { color:#183c31; font-size:27px; font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
+.ganc-dashboard .ganc-kpi-note { font-size:11px; line-height:1.5; color:#526b5d; }
+.ganc-dashboard .ganc-danger-card { border-top-color:#a33545; }
+.ganc-dashboard .ganc-risk-card { border-top-color:#bd831c; }
+.ganc-dashboard .ganc-continuum-grid,.ganc-dashboard .ganc-followup-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:10px; }
+.ganc-dashboard .ganc-stage,.ganc-dashboard .ganc-followup-card { padding:13px; border:1px solid #d9e6dd; border-radius:8px; background:#f5f9f5; }
+.ganc-dashboard .ganc-stage-count,.ganc-dashboard .ganc-followup-value { font-size:24px; font-weight:700; color:#006b49; }
+.ganc-dashboard .ganc-stage-title,.ganc-dashboard .ganc-followup-title,.ganc-dashboard .ganc-stage-percent { font-size:12px; line-height:1.5; }
+.ganc-dashboard .ganc-table-wrapper { max-width:100%; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; }
+.ganc-dashboard .ganc-table { width:100%; border-collapse:collapse; font-size:13px; }
+.ganc-dashboard .ganc-table th { background:#edf5ee; color:#005b3e; text-align:left; font-size:12px; }
+.ganc-dashboard .ganc-table th,.ganc-dashboard .ganc-table td { padding:11px 10px; border-bottom:1px solid #e0e9e2; vertical-align:top; }
+.ganc-dashboard .ganc-table tbody tr:nth-child(even) { background:#f8faf8; }
+.ganc-dashboard .ganc-two-column { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.ganc-dashboard .ganc-two-column > * { min-width:0; }
+.ganc-dashboard .ganc-chart-wrap { max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.ganc-dashboard .ganc-chart-wrap svg { max-width:100%; }
+.ganc-dashboard #gancBreastfeedingChart { min-width:0; width:100%; height:auto; }
+.ganc-dashboard .newborn-note { background:#eff6ef; border-left-color:#006b49; }
+.ganc-dashboard .chart-save,.ganc-dashboard .followup-button { min-height:44px; border-color:#c5d9ca; color:#006b49!important; }
+@media(min-width:1800px) { .msh-workspace { grid-template-columns:230px minmax(0,1fr); gap:22px; } .ganc-dashboard .ganc-kpi-grid { grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); } }
+@media(max-width:1100px) and (min-width:801px) { .msh-workspace { grid-template-columns:180px minmax(0,1fr); gap:12px; } }
+@media(max-width:800px) {
+ body.ganc-workspace-page #content { padding:10px; }
+ .msh-workspace { display:block; }
+ .msh-sidebar { position:static; max-height:none; margin-bottom:12px; }
+ .msh-brand { padding:9px 12px; border-bottom:0; }
+ .msh-brand strong { font-size:15px; }
+ .msh-brand small { display:inline; }
+ .msh-brand-mark { width:27px; height:27px; font-size:21px; }
+ .msh-menu-toggle { display:flex; width:100%; justify-content:space-between; align-items:center; padding:10px 13px; border-radius:0; background:#e8f1eb; color:#005b3e; font-size:14px; font-weight:700; }
+ .msh-sidebar-content { display:none; }
+ .msh-sidebar-content.is-open { display:block; }
+ .msh-section-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .msh-section-nav a { font-size:13px; min-height:44px; }
+ .msh-export-panel { padding:12px; }
+ .msh-export-button { max-width:320px; font-size:14px; }
+ .ganc-dashboard .ganc-section { padding:13px; }
+ .ganc-dashboard .ganc-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .ganc-dashboard .ganc-filter-grid select,.ganc-dashboard input[type="search"] { font-size:16px; }
+ .ganc-dashboard .ganc-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .ganc-dashboard .ganc-kpi-value { font-size:25px; }
+ .ganc-dashboard .ganc-two-column { grid-template-columns:1fr; gap:0; }
+ .ganc-dashboard .ganc-table { min-width:560px; }
+ .ganc-dashboard .women-table { min-width:900px; }
+ .ganc-dashboard .attendance-table { min-width:740px; }
+ .ganc-dashboard .women-tools input { width:100%; }
+ .ganc-dashboard .followup-heading { gap:8px; }
+ .ganc-dashboard .chart-toolbar { justify-content:flex-start; }
+}
+@media(max-width:360px) { .ganc-dashboard .ganc-filter-grid { grid-template-columns:1fr; } .msh-section-nav { grid-template-columns:1fr; } }
+@media(prefers-reduced-motion:reduce) { .ganc-dashboard * { scroll-behavior:auto!important; } }
+@media print { .msh-sidebar { display:none!important; } .msh-workspace { display:block; } body.ganc-workspace-page #content { padding:0; } }
+</style>
+
 {% endblock %}
+{% block bodyclass %}{{ block.super }} ganc-workspace-page{% endblock %}
 {% block content_title %}{% endblock %}
 {% block content %}
 <div class="ganc-dashboard">
+<div class="msh-workspace">
+    <aside class="msh-sidebar" aria-label="Dashboard navigation">
+        <div class="msh-brand"><span class="msh-brand-mark" aria-hidden="true">+</span><div><strong>MNHIMS</strong><small>GANC · PNC</small></div></div>
+        <button class="msh-menu-toggle" type="button" aria-expanded="false" aria-controls="msh-sidebar-content">Sections &amp; export <span aria-hidden="true">☰</span></button>
+        <div id="msh-sidebar-content" class="msh-sidebar-content">
+            <nav class="msh-section-nav" aria-label="Dashboard sections">
+                <a href="#ganc-filter-form">Filters</a>
+                <a href="#overview-kpis">Overview</a>
+                <a href="#care-continuum">Continuum of care</a>
+                <a href="#followup-required">Follow-up required</a>
+                <a href="#cohort-performance">Cohort performance</a>
+                <a href="#attendance-breakdown">Attendance &amp; women</a>
+                <a href="#anc-quality">ANC indicators</a>
+                <a href="#delivery-outcomes">Delivery &amp; newborns</a>
+                <a href="#pnc-performance">Postnatal care</a>
+                <a href="#breastfeeding-continuum">Breastfeeding</a>
+                <a href="#postnatal-mental-health">Mental health</a>
+                <a href="#family-planning">Family planning</a>
+            </nav>
+            <div class="msh-export-panel">
+                <button type="button" class="msh-export-button" id="msh-export-csv">Export all data · CSV</button>
+                <p>Opens in Excel. Includes all filtered dashboard datasets and women details, even when collapsed.</p>
+                <details class="msh-export-help"><summary>CSV format</summary><p>One value per row, with dataset, record path, field and value columns. Use these columns for filtering and pivot tables. On-screen search does not remove records from the export.</p></details>
+                <span id="msh-export-status" role="status" aria-live="polite"></span>
+            </div>
+        </div>
+    </aside>
+    <div class="msh-main">
+
     <!-- ================================================== -->
     <!-- HEADER -->
     <!-- ================================================== -->
-    <div class="ganc-dashboard-header">
-        <h1>
-            GANC/PNC Continuum of Care Dashboard
-        </h1>
-        <p class="ganc-dashboard-subtitle">
-            Strategic monitoring from enrollment through ANC,
-            delivery, maternal and newborn outcomes,
-            postnatal care, breastfeeding and family planning.
-        </p>
-    </div>
+
     <!-- ================================================== -->
     <!-- FILTERS -->
     <!-- ================================================== -->
@@ -293,10 +409,10 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
         </div>
     </form>
     <!-- ================================================== -->
-<nav class="followup-nav" aria-label="Dashboard sections"><a href="#attendance-breakdown">Attendance &amp; follow-up</a><a href="#gancContinuumChart">Continuum chart</a><a href="#anc-quality">ANC indicators</a><a href="#gancBreastfeedingChart">Breastfeeding chart</a></nav>
+
     <!-- EXECUTIVE CONTINUUM KPI -->
     <!-- ================================================== -->
-    <div class="ganc-kpi-grid">
+    <div class="ganc-kpi-grid" id="overview-kpis">
         <div class="ganc-kpi-card">
             <div class="ganc-kpi-label">
                 Enrolled Women
@@ -434,10 +550,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- CONTINUUM -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Continuum of Care
-        </h2>
+    <div class="ganc-section" id="care-continuum">
+        <h2>Continuum of Care</h2>
         <div class="ganc-continuum-grid">
             {% for stage in continuum %}
                 <div class="ganc-stage">
@@ -473,10 +587,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- FOLLOW-UP -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Follow-up Required
-        </h2>
+    <div class="ganc-section" id="followup-required">
+        <h2>Follow-up Required</h2>
         <div class="ganc-followup-grid">
             <div class="ganc-followup-card">
                 <div class="ganc-followup-title">
@@ -539,10 +651,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- COHORT PERFORMANCE -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Cohort Performance
-        </h2>
+    <div class="ganc-section" id="cohort-performance">
+        <h2>Cohort Performance</h2>
         <div class="ganc-table-wrapper">
             <table class="ganc-table">
                 <thead>
@@ -892,10 +1002,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- PNC COMPARISON -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Postnatal Care Clinical Performance
-        </h2>
+    <div class="ganc-section" id="pnc-performance">
+        <h2>Postnatal Care Clinical Performance</h2>
         <p class="newborn-note">
             Newborn breastfeeding and vaccination use the latest attended Group/Individual record per enrollment at each PNC stage.
             Newborns with a death reported by that assessment are excluded; PNC1 deaths are carried forward to PNC2.
@@ -1132,10 +1240,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- BREASTFEEDING CONTINUUM -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Breastfeeding Continuum
-        </h2>
+    <div class="ganc-section" id="breastfeeding-continuum">
+        <h2>Breastfeeding Continuum</h2>
         <div class="ganc-kpi-grid">
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">
@@ -1197,10 +1303,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- POSTNATAL MENTAL HEALTH -->
     <!-- ================================================== -->
-    <div class="ganc-section">
-        <h2>
-            Postnatal Mental Health
-        </h2>
+    <div class="ganc-section" id="postnatal-mental-health">
+        <h2>Postnatal Mental Health</h2>
         <div class="ganc-kpi-grid">
             <div class="ganc-kpi-card ganc-risk-card">
                 <div class="ganc-kpi-label">
@@ -1231,7 +1335,7 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     <!-- ================================================== -->
     <!-- FAMILY PLANNING CONTINUUM -->
     <!-- ================================================== -->
-    <div class="ganc-section">
+    <div class="ganc-section" id="family-planning">
         <h2>
             Postpartum Family Planning & Birth Spacing
         </h2>
@@ -1349,10 +1453,20 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
             </div>
         </div>
     </div>
+</div><!-- msh-main -->
+</div><!-- msh-workspace -->
 </div>
 
 
 
+{{ summary|json_script:"msh-export-summary" }}
+{{ continuum|json_script:"msh-export-continuum" }}
+{{ followup|json_script:"msh-export-followup" }}
+{{ cohort_performance|json_script:"msh-export-cohort-performance" }}
+{{ anc_quality|json_script:"msh-export-anc-quality" }}
+{{ delivery_summary|json_script:"msh-export-delivery" }}
+{{ pnc_summary|json_script:"msh-export-pnc" }}
+{{ selected_filters|json_script:"msh-export-filters" }}
 <script
     src="{% static 'gancgpnc/js/dashboard.js' %}"
 ></script>
@@ -1385,15 +1499,17 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
         add('title', {id:'newborn-chart-title'}, 'Breastfeeding among eligible alive newborns');
         add('desc', {id:'newborn-chart-description'}, describe);
         svg.setAttribute('aria-labelledby','newborn-chart-title newborn-chart-description');
-        const left = 285, width = 450;
+        const compact = svg.getBoundingClientRect().width < 620;
+        svg.setAttribute('viewBox', compact ? '0 0 560 395' : '0 0 960 320');
+        const left = compact ? 12 : 285, width = compact ? 340 : 450;
         for (let value = 0; value <= 100; value += 25) {
             const x = left + width * value / 100;
-            add('line', {x1:x, y1:38, x2:x, y2:242, stroke:'#dce7e5'});
+            add('line', {x1:x, y1:38, x2:x, y2:compact ? 310 : 242, stroke:'#dce7e5'});
             add('text', {x:x, y:25, 'text-anchor':'middle', fill:'#52666a', 'font-size':13}, `${value}%`);
         }
         rows.forEach((row, index) => {
-            const y = 65 + index * 76;
-            add('text', {x:10, y:y+5, fill:'#173b3b', 'font-size':14}, row.label);
+            const y = (compact ? 84 : 65) + index * (compact ? 94 : 76);
+            add('text', {x:10, y:compact ? y-30 : y+5, fill:'#173b3b', 'font-size':14}, row.label);
             if (!row.data.has_eligible_newborns) {
                 add('text', {x:left+12, y:y+5, fill:'#687777', 'font-size':14}, 'N/A — no eligible newborns');
                 return;
@@ -1403,8 +1519,8 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
             add('rect', {x:left, y:y-17, width:width*pct/100, height:30, rx:5, fill:'#0b8178'});
             add('text', {x:width+left+12, y:y+5, fill:'#173b3b', 'font-size':14}, `${pct.toFixed(1)}% (${row.data[row.count]}/${row.data.eligible_newborns})`);
         });
-        add('text', {x:10, y:275, fill:'#52666a', 'font-size':12}, 'Denominator: eligible alive newborns at each assessment; review exclusions may apply.');
-        add('text', {x:10, y:298, fill:'#52666a', 'font-size':12}, 'Multiple births: the recorded Yes/No response is assumed to apply to all surviving babies.');
+        add('text', {x:10, y:compact ? 340 : 275, fill:'#52666a', 'font-size':compact ? 10 : 12}, 'Denominator: eligible alive newborns at each assessment; review exclusions may apply.');
+        add('text', {x:10, y:compact ? 365 : 298, fill:'#52666a', 'font-size':compact ? 9 : 12}, 'Multiple births: the recorded Yes/No response is assumed to apply to all surviving babies.');
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderNewbornChart);
     else renderNewbornChart();
@@ -1522,6 +1638,124 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
     } finally {URL.revokeObjectURL(url);}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+
+</script>
+
+<script>
+(() => {
+    'use strict';
+    const cleanCSVValue = value => {
+        let text = value === null || value === undefined ? '' : String(value);
+        // Preserve strings as text and prevent spreadsheet formula execution.
+        if (typeof value === 'string' && /^[\s\u0000-\u001f]*[=+@-]/.test(text)) text = "'" + text;
+        return '"' + text.replace(/"/g, '""') + '"';
+    };
+    function flattenData(value, path, emit) {
+        if (Array.isArray(value)) {
+            if (!value.length) emit(path, '[]', 'array');
+            value.forEach((item, index) => flattenData(item, path.concat(String(index + 1)), emit));
+        } else if (value !== null && typeof value === 'object') {
+            const entries = Object.entries(value);
+            if (!entries.length) emit(path, '{}', 'object');
+            entries.forEach(([key, item]) => flattenData(item, path.concat(key), emit));
+        } else {
+            emit(path, value, value === null ? 'null' : typeof value);
+        }
+    }
+    function buildCSV(datasets, appliedFilters, timestamp) {
+        const lines = [['Dataset', 'Record', 'Field', 'Value', 'Value type', 'Applied filters', 'Exported UTC'].map(cleanCSVValue).join(',')];
+        Object.entries(datasets).forEach(([name, value]) => {
+            flattenData(value, [], (path, item, kind) => {
+                lines.push([name, path.slice(0, -1).join('.') || '1', path.at(-1) || 'value', item, kind, appliedFilters, timestamp].map(cleanCSVValue).join(','));
+            });
+        });
+        return '\ufeff' + lines.join('\r\n') + '\r\n';
+    }
+    function initWorkspace() {
+        const root = document.querySelector('.ganc-dashboard');
+        if (!root) return;
+        if (!document.querySelector('meta[name="viewport"]')) {
+            const meta = document.createElement('meta');
+            meta.name = 'viewport'; meta.content = 'width=device-width, initial-scale=1';
+            document.head.appendChild(meta);
+        }
+        const menu = document.getElementById('msh-sidebar-content');
+        const toggle = document.querySelector('.msh-menu-toggle');
+        const links = [...document.querySelectorAll('.msh-section-nav a')];
+        function closeMenu() { menu.classList.remove('is-open'); toggle.setAttribute('aria-expanded', 'false'); }
+        toggle.addEventListener('click', () => {
+            const open = menu.classList.toggle('is-open');
+            toggle.setAttribute('aria-expanded', String(open));
+        });
+        links.forEach(link => link.addEventListener('click', () => {
+            links.forEach(item => item.removeAttribute('aria-current'));
+            link.setAttribute('aria-current', 'location');
+            if (window.matchMedia('(max-width:800px)').matches) {
+                closeMenu();
+                const target = document.querySelector(link.hash);
+                if (target) { target.setAttribute('tabindex','-1'); target.focus({preventScroll:true}); }
+            }
+        }));
+        document.addEventListener('keydown', event => { if (event.key === 'Escape' && menu.classList.contains('is-open')) {closeMenu();toggle.focus();} });
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver(entries => {
+                entries.filter(entry => entry.isIntersecting).forEach(entry => {
+                    links.forEach(link => {
+                        if (link.hash === '#' + entry.target.id) link.setAttribute('aria-current', 'location');
+                        else link.removeAttribute('aria-current');
+                    });
+                });
+            }, {rootMargin:'-5% 0px -75% 0px', threshold:0});
+            links.forEach(link => {const target=document.querySelector(link.hash);if(target)observer.observe(target);});
+        }
+        root.querySelectorAll('.ganc-table-wrapper').forEach(wrapper => {
+            wrapper.tabIndex = 0; wrapper.setAttribute('role','region');
+            wrapper.setAttribute('aria-label','Data table; scroll horizontally to view all columns');
+        });
+        const readData = id => {
+            const element = document.getElementById(id);
+            if (!element) throw new Error('Dashboard export data is missing. Reload the page.');
+            return JSON.parse(element.textContent);
+        };
+        // Snapshot labels now: editing an unapplied filter must not mislabel exports.
+        const appliedFilters = [...document.querySelectorAll('.ganc-filter-panel select')].map(select => {
+            const label = document.querySelector(`label[for="${select.id}"]`)?.textContent.trim() || select.name;
+            const choices = [...select.selectedOptions].map(option => option.textContent.trim());
+            return `${label}: ${choices.join('; ')}`;
+        }).join(' | ');
+        const button = document.getElementById('msh-export-csv');
+        const status = document.getElementById('msh-export-status');
+        button.addEventListener('click', () => {
+            button.disabled = true; status.textContent = 'Preparing the filtered data…';
+            try {
+                const datasets = {};
+                for (const name of ['summary','continuum','followup','cohort-performance','anc-quality','delivery','pnc','filters']) {
+                    datasets[name] = readData('msh-export-' + name);
+                }
+                datasets['report-notes'] = {
+                    scope:'All datasets supplied to this filtered dashboard; includes collapsed women details. Not a full database export.',
+                    newborn_basis:'Eligible alive newborns. Multiple-birth Yes/No responses apply to all surviving babies in the record.',
+                    no_eligible_newborns:'When has_eligible_newborns is false, numeric percentage zero is a compatibility placeholder; use the N/A display field.',
+                    pnc_basis:'Latest attended Group/Individual record per enrollment; death timing uses reporting session date. Review exclusions are included.',
+                    format:'One scalar value per row. Record paths and fields allow pivoting or reconstruction. Array indices are one-based.'
+                };
+                const now = new Date().toISOString();
+                const csv = buildCSV(datasets, appliedFilters, now);
+                const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = 'MNHIMS_GANC_PNC_' + now.slice(0,19).replace(/:/g,'-') + '.csv';
+                document.body.appendChild(link); link.click(); link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 30000);
+                status.textContent = 'CSV download requested. Open it in Excel or import it as UTF-8 CSV.';
+            } catch (error) {
+                status.textContent = error.message || 'Export failed. Reload the dashboard and try again.';
+            } finally { button.disabled = false; }
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initWorkspace);
+    else initWorkspace();
 })();
 
 </script>
