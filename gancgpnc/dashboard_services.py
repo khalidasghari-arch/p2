@@ -1111,6 +1111,161 @@ def get_anc_quality_summary(enrollments):
 # ============================================================
 # DELIVERY SUMMARY
 # ============================================================
+# ============================================================
+# NEWBORN SERVICE ELIGIBILITY
+# ============================================================
+def get_newborn_service_summary(enrollments, stage="delivery"):
+    """Calculate services using surviving newborns, not women.
+
+    Reporting assumptions matching the existing model:
+    * number_of_alive_newborn excludes recorded deaths and stillbirths.
+    * A service Yes/No applies to ALL surviving newborns in that record.
+      Mixed outcomes for twins cannot be represented by these Boolean fields.
+    * For each PNC stage, use the latest Group/Individual record per enrollment.
+    * PNC death timing uses the reporting session date, not an actual death date.
+
+    Exclude ambiguous records from BOTH numerator and denominator and expose
+    review counts. Keep percentage keys numeric for existing charts/templates;
+    use has_eligible_newborns or the *_pct_display keys to display N/A.
+    This helper does not write to the database.
+    """
+    if stage not in {"delivery", "pnc1", "pnc2"}:
+        raise ValueError("Unknown newborn assessment stage")
+
+    enrollment_ids = (
+        enrollments.order_by().values_list("pk", flat=True).distinct()
+    )
+    delivery_map = {}
+    duplicate_ids = set()
+    for row in Gancdelivery.objects.filter(
+        registerid_id__in=enrollment_ids
+    ).order_by().values(
+        "registerid_id", "date_of_delivery", "number_of_newborn",
+        "number_of_alive_newborn", "number_of_newborn_death",
+        "number_of_fresh_still_birth", "early_breastfeeding",
+        "newborn_vaccination_before_discharge",
+    ):
+        register_id = row["registerid_id"]
+        if register_id in delivery_map:
+            duplicate_ids.add(register_id)
+        delivery_map[register_id] = row
+
+    specs = {
+        "pnc1": (
+            GroupPncfirstSession, "session_date", "newborn_death",
+            "exclusive_breast_feeding", "newborn_vaccination_completed",
+        ),
+        "pnc2": (
+            GroupPncsecondSession, "sessiondate", "newborndeath",
+            "exclusivebreastfeeding", "newbornvaccinationcompleted",
+        ),
+    }
+    records = {}
+    death_dates = {}
+    missing_death_dates = set()
+    if stage == "delivery":
+        for register_id, row in delivery_map.items():
+            records[register_id] = {
+                "assessment_date": row["date_of_delivery"],
+                "bf": row["early_breastfeeding"],
+                "vaccine": row["newborn_vaccination_before_discharge"],
+            }
+    else:
+        model, date_field, death_field, bf_field, vaccine_field = specs[stage]
+        attended = attending_sessions(model.objects.filter(
+            registerid_id__in=enrollment_ids
+        )).order_by("registerid_id", f"-{date_field}", "-pk")
+        for row in attended.values(
+            "registerid_id", date_field, bf_field, vaccine_field
+        ):
+            records.setdefault(row["registerid_id"], {
+                "assessment_date": row[date_field],
+                "bf": row[bf_field],
+                "vaccine": row[vaccine_field],
+            })
+
+        # A death can be reported on an absent/dropout record as well.
+        # Carry PNC1 deaths forward to PNC2, but never PNC2 deaths backward.
+        death_stages = ("pnc1",) if stage == "pnc1" else ("pnc1", "pnc2")
+        for death_stage in death_stages:
+            death_model, date_name, flag_name, _, _ = specs[death_stage]
+            for register_id, recorded_date in death_model.objects.filter(
+                registerid_id__in=enrollment_ids, **{flag_name: True}
+            ).order_by().values_list("registerid_id", date_name):
+                if recorded_date is None:
+                    missing_death_dates.add(register_id)
+                    continue
+                previous = death_dates.get(register_id)
+                if previous is None or recorded_date < previous:
+                    death_dates[register_id] = recorded_date
+
+    result = {
+        "eligible": 0, "breastfed": 0, "vaccinated": 0, "review": 0,
+        "review_reasons": {}, "multiple_birth_enrollments": 0,
+    }
+
+    def flag_review(reason):
+        result["review"] += 1
+        result["review_reasons"][reason] = (
+            result["review_reasons"].get(reason, 0) + 1
+        )
+
+    for register_id, record in records.items():
+        delivery = delivery_map.get(register_id)
+        if delivery is None:
+            flag_review("missing_delivery")
+            continue
+        if register_id in duplicate_ids:
+            flag_review("multiple_delivery_records")
+            continue
+        alive = delivery["number_of_alive_newborn"]
+        total = delivery["number_of_newborn"]
+        dead = delivery["number_of_newborn_death"]
+        still = delivery["number_of_fresh_still_birth"]
+        if (
+            any(value is None or value < 0 for value in (alive, total, dead, still))
+            or total != alive + dead + still
+        ):
+            flag_review("inconsistent_newborn_counts")
+            continue
+        if stage != "delivery":
+            assessment_date = record["assessment_date"]
+            delivery_date = delivery["date_of_delivery"]
+            if (
+                assessment_date is None or delivery_date is None
+                or assessment_date < delivery_date
+                or register_id in missing_death_dates
+            ):
+                flag_review("invalid_or_missing_dates")
+                continue
+            death_date = death_dates.get(register_id)
+            if death_date is not None and death_date <= assessment_date:
+                if death_date < delivery_date:
+                    flag_review("death_report_before_delivery")
+                    continue
+                if total > 1 and alive > 0:
+                    flag_review("multiple_birth_death_needs_survivor_count")
+                    continue
+                alive = 0
+
+        result["eligible"] += alive
+        if alive and total > 1:
+            result["multiple_birth_enrollments"] += 1
+        if record["bf"] is True:
+            result["breastfed"] += alive
+        if record["vaccine"] is True:
+            result["vaccinated"] += alive
+
+    result["has_eligible_newborns"] = result["eligible"] > 0
+    for key in ("breastfed", "vaccinated"):
+        value = percentage(result[key], result["eligible"])
+        result[f"{key}_pct"] = value
+        result[f"{key}_pct_display"] = (
+            f"{value:.1f}%" if result["has_eligible_newborns"] else "N/A"
+        )
+    return result
+
+
 def get_delivery_summary(enrollments):
     deliveries = get_session_querysets(
         enrollments
@@ -1162,18 +1317,9 @@ def get_delivery_summary(enrollments):
         deliveries,
         "number_of_fresh_still_birth",
     )
-    early_breastfeeding = (
-        positive_unique_count(
-            deliveries,
-            "early_breastfeeding",
-        )
-    )
-    vaccination = (
-        positive_unique_count(
-            deliveries,
-            "newborn_vaccination_before_discharge",
-        )
-    )
+    newborn_services = get_newborn_service_summary(enrollments, "delivery")
+    early_breastfeeding = newborn_services["breastfed"]
+    vaccination = newborn_services["vaccinated"]
     ppfp_counseling = (
         positive_unique_count(
             deliveries,
@@ -1309,17 +1455,18 @@ def get_delivery_summary(enrollments):
         "early_breastfeeding": (
             early_breastfeeding
         ),
-        "early_breastfeeding_pct": percentage(
-            early_breastfeeding,
-            delivery_women,
-        ),
+        "early_breastfeeding_pct": newborn_services["breastfed_pct"],
+        "early_breastfeeding_pct_display": newborn_services["breastfed_pct_display"],
+        "eligible_newborns": newborn_services["eligible"],
+        "has_eligible_newborns": newborn_services["has_eligible_newborns"],
+        "newborn_records_for_review": newborn_services["review"],
+        "newborn_review_reasons": newborn_services["review_reasons"],
+        "newborn_multiple_birth_enrollments": newborn_services["multiple_birth_enrollments"],
         "vaccination_before_discharge": (
             vaccination
         ),
-        "vaccination_before_discharge_pct": percentage(
-            vaccination,
-            delivery_women,
-        ),
+        "vaccination_before_discharge_pct": newborn_services["vaccinated_pct"],
+        "vaccination_before_discharge_pct_display": newborn_services["vaccinated_pct_display"],
         "ppfp_counseling": (
             ppfp_counseling
         ),
@@ -1353,6 +1500,8 @@ def get_pnc_summary(enrollments):
     )
     pnc1 = sessions["pnc1"]
     pnc2 = sessions["pnc2"]
+    pnc1_newborn_services = get_newborn_service_summary(enrollments, "pnc1")
+    pnc2_newborn_services = get_newborn_service_summary(enrollments, "pnc2")
     # ========================================================
     # PNC FIRST
     # ========================================================
@@ -1425,18 +1574,8 @@ def get_pnc_summary(enrollments):
             "maternal_death",
         )
     )
-    pnc1_newborn_vaccination = (
-        positive_unique_count(
-            pnc1,
-            "newborn_vaccination_completed",
-        )
-    )
-    pnc1_exclusive_bf = (
-        positive_unique_count(
-            pnc1,
-            "exclusive_breast_feeding",
-        )
-    )
+    pnc1_newborn_vaccination = pnc1_newborn_services["vaccinated"]
+    pnc1_exclusive_bf = pnc1_newborn_services["breastfed"]
     pnc1_ppfp_chosen = (
         positive_unique_count(
             pnc1,
@@ -1527,18 +1666,8 @@ def get_pnc_summary(enrollments):
             "maternaldeath",
         )
     )
-    pnc2_newborn_vaccination = (
-        positive_unique_count(
-            pnc2,
-            "newbornvaccinationcompleted",
-        )
-    )
-    pnc2_exclusive_bf = (
-        positive_unique_count(
-            pnc2,
-            "exclusivebreastfeeding",
-        )
-    )
+    pnc2_newborn_vaccination = pnc2_newborn_services["vaccinated"]
+    pnc2_exclusive_bf = pnc2_newborn_services["breastfed"]
     pnc2_birth_spacing_chosen = (
         positive_unique_count(
             pnc2,
@@ -1602,6 +1731,11 @@ def get_pnc_summary(enrollments):
     return {
         "pnc1": {
             "women": pnc1_women,
+            "eligible_newborns": pnc1_newborn_services["eligible"],
+            "has_eligible_newborns": pnc1_newborn_services["has_eligible_newborns"],
+            "newborn_records_for_review": pnc1_newborn_services["review"],
+            "newborn_review_reasons": pnc1_newborn_services["review_reasons"],
+            "newborn_multiple_birth_enrollments": pnc1_newborn_services["multiple_birth_enrollments"],
             "hypertension": (
                 pnc1_hypertension
             ),
@@ -1655,17 +1789,13 @@ def get_pnc_summary(enrollments):
             "newborn_vaccination": (
                 pnc1_newborn_vaccination
             ),
-            "newborn_vaccination_pct": percentage(
-                pnc1_newborn_vaccination,
-                pnc1_women,
-            ),
+            "newborn_vaccination_pct": pnc1_newborn_services["vaccinated_pct"],
+            "newborn_vaccination_pct_display": pnc1_newborn_services["vaccinated_pct_display"],
             "exclusive_breastfeeding": (
                 pnc1_exclusive_bf
             ),
-            "exclusive_breastfeeding_pct": percentage(
-                pnc1_exclusive_bf,
-                pnc1_women,
-            ),
+            "exclusive_breastfeeding_pct": pnc1_newborn_services["breastfed_pct"],
+            "exclusive_breastfeeding_pct_display": pnc1_newborn_services["breastfed_pct_display"],
             "ppfp_chosen": (
                 pnc1_ppfp_chosen
             ),
@@ -1679,6 +1809,11 @@ def get_pnc_summary(enrollments):
         },
         "pnc2": {
             "women": pnc2_women,
+            "eligible_newborns": pnc2_newborn_services["eligible"],
+            "has_eligible_newborns": pnc2_newborn_services["has_eligible_newborns"],
+            "newborn_records_for_review": pnc2_newborn_services["review"],
+            "newborn_review_reasons": pnc2_newborn_services["review_reasons"],
+            "newborn_multiple_birth_enrollments": pnc2_newborn_services["multiple_birth_enrollments"],
             "hypertension": (
                 pnc2_hypertension
             ),
@@ -1746,17 +1881,13 @@ def get_pnc_summary(enrollments):
             "newborn_vaccination": (
                 pnc2_newborn_vaccination
             ),
-            "newborn_vaccination_pct": percentage(
-                pnc2_newborn_vaccination,
-                pnc2_women,
-            ),
+            "newborn_vaccination_pct": pnc2_newborn_services["vaccinated_pct"],
+            "newborn_vaccination_pct_display": pnc2_newborn_services["vaccinated_pct_display"],
             "exclusive_breastfeeding": (
                 pnc2_exclusive_bf
             ),
-            "exclusive_breastfeeding_pct": percentage(
-                pnc2_exclusive_bf,
-                pnc2_women,
-            ),
+            "exclusive_breastfeeding_pct": pnc2_newborn_services["breastfed_pct"],
+            "exclusive_breastfeeding_pct_display": pnc2_newborn_services["breastfed_pct_display"],
             "birth_spacing_chosen": (
                 pnc2_birth_spacing_chosen
             ),

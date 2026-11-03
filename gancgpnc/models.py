@@ -330,7 +330,7 @@ class Gancthirdsession(models.Model):
     urinexamcheck = models.BooleanField(blank=True, null=True,
         verbose_name="Urine Exam Check"
     )
-
+      
     urinexam = models.CharField(
         max_length=255,
         choices=URIN_EXAM,

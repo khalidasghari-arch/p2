@@ -1983,7 +1983,7 @@ class GancthirdsessionAdmin(BaseSessionAdmin):
             "description": "Record urine protein, cough screening, referral and TT vaccine.",
             "fields": (
                 "lab_help",
-                ("urinexam", "rpositivepuriatomd"),
+                ("urinexamcheck", "urinexam", "rpositivepuriatomd"),
                 ("coughmorethantwoweeks", "rcough"),
                 "ttvaccine",
             )

@@ -36,6 +36,18 @@ GANC/PNC Continuum Dashboard
             grid-template-columns: 1fr;
         }
     }
+
+/* Newborn indicators: counts, review notes and accessible chart. */
+.newborn-ratio { display:block; margin-top:6px; font-size:12px; line-height:1.5; font-weight:400; color:#52666a; }
+.newborn-na { color:#687777; }
+.newborn-note { margin:14px 0; padding:12px 16px; border-left:4px solid #0c817a; border-radius:6px; background:#eff8f6; color:#244f4b; font-size:13px; line-height:1.6; }
+.newborn-review { margin-top:12px; padding:12px 16px; border:1px solid #e6c88c; border-radius:7px; background:#fff9ed; color:#664a19; font-size:13px; line-height:1.6; }
+.newborn-review summary { cursor:pointer; font-weight:600; }
+.newborn-review ul { margin:8px 0; padding-left:20px; }
+.newborn-eligibility-row { background:#eff8f6; }
+.newborn-chart-scroll { overflow-x:auto; }
+#gancBreastfeedingChart { display:block; width:100%; min-width:620px; height:auto; }
+
 </style>
 <style>
 .ganc-dashboard { --fu-ink:#173b3b; --fu-line:#dbe7e5; --fu-green:#0f766e; color:var(--fu-ink); }
@@ -756,6 +768,27 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
         <h2>
             Delivery & Maternal/Newborn Outcomes
         </h2>
+        <p class="newborn-note">
+            Breastfeeding and vaccination use eligible alive newborns, excluding recorded deaths and stillbirths.
+            The recorded alive count is used directly; deaths are not subtracted twice.
+            For twins and other multiple births, one Yes/No response is assumed to apply to all surviving babies in that record.
+        </p>
+
+        {% if delivery_summary.newborn_records_for_review %}
+        <details class="newborn-review">
+            <summary>Delivery: {{ delivery_summary.newborn_records_for_review }} enrollment(s) excluded from newborn service indicators — review needed</summary>
+            <p>Review the source delivery and PNC records for the selected population. Exclusions apply to both numerator and denominator.</p>
+            <ul>
+                {% if delivery_summary.newborn_review_reasons.missing_delivery %}<li>Missing delivery record: {{ delivery_summary.newborn_review_reasons.missing_delivery }}</li>{% endif %}
+                {% if delivery_summary.newborn_review_reasons.multiple_delivery_records %}<li>More than one delivery record for the enrollment: {{ delivery_summary.newborn_review_reasons.multiple_delivery_records }}</li>{% endif %}
+                {% if delivery_summary.newborn_review_reasons.inconsistent_newborn_counts %}<li>Newborn counts do not reconcile: {{ delivery_summary.newborn_review_reasons.inconsistent_newborn_counts }}</li>{% endif %}
+                {% if delivery_summary.newborn_review_reasons.invalid_or_missing_dates %}<li>Invalid or missing assessment dates: {{ delivery_summary.newborn_review_reasons.invalid_or_missing_dates }}</li>{% endif %}
+                {% if delivery_summary.newborn_review_reasons.death_report_before_delivery %}<li>Death report dated before delivery: {{ delivery_summary.newborn_review_reasons.death_report_before_delivery }}</li>{% endif %}
+                {% if delivery_summary.newborn_review_reasons.multiple_birth_death_needs_survivor_count %}<li>Multiple birth with a PNC death report; surviving newborn count cannot be determined: {{ delivery_summary.newborn_review_reasons.multiple_birth_death_needs_survivor_count }}</li>{% endif %}
+            </ul>
+        </details>
+        {% endif %}
+
         <div class="ganc-kpi-grid">
             <div class="ganc-kpi-card">
                 <div class="ganc-kpi-label">Deliveries</div>
@@ -831,7 +864,13 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     Early Breastfeeding
                 </div>
                 <div class="ganc-kpi-value">
-                    {{ delivery_summary.early_breastfeeding_pct }}%
+                    {% if delivery_summary.has_eligible_newborns %}
+                        {{ delivery_summary.early_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ delivery_summary.early_breastfeeding }} / {{ delivery_summary.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="ganc-kpi-card">
@@ -839,7 +878,13 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     Newborn Vaccination
                 </div>
                 <div class="ganc-kpi-value">
-                    {{ delivery_summary.vaccination_before_discharge_pct }}%
+                    {% if delivery_summary.has_eligible_newborns %}
+                        {{ delivery_summary.vaccination_before_discharge_pct_display }}
+                        <span class="newborn-ratio">{{ delivery_summary.vaccination_before_discharge }} / {{ delivery_summary.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -851,6 +896,43 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
         <h2>
             Postnatal Care Clinical Performance
         </h2>
+        <p class="newborn-note">
+            Newborn breastfeeding and vaccination use the latest attended Group/Individual record per enrollment at each PNC stage.
+            Newborns with a death reported by that assessment are excluded; PNC1 deaths are carried forward to PNC2.
+            Death timing uses the reporting session date. A death in a multiple birth requires review because the Yes/No field does not identify how many babies remain alive.
+            Other clinical indicators continue to use their existing maternal denominators.
+        </p>
+
+        {% if pnc_summary.pnc1.newborn_records_for_review %}
+        <details class="newborn-review">
+            <summary>PNC first: {{ pnc_summary.pnc1.newborn_records_for_review }} enrollment(s) excluded from newborn service indicators — review needed</summary>
+            <p>Review the source delivery and PNC records for the selected population. Exclusions apply to both numerator and denominator.</p>
+            <ul>
+                {% if pnc_summary.pnc1.newborn_review_reasons.missing_delivery %}<li>Missing delivery record: {{ pnc_summary.pnc1.newborn_review_reasons.missing_delivery }}</li>{% endif %}
+                {% if pnc_summary.pnc1.newborn_review_reasons.multiple_delivery_records %}<li>More than one delivery record for the enrollment: {{ pnc_summary.pnc1.newborn_review_reasons.multiple_delivery_records }}</li>{% endif %}
+                {% if pnc_summary.pnc1.newborn_review_reasons.inconsistent_newborn_counts %}<li>Newborn counts do not reconcile: {{ pnc_summary.pnc1.newborn_review_reasons.inconsistent_newborn_counts }}</li>{% endif %}
+                {% if pnc_summary.pnc1.newborn_review_reasons.invalid_or_missing_dates %}<li>Invalid or missing assessment dates: {{ pnc_summary.pnc1.newborn_review_reasons.invalid_or_missing_dates }}</li>{% endif %}
+                {% if pnc_summary.pnc1.newborn_review_reasons.death_report_before_delivery %}<li>Death report dated before delivery: {{ pnc_summary.pnc1.newborn_review_reasons.death_report_before_delivery }}</li>{% endif %}
+                {% if pnc_summary.pnc1.newborn_review_reasons.multiple_birth_death_needs_survivor_count %}<li>Multiple birth with a PNC death report; surviving newborn count cannot be determined: {{ pnc_summary.pnc1.newborn_review_reasons.multiple_birth_death_needs_survivor_count }}</li>{% endif %}
+            </ul>
+        </details>
+        {% endif %}
+
+        {% if pnc_summary.pnc2.newborn_records_for_review %}
+        <details class="newborn-review">
+            <summary>PNC second: {{ pnc_summary.pnc2.newborn_records_for_review }} enrollment(s) excluded from newborn service indicators — review needed</summary>
+            <p>Review the source delivery and PNC records for the selected population. Exclusions apply to both numerator and denominator.</p>
+            <ul>
+                {% if pnc_summary.pnc2.newborn_review_reasons.missing_delivery %}<li>Missing delivery record: {{ pnc_summary.pnc2.newborn_review_reasons.missing_delivery }}</li>{% endif %}
+                {% if pnc_summary.pnc2.newborn_review_reasons.multiple_delivery_records %}<li>More than one delivery record for the enrollment: {{ pnc_summary.pnc2.newborn_review_reasons.multiple_delivery_records }}</li>{% endif %}
+                {% if pnc_summary.pnc2.newborn_review_reasons.inconsistent_newborn_counts %}<li>Newborn counts do not reconcile: {{ pnc_summary.pnc2.newborn_review_reasons.inconsistent_newborn_counts }}</li>{% endif %}
+                {% if pnc_summary.pnc2.newborn_review_reasons.invalid_or_missing_dates %}<li>Invalid or missing assessment dates: {{ pnc_summary.pnc2.newborn_review_reasons.invalid_or_missing_dates }}</li>{% endif %}
+                {% if pnc_summary.pnc2.newborn_review_reasons.death_report_before_delivery %}<li>Death report dated before delivery: {{ pnc_summary.pnc2.newborn_review_reasons.death_report_before_delivery }}</li>{% endif %}
+                {% if pnc_summary.pnc2.newborn_review_reasons.multiple_birth_death_needs_survivor_count %}<li>Multiple birth with a PNC death report; surviving newborn count cannot be determined: {{ pnc_summary.pnc2.newborn_review_reasons.multiple_birth_death_needs_survivor_count }}</li>{% endif %}
+            </ul>
+        </details>
+        {% endif %}
+
         <p class="ganc-dashboard-subtitle">
             Comparison between PNC First Session and
             PNC Second Session.
@@ -865,6 +947,17 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     </tr>
                 </thead>
                 <tbody>
+                    <tr class="newborn-eligibility-row">
+                        <td>Eligible alive newborns for service indicators</td>
+                        <td>{{ pnc_summary.pnc1.eligible_newborns }}</td>
+                        <td>{{ pnc_summary.pnc2.eligible_newborns }}</td>
+                    </tr>
+                    <tr>
+                        <td>Enrollments excluded pending newborn-data review</td>
+                        <td>{{ pnc_summary.pnc1.newborn_records_for_review }}</td>
+                        <td>{{ pnc_summary.pnc2.newborn_records_for_review }}</td>
+                    </tr>
+
                     <tr>
                         <td>Women Attending</td>
                         <td>
@@ -993,19 +1086,43 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     <tr>
                         <td>Newborn Vaccination</td>
                         <td>
-                            {{ pnc_summary.pnc1.newborn_vaccination_pct }}%
+                            {% if pnc_summary.pnc1.has_eligible_newborns %}
+                        {{ pnc_summary.pnc1.newborn_vaccination_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc1.newborn_vaccination }} / {{ pnc_summary.pnc1.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                         </td>
                         <td>
-                            {{ pnc_summary.pnc2.newborn_vaccination_pct }}%
+                            {% if pnc_summary.pnc2.has_eligible_newborns %}
+                        {{ pnc_summary.pnc2.newborn_vaccination_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc2.newborn_vaccination }} / {{ pnc_summary.pnc2.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                         </td>
                     </tr>
                     <tr>
                         <td>Exclusive Breastfeeding</td>
                         <td>
-                            {{ pnc_summary.pnc1.exclusive_breastfeeding_pct }}%
+                            {% if pnc_summary.pnc1.has_eligible_newborns %}
+                        {{ pnc_summary.pnc1.exclusive_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc1.exclusive_breastfeeding }} / {{ pnc_summary.pnc1.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                         </td>
                         <td>
-                            {{ pnc_summary.pnc2.exclusive_breastfeeding_pct }}%
+                            {% if pnc_summary.pnc2.has_eligible_newborns %}
+                        {{ pnc_summary.pnc2.exclusive_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc2.exclusive_breastfeeding }} / {{ pnc_summary.pnc2.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                         </td>
                     </tr>
                 </tbody>
@@ -1025,7 +1142,13 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     Early Breastfeeding at Delivery
                 </div>
                 <div class="ganc-kpi-value">
-                    {{ delivery_summary.early_breastfeeding_pct }}%
+                    {% if delivery_summary.has_eligible_newborns %}
+                        {{ delivery_summary.early_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ delivery_summary.early_breastfeeding }} / {{ delivery_summary.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="ganc-kpi-card">
@@ -1033,7 +1156,13 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     Exclusive Breastfeeding PNC1
                 </div>
                 <div class="ganc-kpi-value">
-                    {{ pnc_summary.pnc1.exclusive_breastfeeding_pct }}%
+                    {% if pnc_summary.pnc1.has_eligible_newborns %}
+                        {{ pnc_summary.pnc1.exclusive_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc1.exclusive_breastfeeding }} / {{ pnc_summary.pnc1.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="ganc-kpi-card">
@@ -1041,15 +1170,25 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
                     Exclusive Breastfeeding PNC2
                 </div>
                 <div class="ganc-kpi-value">
-                    {{ pnc_summary.pnc2.exclusive_breastfeeding_pct }}%
+                    {% if pnc_summary.pnc2.has_eligible_newborns %}
+                        {{ pnc_summary.pnc2.exclusive_breastfeeding_pct_display }}
+                        <span class="newborn-ratio">{{ pnc_summary.pnc2.exclusive_breastfeeding }} / {{ pnc_summary.pnc2.eligible_newborns }} eligible newborns</span>
+                    {% else %}
+                        <span class="newborn-na">N/A</span>
+                        <span class="newborn-ratio">No eligible newborns</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
         {{ breastfeeding_labels|json_script:"breastfeeding-labels" }}
         {{ breastfeeding_values|json_script:"breastfeeding-values" }}
-        <div class="ganc-chart-wrap">
+        {{ delivery_summary|json_script:"newborn-delivery-summary" }}
+        {{ pnc_summary|json_script:"newborn-pnc-summary" }}
+        <p class="newborn-note">Each percentage uses the eligible newborns at that assessment. The three assessments may cover different populations. N/A means there are no eligible newborns; it does not mean 0% received care. Multiple-birth results assume the recorded response applies to all surviving babies.</p>
+        <div class="ganc-chart-wrap newborn-chart-scroll">
             <svg
                 id="gancBreastfeedingChart"
+                viewBox="0 0 960 320"
                 role="img"
                 aria-label="Breastfeeding continuum"
             ></svg>
@@ -1211,9 +1350,68 @@ button.followup-toggle { cursor:pointer; text-align:left; min-width:115px; }
         </div>
     </div>
 </div>
+
+
+
 <script
     src="{% static 'gancgpnc/js/dashboard.js' %}"
 ></script>
+<script>
+(() => {
+    'use strict';
+    function renderNewbornChart() {
+        const svg = document.getElementById('gancBreastfeedingChart');
+        if (!svg) return;
+        const read = id => JSON.parse(document.getElementById(id).textContent);
+        const delivery = read('newborn-delivery-summary');
+        const pnc = read('newborn-pnc-summary');
+        const rows = [
+            {label:'Early breastfeeding · Delivery', data:delivery, count:'early_breastfeeding', pct:'early_breastfeeding_pct'},
+            {label:'Exclusive breastfeeding · PNC1', data:pnc.pnc1, count:'exclusive_breastfeeding', pct:'exclusive_breastfeeding_pct'},
+            {label:'Exclusive breastfeeding · PNC2', data:pnc.pnc2, count:'exclusive_breastfeeding', pct:'exclusive_breastfeeding_pct'}
+        ];
+        svg.replaceChildren();
+        const ns = 'http://www.w3.org/2000/svg';
+        function add(tag, attrs, text) {
+            const node = document.createElementNS(ns, tag);
+            Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+            if (text !== undefined) node.textContent = text;
+            svg.appendChild(node);
+            return node;
+        }
+        const describe = rows.map(row => row.data.has_eligible_newborns
+            ? `${row.label}: ${row.data[row.count]} of ${row.data.eligible_newborns}, ${Number(row.data[row.pct]).toFixed(1)} percent`
+            : `${row.label}: N/A, no eligible newborns`).join('. ');
+        add('title', {id:'newborn-chart-title'}, 'Breastfeeding among eligible alive newborns');
+        add('desc', {id:'newborn-chart-description'}, describe);
+        svg.setAttribute('aria-labelledby','newborn-chart-title newborn-chart-description');
+        const left = 285, width = 450;
+        for (let value = 0; value <= 100; value += 25) {
+            const x = left + width * value / 100;
+            add('line', {x1:x, y1:38, x2:x, y2:242, stroke:'#dce7e5'});
+            add('text', {x:x, y:25, 'text-anchor':'middle', fill:'#52666a', 'font-size':13}, `${value}%`);
+        }
+        rows.forEach((row, index) => {
+            const y = 65 + index * 76;
+            add('text', {x:10, y:y+5, fill:'#173b3b', 'font-size':14}, row.label);
+            if (!row.data.has_eligible_newborns) {
+                add('text', {x:left+12, y:y+5, fill:'#687777', 'font-size':14}, 'N/A — no eligible newborns');
+                return;
+            }
+            const pct = Number(row.data[row.pct]);
+            add('rect', {x:left, y:y-17, width:width, height:30, rx:5, fill:'#eef5f3'});
+            add('rect', {x:left, y:y-17, width:width*pct/100, height:30, rx:5, fill:'#0b8178'});
+            add('text', {x:width+left+12, y:y+5, fill:'#173b3b', 'font-size':14}, `${pct.toFixed(1)}% (${row.data[row.count]}/${row.data.eligible_newborns})`);
+        });
+        add('text', {x:10, y:275, fill:'#52666a', 'font-size':12}, 'Denominator: eligible alive newborns at each assessment; review exclusions may apply.');
+        add('text', {x:10, y:298, fill:'#52666a', 'font-size':12}, 'Multiple births: the recorded Yes/No response is assumed to apply to all surviving babies.');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderNewbornChart);
+    else renderNewbornChart();
+    window.addEventListener('load', renderNewbornChart);
+    window.addEventListener('resize', () => requestAnimationFrame(renderNewbornChart));
+})();
+</script>
 <script>
 (() => {
   'use strict';
