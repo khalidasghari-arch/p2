@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'gancgpnc',
     'skill_lab',
     'qqm',
+    'mentee_review.apps.MenteeReviewConfig',
 ]
 
 REST_FRAMEWORK = {

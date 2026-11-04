@@ -1,6 +1,7 @@
 import re
 from django.contrib import admin
 from .duplicate_admin import DuplicateMenteeAdminMixin
+from mentee_review.querysets import archived_ids
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
@@ -97,7 +98,7 @@ class StaffAdmin(DuplicateMenteeAdminMixin, admin.ModelAdmin):
             return None
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = super().get_queryset(request).exclude(pk__in=archived_ids())
         if request.user.is_superuser:
             return qs
 
@@ -214,7 +215,7 @@ class MentorshipdetailsInline(admin.TabularInline):
                 kwargs["queryset"] = Staff.objects.filter(
                 hfname=parent_obj.facilityfk,
                 status=True,
-            ).order_by("firstname", "lastname")
+            ).exclude(pk__in=archived_ids()).order_by("firstname", "lastname")
             else:
                 kwargs["queryset"] = Staff.objects.none()
 

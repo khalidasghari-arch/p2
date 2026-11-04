@@ -1,3 +1,4 @@
+from mentee_review.querysets import archived_ids
 """Additive dashboard data; copy into the mentorship app.
 
 Uses the supplied mentorship models. English topic text is the default topic
@@ -128,7 +129,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
 
     # Current roster counts use province/facility. Activity selections additionally
     # restrict to unique mentees with a matching detail, avoiding join inflation.
-    staff = Staff.objects.select_related('hfname__districtfk__provincefk')
+    staff = Staff.objects.exclude(pk__in=archived_ids()).select_related('hfname__districtfk__provincefk')
     if not request.user.is_superuser:
         staff = staff.filter(hfname__districtfk__provincefk_id=province_id) if province_id is not None else staff.none()
     if filters.get('province'):
