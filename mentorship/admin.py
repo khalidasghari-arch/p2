@@ -1,5 +1,6 @@
 import re
 from django.contrib import admin
+from .duplicate_admin import DuplicateMenteeAdminMixin
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import (
@@ -66,7 +67,7 @@ class MentorshipTopicsAdmin(admin.ModelAdmin):
 # =====================================================
 
 @admin.register(Staff)
-class StaffAdmin(admin.ModelAdmin):
+class StaffAdmin(DuplicateMenteeAdminMixin, admin.ModelAdmin):
     list_display = ("id", "hfname", "tazkiranumber", "firstname", "lastname", "fathername", "position", "gender", "status")
     list_filter = ("hfname", "status", "position")
     search_fields = ("firstname", "lastname", "tazkiranumber", "id")
