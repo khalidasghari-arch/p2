@@ -854,6 +854,9 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             )
         )
     def changelist_view(self, request, extra_context=None):
+        if request.GET.get("sequence_evidence") == "1":
+            from .dashboard_evidence import sequence_evidence_view
+            return sequence_evidence_view(self, request)
         data = self._build_dashboard_data(request)
         if request.GET.get("export") == "1":
             return self._export_dashboard_excel(data)
@@ -1321,6 +1324,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "competent_prior_ls_count": confirmed_count,
                 "competent_verify_ls_count": len(verification),
                 "competency_sequence_text": sequence_text,
+                "sequence_reviews": sequence,
                 "needs_count": needs_count,
                 "ls_topics_text": "\n".join(ls_topics),
                 "pc_topics_text": "\n".join(pc_topics),
