@@ -735,7 +735,7 @@
         </div>
         <div class="mh-note">
             <strong>Interpretation:</strong>
-            “Needs graduation / follow-up” means the mentee has LS, PC, or MC activity recorded for a topic, but the topic is not yet counted as competent/graduated based on PC or MC recorded in Mentorshipdetails under the selected filters. Saved topic status is not used. Prior-LS checks use mentee/topic IDs and available authorized history through the selected end date, including earlier sessions and other facilities. Expand Learning sequence for reasons. The prior-LS and verification columns sum to recorded competent topics. Neither proves full-curriculum graduation.
+            “Needs graduation / follow-up” means the mentee has LS, PC, or MC activity recorded for a topic, but the topic is not yet counted as competent/graduated based on PC or MC recorded in Mentorshipdetails under the selected filters. Saved topic status is not used. Prior-LS checks use mentee/topic IDs and available authorized history through the selected end date, including earlier sessions and other facilities. Expand Learning sequence for reasons. The prior-LS and verification columns sum to recorded competent topics. Neither proves full-curriculum graduation. Current mentee status is the latest Active/Inactive/Unspecified value in the staff roster, not a historical status at the selected end date.
         </div>
         <div class="table-scroll">
             <table class="mh-table mentee-profile-table" id="menteeProfileTable">
@@ -744,6 +744,7 @@
                         <th>Province</th>
                         <th>Mentorship Facility</th>
                         <th>Mentee</th>
+                        <th>Current mentee status</th>
                         <th>Father name</th>
                         <th>Position</th>
                         <th>Gender</th>
@@ -769,6 +770,7 @@
                             <td>{{ r.province }}</td>
                             <td>{{ r.facility }}</td>
                             <td><strong>{{ r.mentee }}</strong></td>
+                            <td><span class="mx-status {% if r.current_mentee_status == 'Active' %}mx-status-active{% elif r.current_mentee_status == 'Inactive' %}mx-status-inactive{% endif %}">{{ r.current_mentee_status|default:'Unspecified' }}</span></td>
                             <td>{% include "admin/mentorship/dashboard_fathername.html" with fathername=r.fathername %}</td>
                             <td>{{ r.position }}</td>
                             <td>{{ r.gender }}</td>
@@ -785,7 +787,7 @@
                                 {% endif %}
                             </td>
                             <td><span class="badge badge-green">{{ r.competent_prior_ls_count }}</span></td>
-                            <td>{% if r.competent_verify_ls_count %}<span class="badge badge-orange">{{ r.competent_verify_ls_count }}</span>{% else %}0{% endif %}</td>
+                            <td>{% if r.competent_verify_ls_count %}<span class="badge badge-orange">{{ r.competent_verify_ls_count }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</td>
                             <td class="topic-list-cell">{% if r.sequence_reviews %}<details class="mh-topic-list"><summary>Review {{ r.competent_count }} topics</summary><div style="max-height:300px;overflow:auto;min-width:190px">{% for item in r.sequence_reviews %}<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid #d5e3dc"><b>{{ item.topic }}</b> · {{ item.prior_ls_visits|default:0 }} earlier LS visits<br>{% if item.confirmed %}Earlier LS found{% else %}Records need review{% endif %}{% if item.evidence_url %}<br><a href="{{ item.evidence_url }}">View actual records</a>{% endif %}</div>{% endfor %}</div></details>{% else %}—{% endif %}</td>
                             <td class="topic-list-cell">
                                 {% if r.ls_topics_text %}
@@ -835,7 +837,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="22">No mentee profile records found for the selected filters.</td>
+                            <td colspan="23">No mentee profile records found for the selected filters.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

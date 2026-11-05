@@ -1325,6 +1325,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "competent_verify_ls_count": len(verification),
                 "competency_sequence_text": sequence_text,
                 "sequence_reviews": sequence,
+                "current_mentee_status": {True: "Active", False: "Inactive"}.get(extensions["mentee_identity_map"][_key[1]].get("status"), "Unspecified"),
                 "needs_count": needs_count,
                 "ls_topics_text": "\n".join(ls_topics),
                 "pc_topics_text": "\n".join(pc_topics),
@@ -1566,7 +1567,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             "LS Topics", "PC Topics", "MC Topics",
             "Competent Topics", "Topics Needing Graduation",
             "Last Visit Date", "Overall Status",
-            "Competent topics with prior LS", "Competent topics needing LS verification", "Competency sequence details",
+            "Competent topics with prior LS", "Competent topics needing LS verification", "Competency sequence details", "Current mentee status",
         ])
         for r in data["mentee_profile_rows"]:
             ws5.append([
@@ -1597,6 +1598,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 r.get("competent_prior_ls_count"),
                 r.get("competent_verify_ls_count"),
                 r.get("competency_sequence_text"),
+                r.get("current_mentee_status"),
             ])
         ws6 = wb.create_sheet("Story_Candidates")
         ws6.append([
