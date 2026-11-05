@@ -19,7 +19,7 @@ def classify_sequence(history, facility_id):
     elif learning:
         code, label = 'later_ls', 'LS only after first PC/MC — verify sequence'
     else:
-        code, label = 'no_ls', 'No LS in available authorized history — verify'
+        code, label = 'no_ls', '0 LS records matched this mentee ID and topic ID'
     outside = bool(earlier and not any(e['facility_id'] == facility_id for e in earlier))
     return {'code': code, 'interpretation': label, 'first_competency_date': first,
             'prior_ls_visits': len({e['visit_id'] for e in earlier}),

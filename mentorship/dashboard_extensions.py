@@ -1,4 +1,3 @@
-from mentee_review.querysets import archived_ids
 """Additive dashboard data; copy into the mentorship app.
 
 Uses the supplied mentorship models. English topic text is the default topic
@@ -129,7 +128,7 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
 
     # Current roster counts use province/facility. Activity selections additionally
     # restrict to unique mentees with a matching detail, avoiding join inflation.
-    staff = Staff.objects.exclude(pk__in=archived_ids()).select_related('hfname__districtfk__provincefk')
+    staff = Staff.objects.select_related('hfname__districtfk__provincefk')
     if not request.user.is_superuser:
         staff = staff.filter(hfname__districtfk__provincefk_id=province_id) if province_id is not None else staff.none()
     if filters.get('province'):
@@ -238,11 +237,16 @@ def build_dashboard_extensions(request, details_qs, scoped_history_qs, filters, 
         known = row['active'] + row['inactive']
         row['attrition_rate'] = round(100 * row['inactive'] / known, 1) if known else None
     learning_rows.sort(key=lambda r: (r['mentee'], r['topic'], r['mentee_id'], r['topic_id']))
+    sequence_data = build_sequence_data(details_qs, scoped_history_qs, filters)
+    from urllib.parse import urlencode
+    for (fid, mid, tid), check in sequence_data['sequence_checks'].items():
+        check['evidence_url'] = '?' + urlencode({**{k: v for k, v in filters.items() if v},
+            'sequence_evidence': '1', 'review_mentee': mid, 'review_topic': tid, 'review_facility': fid})
     return {
         **quality,
         **build_competency_data(details_qs),
         **build_participation_data(request, details_qs, filters, province_id),
-        **build_sequence_data(details_qs, scoped_history_qs, filters),
+        **sequence_data,
         'mentor_visit_counts': visit_counts,
         'mentee_status_kpis': counts, 'facility_status_rows': facility_status,
         'mentee_status_rows': roster_rows,

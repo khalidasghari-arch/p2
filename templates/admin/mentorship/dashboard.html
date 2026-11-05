@@ -786,7 +786,7 @@
                             </td>
                             <td><span class="badge badge-green">{{ r.competent_prior_ls_count }}</span></td>
                             <td>{% if r.competent_verify_ls_count %}<span class="badge badge-orange">{{ r.competent_verify_ls_count }}</span>{% else %}0{% endif %}</td>
-                            <td class="topic-list-cell">{% if r.competency_sequence_text %}<details class="mh-topic-list"><summary>Review {{ r.competent_count }} topics</summary>{{ r.competency_sequence_text|linebreaksbr }}</details>{% else %}—{% endif %}</td>
+                            <td class="topic-list-cell">{% if r.sequence_reviews %}<details class="mh-topic-list"><summary>Review {{ r.competent_count }} topics</summary><div style="max-height:300px;overflow:auto;min-width:190px">{% for item in r.sequence_reviews %}<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid #d5e3dc"><b>{{ item.topic }}</b> · {{ item.prior_ls_visits|default:0 }} earlier LS visits<br>{% if item.confirmed %}Earlier LS found{% else %}Records need review{% endif %}{% if item.evidence_url %}<br><a href="{{ item.evidence_url }}">View actual records</a>{% endif %}</div>{% endfor %}</div></details>{% else %}—{% endif %}</td>
                             <td class="topic-list-cell">
                                 {% if r.ls_topics_text %}
                                     <details class="mh-topic-list"><summary>{{ r.ls_count }} topics</summary>{{ r.ls_topics_text|linebreaksbr }}</details>
