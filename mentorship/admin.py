@@ -33,6 +33,7 @@ from .dashboard_extensions import (
     append_extension_sheets,
     format_dashboard_workbook,
 )
+from .prior_learning_validation import PriorLearningInlineFormSet, PriorLearningVisitAdminMixin
 
 # =====================================================
 # Helpers
@@ -189,6 +190,7 @@ class MentorshipdetailsInlineForm(forms.ModelForm):
 # =====================================================
 
 class MentorshipdetailsInline(admin.TabularInline):
+    formset = PriorLearningInlineFormSet
     model = Mentorshipdetails
     form = MentorshipdetailsInlineForm
     extra = 1
@@ -235,7 +237,7 @@ class MentorshipdetailsInline(admin.TabularInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     class Media:
-            js = ("admin/js/topic_filter.js",)
+            js = ('admin/js/topic_filter.js', 'mentorship/js/prior_learning_alert.js')
 
 # =====================================================
 # MENTORSHIP VISIT ADMIN:
@@ -558,7 +560,7 @@ class MentorshipVisitAdminForm(forms.ModelForm):
         return cleaned
     
 @admin.register(Mentorshipvisit)
-class MentorshipvisitAdmin(ProvinceRestrictedAdminMixin, 
+class MentorshipvisitAdmin(PriorLearningVisitAdminMixin, ProvinceRestrictedAdminMixin, 
 MentorshipDashboardMixin, admin.ModelAdmin):
     form = MentorshipVisitAdminForm   # 👈 ADD THIS
     actions = [export_selected_mentorship_large]
