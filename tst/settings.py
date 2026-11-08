@@ -55,7 +55,7 @@ ADMIN_HIDDEN_APPS = [
 # ============================================================
 
 GANC_DASHBOARD_ENABLED = True
-
+MENTEE_COMPARISON_SKILL_MODEL = "skill_lab.Skill_Lab_Mentee"
 # -----------------------------
 # Applications
 # -----------------------------
@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'hiva',
     'km_dashboard',
+    'mentee_comparison.apps.MenteeComparisonConfig',
     'mentorship.apps.MentorshipConfig',
     'product.apps.ProductConfig',
     'django.contrib.admin',

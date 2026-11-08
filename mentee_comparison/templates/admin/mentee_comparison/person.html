@@ -1,0 +1,4 @@
+{% if person %}
+<strong>{{ person.firstname }} {{ person.lastname|default_if_none:"" }}</strong>
+<dl><dt>ID</dt><dd>{{ person.pk }}</dd><dt>Father name</dt><dd>{{ person.fathername|default:"Not recorded" }}</dd><dt>Province / district</dt><dd>{{ person.hfname.districtfk.provincefk }} / {{ person.hfname.districtfk }}</dd><dt>Facility</dt><dd>{{ person.hfname }}</dd><dt>Position</dt><dd>{{ person.position }}</dd><dt>Gender / status</dt><dd>{{ person.get_gender_display|default_if_none:"Not recorded" }} / {{ person.get_status_display|default_if_none:"Not recorded" }}</dd><dt>Tazkira</dt><dd>{{ person.tazkiranumber|default:"Not recorded" }}</dd></dl>
+{% else %}<p>No linked registration.</p>{% endif %}
