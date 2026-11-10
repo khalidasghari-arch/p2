@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'hiva',
     'km_dashboard',
     'mentee_comparison.apps.MenteeComparisonConfig',
+    'skilllab_review.apps.SkillLabReviewConfig',
     'mentorship.apps.MentorshipConfig',
     'product.apps.ProductConfig',
     'django.contrib.admin',

@@ -1887,3 +1887,6 @@ class SkillLabMenteeAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMixin,
             return obj.hfname.districtfk.provincefk.name
         except Exception:
             return "-"
+
+from .duplicate_admin import install_skilllab_duplicate_review
+install_skilllab_duplicate_review(admin.site)
