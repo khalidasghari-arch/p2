@@ -571,6 +571,12 @@ class SkillLabDuplicateMenteeAdminMixin:
 
     def get_queryset(self, request):
         qs=super().get_queryset(request).exclude(pk__in=archived_ids())
+        if request.GET.get('_popup') == '1' or (
+            request.GET.get('app_label') == 'skill_lab' and
+            request.GET.get('model_name') == Record._meta.model_name and
+            request.GET.get('field_name') == 'mentee_name'
+        ):
+            qs=qs.filter(status=True)
         if request.user.is_superuser:return qs
         from hiva.admin_utils import user_province
         province=user_province(request);pid=getattr(province,'id',province)
@@ -586,12 +592,48 @@ class _ArchivedChoiceMixin:
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         field=super().formfield_for_foreignkey(db_field,request,**kwargs)
         if db_field.remote_field.model is Staff and field is not None and field.queryset is not None:
-            field.queryset=field.queryset.exclude(pk__in=archived_ids())
+            field.queryset=field.queryset.filter(status=True).exclude(pk__in=archived_ids())
             if not request.user.is_superuser:
                 from hiva.admin_utils import user_province
                 province=user_province(request);pid=getattr(province,'id',province)
                 field.queryset=field.queryset.filter(hfname__districtfk__provincefk_id=pid) if pid is not None else field.queryset.none()
         return field
+
+
+class _ActiveParticipantFormMixin:
+    def clean(self):
+        data=super().clean()
+        # Check the original record too: changing its mentee must not bypass
+        # the restriction on editing an inactive mentee's history.
+        original_id=self.instance.pk or getattr(data.get('id'), 'pk', None)
+        if original_id and Record._base_manager.filter(pk=original_id).exclude(
+            mentee_name__status=True
+        ).exists():
+            raise ValidationError(
+                'This record belongs to an inactive mentee and cannot be edited here. '
+                'Please contact your administrator.'
+            )
+        return data
+
+
+class _ActiveParticipantMixin:
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            mentee_name__status=True
+        ).exclude(mentee_name_id__in=archived_ids())
+
+
+class _ActiveParticipantAdminMixin(_ActiveParticipantMixin):
+    def get_form(self, request, obj=None, **kwargs):
+        form=super().get_form(request, obj, **kwargs)
+        return type('ActiveParticipantForm', (_ActiveParticipantFormMixin, form), {})
+
+
+class _ActiveParticipantInlineMixin(_ActiveParticipantMixin):
+    def get_formset(self, request, obj=None, **kwargs):
+        formset=super().get_formset(request, obj, **kwargs)
+        form=type('ActiveParticipantInlineForm', (_ActiveParticipantFormMixin, formset.form), {})
+        return type('ActiveParticipantFormSet', (formset,), {'form': form})
 
 
 def install_skilllab_duplicate_review(admin_site):
@@ -614,10 +656,21 @@ def install_skilllab_duplicate_review(admin_site):
     existing.change_list_template='admin/skill_lab/skill_lab_mentee/change_list_review.html'
     existing._skilllab_review_parent_template=parent
     existing._skilllab_review_installed=True
-    # Filter archived mentees after the existing province and facility filters.
+    # Apply active choices after existing province and facility filters.
     for model,model_admin in list(admin_site._registry.items()):
         if model._meta.app_label!='skill_lab':continue
         if not isinstance(model_admin,_ArchivedChoiceMixin):
             model_admin.__class__=type('ArchiveChoices'+model_admin.__class__.__name__,(_ArchivedChoiceMixin,model_admin.__class__),{})
         model_admin.inlines=tuple(type('ArchiveChoices'+inline.__name__,(_ArchivedChoiceMixin,inline),{})
             if not issubclass(inline,_ArchivedChoiceMixin) else inline for inline in model_admin.inlines)
+
+        if model is Record and not isinstance(model_admin, _ActiveParticipantAdminMixin):
+            model_admin.__class__=type(
+                'ActiveParticipants'+model_admin.__class__.__name__,
+                (_ActiveParticipantAdminMixin, model_admin.__class__), {}
+            )
+        model_admin.inlines=tuple(
+            type('ActiveParticipants'+inline.__name__, (_ActiveParticipantInlineMixin, inline), {})
+            if inline.model is Record and not issubclass(inline, _ActiveParticipantInlineMixin)
+            else inline for inline in model_admin.inlines
+        )
