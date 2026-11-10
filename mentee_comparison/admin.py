@@ -73,7 +73,10 @@ class MenteeMatchAdmin(admin.ModelAdmin):
 
     def evidence_url(self, request, record, parent):
         """Link only to an accessible, registered source admin page."""
-        for obj in (record, parent):
+        # Skill Lab evidence belongs on the complete session entry page.
+        skill_record_model = source_models()[3]
+        targets = (parent,) if isinstance(record, skill_record_model) else (record, parent)
+        for obj in targets:
             if obj is None:
                 continue
             model_admin = self.admin_site._registry.get(type(obj))
