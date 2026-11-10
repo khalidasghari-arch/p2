@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.http import urlencode
 from .models import MenteeMatch
 from .services import build_rows, enrich, permitted, scoped_people, source_models
@@ -71,6 +71,28 @@ class MenteeMatchAdmin(admin.ModelAdmin):
         url = reverse('admin:mentee_comparison_menteematch_changelist', current_app=self.admin_site.name)
         return HttpResponseRedirect(url + '?' + urlencode({'q':s.firstname,'state':'all'}))
 
+    def evidence_url(self, request, record, parent):
+        """Link only to an accessible, registered source admin page."""
+        for obj in (record, parent):
+            if obj is None:
+                continue
+            model_admin = self.admin_site._registry.get(type(obj))
+            if model_admin is None:
+                continue
+            if not model_admin.has_view_or_change_permission(request, obj):
+                continue
+            if not model_admin.get_queryset(request).filter(pk=obj.pk).exists():
+                continue
+            opts = obj._meta
+            try:
+                return reverse(
+                    f'admin:{opts.app_label}_{opts.model_name}_change',
+                    args=[obj.pk], current_app=self.admin_site.name,
+                )
+            except NoReverseMatch:
+                continue
+        return ''
+
     def changelist_view(self, request, extra_context=None):
         if not permitted(request.user):
             raise PermissionDenied
@@ -79,7 +101,10 @@ class MenteeMatchAdmin(admin.ModelAdmin):
             if request.GET.get('export') == 'xlsx':
                 return self.export(enrich(rows,request.GET,pid), request)
             page = Paginator(rows,20).get_page(request.GET.get('page',1))
-            page.object_list = enrich(list(page.object_list),request.GET,pid)
+            page.object_list = enrich(
+                list(page.object_list), request.GET, pid,
+                evidence_url=lambda record, parent: self.evidence_url(request, record, parent),
+            )
         except ValidationError as exc:
             return HttpResponseBadRequest('; '.join(exc.messages))
         _, qk, _ = scoped_people(request)

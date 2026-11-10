@@ -162,7 +162,7 @@ def area_key(area):
     return ('hqip', area.hqip_area_id) if area.hqip_area_id else ('name', norm(area.name))
 
 
-def enrich(rows, params, pid):
+def enrich(rows, params, pid, evidence_url=None):
     dates = date_filters(params)
     _, skill, details, records = source_models()
     m_topics = list(apps.get_model('mentorship','MentorshipTopics').objects.select_related('thematicfk'))
@@ -234,7 +234,8 @@ def enrich(rows, params, pid):
                     'date':dt,'facility':str(facility or 'Not recorded'),'mentor':str(mentor or 'Not recorded'),
                     'type':', '.join(selected) or 'No LS/PC/MC selected',
                     'quality':'Multiple session flags — review' if len(selected)>1 else '',
-                    'area':target['area'],'topic':target['topic']}
+                    'area':target['area'],'topic':target['topic'],
+                    'evidence_url': evidence_url(obj, visit) if evidence_url else ''}
                 target['sessions'].append(event)
                 row['sessions'].append(event)
         areas = {}
