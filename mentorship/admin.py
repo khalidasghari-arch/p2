@@ -1,4 +1,5 @@
 import re
+from .models import MentorshipEmailRecipient
 from django.contrib import admin
 from .duplicate_admin import DuplicateMenteeAdminMixin
 from mentee_review.querysets import archived_ids
@@ -1637,3 +1638,10 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response
+
+@admin.register(MentorshipEmailRecipient)
+class MentorshipEmailRecipientAdmin(admin.ModelAdmin):
+    list_display = ("email", "enabled")
+    list_editable = ("enabled",)
+    list_filter = ("enabled",)
+    search_fields = ("email",)

@@ -211,3 +211,9 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     "DJANGO_CORS_ALLOWED_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
 ).split(",")
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+MENTORSHIP_NOTIFICATION_FROM = os.environ.get(
+    "MENTORSHIP_NOTIFICATION_FROM", ""
+).strip()
+MNHIMS_BASE_URL = os.environ.get("MNHIMS_BASE_URL", "").strip()

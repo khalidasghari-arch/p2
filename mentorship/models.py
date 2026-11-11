@@ -132,3 +132,15 @@ class MentorshipDashboard(Mentorshipvisit):
         proxy = True
         verbose_name = "MENTORSHIP DASHBOARD"
         verbose_name_plural = "MENTORSHIP DASHBOARD"
+
+class MentorshipEmailRecipient(models.Model):
+    email = models.EmailField(unique=True)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("email",)
+        verbose_name = "Mentorship email recipient"
+        verbose_name_plural = "Mentorship email recipients"
+
+    def __str__(self):
+        return self.email
