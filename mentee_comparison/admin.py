@@ -146,11 +146,12 @@ class MenteeMatchAdmin(admin.ModelAdmin):
         pairs=sheet('Mentee comparison',['Match status','Mentorship ID','Mentorship name','Father name','Province','Facility','Position','Gender','Active','Skill Lab ID','Skill Lab name','Skill Lab father','Skill Lab facility','Skill Lab position','Skill Lab gender','Skill Lab active','Confirmed by ID','Confirmed on','Match note'])
         topics=sheet('Topics',['Mentorship ID','Skill Lab ID','Area','Topic','Definition','Alignment','Coverage','Mentorship LS','Mentorship PC','Mentorship MC','Skill Lab LS','Skill Lab PC','Skill Lab MC','Mentorship first','Mentorship latest','Skill Lab first','Skill Lab latest'])
         areas=sheet('Thematic areas',['Mentorship ID','Skill Lab ID','Area','Mentorship LS','Mentorship PC','Mentorship MC','Skill Lab LS','Skill Lab PC','Skill Lab MC'])
-        sessions=sheet('Actual records',['Mentorship ID','Skill Lab ID','Source','Record ID','Date','Facility','Mentor','Area','Topic','Session flags','Quality note'])
+        sessions=sheet('Actual records',['Mentorship ID','Skill Lab ID','Source','Record ID','Date','Facility','Mentor','Area','Topic','Session flags','Quality note','Visit / session ID','Start / check-in','End / check-out','Duration','Duration minutes'])
         suggestions=sheet('Possible matches',['Mentorship ID','Skill Lab ID','Skill Lab name','Father name','Position','Reason','Already linked'])
         meta=sheet('Read me',['Item','Value'])
         add(meta,['Filters',request.GET.urlencode()])
         add(meta,['Scope','Only confirmed pairs have session comparisons. Dates filter sessions, not identity matching. Provincial users see only sessions recorded in their authorized province.'])
+        add(meta,['Timing','Times and durations describe the entire visit/session and repeat across topics and mentees. Do not sum repeated durations. Missing or reversed times have no numeric duration; durations use completed minutes.'])
         add(meta,['Interpretation','Counts are actual record flags, not competency certification. PC is not collected in Skill Lab. Unmapped topics are kept separate.'])
         for row in rows:
             s,k,p=row['s'],row['k'],row['person']
@@ -163,7 +164,7 @@ class MenteeMatchAdmin(admin.ModelAdmin):
             for a in row['areas']:
                 add(areas,[s.pk,k.pk,a['name'],a['m_ls'],a['m_pc'],a['m_mc'],a['k_ls'],'Not collected',a['k_mc']])
             for e in row['sessions']:
-                add(sessions,[s.pk,k.pk,e['source'],e['id'],e['date'],e['facility'],e['mentor'],e['area'],e['topic'],e['type'],e['quality']])
+                add(sessions,[s.pk,k.pk,e['source'],e['id'],e['date'],e['facility'],e['mentor'],e['area'],e['topic'],e['type'],e['quality'],e['visit_id'],e['start_time'].strftime('%H:%M') if e['start_time'] else '',e['end_time'].strftime('%H:%M') if e['end_time'] else '',e['duration'],e['duration_minutes']])
         for ws in wb:
             ws.freeze_panes='A2'
             ws.auto_filter.ref=ws.dimensions

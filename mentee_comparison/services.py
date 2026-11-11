@@ -162,6 +162,28 @@ def area_key(area):
     return ('hqip', area.hqip_area_id) if area.hqip_area_id else ('name', norm(area.name))
 
 
+def session_timing(visit, side):
+    start_field, end_field = (
+        ('mentorshipstarttime', 'mentorshipendtime') if side == 'M'
+        else ('check_in', 'check_out')
+    )
+    start = getattr(visit, start_field, None)
+    end = getattr(visit, end_field, None)
+    result = {'start_time': start, 'end_time': end,
+              'duration_minutes': None, 'duration': 'Not recorded'}
+    if start is None or end is None:
+        return result
+    seconds = lambda value: value.hour * 3600 + value.minute * 60 + value.second
+    elapsed = seconds(end) - seconds(start)
+    if elapsed < 0:
+        result['duration'] = 'Check times: end is before start'
+        return result
+    minutes = elapsed // 60
+    result.update(duration_minutes=minutes,
+                  duration=f'{minutes // 60} h {minutes % 60:02d} min')
+    return result
+
+
 def enrich(rows, params, pid, evidence_url=None):
     dates = date_filters(params)
     _, skill, details, records = source_models()
@@ -235,7 +257,9 @@ def enrich(rows, params, pid, evidence_url=None):
                     'type':', '.join(selected) or 'No LS/PC/MC selected',
                     'quality':'Multiple session flags — review' if len(selected)>1 else '',
                     'area':target['area'],'topic':target['topic'],
-                    'evidence_url': evidence_url(obj, visit) if evidence_url else ''}
+                    'evidence_url': evidence_url(obj, visit) if evidence_url else '',
+                    'visit_id': visit.pk if visit else None}
+                event.update(session_timing(visit, side))
                 target['sessions'].append(event)
                 row['sessions'].append(event)
         areas = {}
