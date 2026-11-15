@@ -281,17 +281,29 @@ class FacilityFilter(admin.SimpleListFilter):
     parameter_name = "facility"
 
     def lookups(self, request, model_admin):
-        qs = model_admin.get_queryset(request)
-        prov_id = request.GET.get("province")
-        if prov_id:
-            qs = qs.filter(facilityname__districtfk__provincefk__id=prov_id)
+        queryset = model_admin.get_queryset(request)
+        province_id = request.GET.get("province")
 
-        facilities = qs.values_list("facility_name__id", "facility_name__name").distinct().order_by("facility_name__name")
-        return [(fid, fname) for fid, fname in facilities if fid]
+        if province_id:
+            queryset = queryset.filter(
+                facility_name__districtfk__provincefk__id=province_id
+            )
+
+        facilities = (
+            queryset.values_list("facility_name__id", "facility_name__name")
+            .order_by("facility_name__name", "facility_name__id")
+            .distinct()
+        )
+        return [
+            (facility_id, facility_name)
+            for facility_id, facility_name in facilities
+            if facility_id is not None
+        ]
 
     def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(facilityname__id=self.value())
+        facility_id = self.value()
+        if facility_id:
+            return queryset.filter(facility_name__id=facility_id)
         return queryset
     
 # ============================================================
