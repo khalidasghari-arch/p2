@@ -281,29 +281,17 @@ class FacilityFilter(admin.SimpleListFilter):
     parameter_name = "facility"
 
     def lookups(self, request, model_admin):
-        queryset = model_admin.get_queryset(request)
-        province_id = request.GET.get("province")
+        qs = model_admin.get_queryset(request)
+        prov_id = request.GET.get("province")
+        if prov_id:
+            qs = qs.filter(facility_name__districtfk__provincefk__id=prov_id)
 
-        if province_id:
-            queryset = queryset.filter(
-                facility_name__districtfk__provincefk__id=province_id
-            )
-
-        facilities = (
-            queryset.values_list("facility_name__id", "facility_name__name")
-            .order_by("facility_name__name", "facility_name__id")
-            .distinct()
-        )
-        return [
-            (facility_id, facility_name)
-            for facility_id, facility_name in facilities
-            if facility_id is not None
-        ]
+        facilities = qs.values_list("facility_name__id", "facility_name__name").distinct().order_by("facility_name__name")
+        return [(fid, fname) for fid, fname in facilities if fid]
 
     def queryset(self, request, queryset):
-        facility_id = self.value()
-        if facility_id:
-            return queryset.filter(facility_name__id=facility_id)
+        if self.value():
+            return queryset.filter(facility_name__id=self.value())
         return queryset
     
 # ============================================================
@@ -10236,11 +10224,9 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
         queryset = base_qs
         filters, dropdowns = {}, []
         for name, label, path in self.filter_definitions:
-            value = request.GET.get(name, "").strip()
-            filters[name] = value
-            if name in ("province", "facility"):
-                if value and (not value.isdecimal() or len(value) > 18 or int(value) <= 0):
-                    raise SuspiciousOperation("Invalid dashboard filter ID")
+            requested = dict.fromkeys(request.GET.getlist(name))
+            is_location = name in ("province", "facility")
+            if is_location:
                 label_path = ("facility_name__districtfk__provincefk__name"
                               if name == "province" else "facility_name__name")
                 choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
@@ -10250,9 +10236,22 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
                 choices = [{"value": item, "label": item} for item in
                            queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
                            .order_by(path).values_list(path, flat=True).distinct()]
-            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices})
-            if value:
-                queryset = queryset.filter(**{path: int(value) if name in ("province", "facility") else value})
+            labels = {choice["value"]: choice["label"] for choice in choices}
+            selected = [value for value in requested if value in labels]
+            for choice in choices:
+                choice["selected"] = choice["value"] in selected
+
+            dropdowns.append({
+                "name": name,
+                "label": label,
+                "choices": choices,
+                "selected_count": len(selected),
+            })
+            filters[name] = ", ".join(labels[value] for value in selected)
+            if selected:
+                values = [int(value) for value in selected] if is_location else selected
+                queryset = queryset.filter(**{path + "__in": values})
+
         return queryset, filters, dropdowns
 
     def _annotations(self):
