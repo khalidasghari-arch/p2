@@ -6,6 +6,7 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 
 from django.contrib import messages
+from django.contrib.admin.utils import quote
 from django.contrib.admin.models import LogEntry, CHANGE
 from django.contrib.contenttypes.models import ContentType
 from django.core import signing
@@ -19,7 +20,7 @@ from django.db.models import Q, Count
 from mentee_review.models import ReviewMerge, ReviewDecision
 from mentee_review.querysets import archived_ids
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 
 from .models import Staff, Mentorshipdetails, MenteeTopicStatus
 
@@ -205,6 +206,50 @@ class DuplicateMenteeAdminMixin:
                     source_statuses=sum(o.mentee_id == source.pk for o in statuses),
                     has_history=bool(inventory), blocked=any(not x['supported'] for x in inventory),
                     payload=payload, digest=digest, details=details, statuses=statuses)
+
+    def _linked_evidence(self, request, preview):
+        """Resolve links through the destination admin's permissions and scope."""
+        source = preview['source']
+        evidence = []
+        for item in preview['inventory']:
+            label = item['model']
+            if label == 'mentee_comparison.MenteeMatch':
+                label = 'Mentorship–Skill Lab match'
+            elif item['supported']:
+                label = ('Mentorship activity' if item['model'] == Mentorshipdetails._meta.label
+                         else 'Saved topic status')
+            else:
+                label = 'Other linked record'
+            group = dict(label=label, count=item['count'], links=[])
+            evidence.append(group)
+            for relation in source._meta.get_fields(include_hidden=True):
+                field = getattr(relation, 'field', None)
+                model = getattr(relation, 'related_model', None)
+                if not (relation.auto_created and not relation.concrete
+                        and (relation.one_to_many or relation.one_to_one)
+                        and model and field and model._meta.label == item['model']
+                        and field.name == item['field']):
+                    continue
+                destination = self.admin_site._registry.get(model)
+                if destination is None:
+                    break
+                opts = model._meta
+                records = destination.get_queryset(request).filter(
+                    **{field.attname: source.pk}
+                ).order_by('pk')[:20]
+                for record in records:
+                    if not destination.has_view_or_change_permission(request, record):
+                        continue
+                    try:
+                        url = reverse(
+                            f'{self.admin_site.name}:{opts.app_label}_{opts.model_name}_change',
+                            args=[quote(record.pk)],
+                        )
+                    except NoReverseMatch:
+                        break
+                    group['links'].append(dict(id=record.pk, url=url))
+                break
+        return evidence
 
     def _view_permissions(self, request):
         if not self.has_view_permission(request):
@@ -532,6 +577,8 @@ class DuplicateMenteeAdminMixin:
                  'decisions':decisions,'review_error':error,'outcome':outcome,'result':result,
                  'can_merge':request.user.has_perm('mentee_review.merge_mentees'),'home_url':self.duplicate_url(),'history_url':reverse(f'{self.admin_site.name}:mentorship_staff_merge_history')}
         if state and preview:
+            if step == 5:
+                context['linked_evidence'] = self._linked_evidence(request, preview)
             a,b=preview['source'],preview['target']
             different=self._different_statuses(preview)
             remaining=[c for c in different if str(c['source'].pk) not in state['choices']]
