@@ -9872,14 +9872,9 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         queryset = base_qs
         filters, dropdowns = {}, []
         for name, label, path in self.filter_definitions:
-            multiple = name in ("gre_year", "gre_month", "shamsiyear", "shamsimonth")
-            value = (list(dict.fromkeys(
-                item.strip() for item in request.GET.getlist(name) if item.strip()
-            )) if multiple else request.GET.get(name, "").strip())
-            filters[name] = value
-            if name in ("province", "facility"):
-                if value and (not value.isdecimal() or len(value) > 18 or int(value) <= 0):
-                    raise SuspiciousOperation("Invalid dashboard filter ID")
+            requested = dict.fromkeys(request.GET.getlist(name))
+            is_location = name in ("province", "facility")
+            if is_location:
                 label_path = ("aimfacilityname__districtfk__provincefk__name"
                               if name == "province" else "aimfacilityname__name")
                 choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
@@ -9889,9 +9884,22 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 choices = [{"value": item, "label": item} for item in
                            queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
                            .order_by(path).values_list(path, flat=True).distinct()]
-            dropdowns.append({"name": name, "label": label, "value": value, "choices": choices, "multiple": multiple})
-            if value:
-                queryset = queryset.filter(**{path + ("__in" if multiple else ""): int(value) if name in ("province", "facility") else value})
+            labels = {choice["value"]: choice["label"] for choice in choices}
+            selected = [value for value in requested if value in labels]
+            for choice in choices:
+                choice["selected"] = choice["value"] in selected
+
+            dropdowns.append({
+                "name": name,
+                "label": label,
+                "choices": choices,
+                "selected_count": len(selected),
+            })
+            filters[name] = ", ".join(labels[value] for value in selected)
+            if selected:
+                values = [int(value) for value in selected] if is_location else selected
+                queryset = queryset.filter(**{path + "__in": values})
+
         return queryset, filters, dropdowns
 
     def _annotations(self):
@@ -9963,19 +9971,23 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             for field, label in self.count_definitions:
                 value = getattr(obj, field)
                 if value is None:
-                    issues.append("Missing count: " + field)
+                    issues.append(f"{label}: count missing. Check the monthly source report.")
                 elif value < 0:
-                    issues.append("Negative count: " + field)
+                    issues.append(f"{label}: recorded count {value} is negative. Check the monthly source report.")
             for key, label, numerator, denominator in self.rate_definitions:
                 num, den = getattr(obj, numerator), getattr(obj, denominator)
                 stored = getattr(obj, key)
                 if num is not None and den is not None and num > den:
-                    issues.append("Numerator exceeds denominator: " + key)
+                    issues.append(f"{label}: recorded numerator {num} exceeds denominator {den}. Verify both counts.")
                 if stored is not None and (stored < 0 or stored > 100):
-                    issues.append("Stored percentage outside 0–100: " + key)
+                    issues.append(f"{label}: saved percentage {stored}% falls outside 0–100%.")
                 expected = self._rate(num, den)
                 if expected is not None and (stored is None or abs(Decimal(str(expected)) - stored) > Decimal("0.01")):
-                    issues.append("Stored percentage differs from count calculation: " + key)
+                    saved = "missing" if stored is None else f"{stored}%"
+                    issues.append(
+                        f"{label}: saved percentage {saved}. Recorded counts "
+                        f"{num} / {den} give {expected}%. Check the original report."
+                    )
             if issues:
                 facility = obj.aimfacilityname
                 rows.append({"id": obj.pk, "province": facility.districtfk.provincefk.name,
@@ -10012,6 +10024,21 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             row["month_label"] = f"{row['gre_year']}-{row['gre_month']} / {row['period']}"
         comparison = self._comparison(queryset)
         quality = self._quality_rows(queryset)
+        source_model = queryset.model._meta.concrete_model
+        source_opts = source_model._meta
+        source_permission = f"{source_opts.app_label}.{{}}_{source_opts.model_name}"
+        can_view_source = request.user.has_perm(source_permission.format("view")) or (
+            request.user.has_perm(source_permission.format("change"))
+        )
+        quality_links = {
+            row["id"]: reverse(
+                f"admin:{source_opts.app_label}_{source_opts.model_name}_change",
+                args=[row["id"]],
+                current_app=self.admin_site.name,
+            )
+            for row in quality
+        } if can_view_source else {}
+
         count_labels = dict(self.count_definitions)
         rate_labels = {key: label for key, label, num, den in self.rate_definitions}
         process_keys = ["who_ssc_rate", "safe_tracker_rate", "qbl_cs_rate", "vag_clean_rate",
@@ -10041,6 +10068,12 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             self._table("facility", "Facility summary", [("province", "Province"), ("district", "District"),
                 ("facility", "Facility"), ("hfcode", "HF code")] + summary_columns, facilities),
         ]
+        for table in tables:
+            if table["key"] == "quality":
+                table["source_links"] = [quality_links.get(row["id"]) for row in quality]
+                table["show_source_links"] = bool(quality_links)
+                table["display_rows"] = list(zip(table["rows"], table["source_links"]))
+                break
         volume_series = [("total_deliv", "Deliveries"), ("total_cs", "C-sections")]
         charts = [
             self._chart("progress", "Safety process rates by baseline / progress", progress, "bl_progress",
