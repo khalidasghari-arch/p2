@@ -83,8 +83,17 @@
       {% if table.rows %}
       <div class="scroller" tabindex="0" role="region" aria-label="{{ table.title }}">
         <table aria-label="{{ table.title }}">
-          <thead><tr>{% for header in table.headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr></thead>
-          <tbody>{% for row in table.rows %}<tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          <thead><tr>{% for header in table.headers %}<th scope="col">{{ header }}</th>{% endfor %}{% if table.show_source_links %}<th scope="col">Source record</th>{% endif %}</tr></thead>
+          <tbody>
+          {% if table.show_source_links %}
+            {% for row, source_url in table.display_rows %}
+              <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}
+                <td><a href="{{ source_url }}">View source record</a></td></tr>
+            {% endfor %}
+          {% else %}
+            {% for row in table.rows %}<tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}
+          {% endif %}
+          </tbody>
         </table>
       </div>
       {% else %}<p>No rows to display.</p>{% endif %}

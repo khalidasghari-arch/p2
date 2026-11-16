@@ -10363,7 +10363,7 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
                     "notes": "Check reporting duration, missing counts, case mix and source documents before interpretation."})
         return sorted(output, key=lambda row: (row["province"] or "", row["facility"] or ""))
 
-    def _quality_rows(self, queryset):
+    def _quality_rows(self, request, queryset):
         output = []
         sections = ("sec1_complete", "sec2_complete", "sec3_complete", "sec4_complete")
         for obj in queryset.iterator(chunk_size=1000):
@@ -10381,8 +10381,21 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
             for key, label, numerator, denominator in self.rate_definitions:
                 if getattr(obj, numerator) > getattr(obj, denominator):
                     issues.append("Numerator exceeds denominator: " + key)
-            if any(obj.all4_sections_complete > getattr(obj, field) for field in sections):
-                issues.append("All-four completion exceeds an individual section count")
+            section_counts = [getattr(obj, field) for field in sections]
+            all_four = obj.all4_sections_complete
+            if all_four is not None and all(count is not None for count in section_counts):
+                upper_limit = min(section_counts)
+                if all_four > upper_limit:
+                    counts = ", ".join(
+                        f"Section {number}: {count}"
+                        for number, count in enumerate(section_counts, start=1)
+                    )
+                    issues.append(
+                        f"All four complete: {all_four}; files sampled: {obj.files_selected}. "
+                        f"{counts}. At most {upper_limit} could have all four complete "
+                        "given these counts. Verify the counts against the original sampled "
+                        "checklists or tally sheet."
+                    )
             for legacy, fk, label in self.reporting_fields:
                 lookup = getattr(obj, fk)
                 if lookup is not None:
@@ -10430,7 +10443,22 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
         for row in monthly:
             row["month_label"] = f"{row['_dash_gre_year']}-{row['_dash_gre_month']} / {row['_dash_period']}"
         comparison = self._comparison(queryset)
-        quality = self._quality_rows(queryset)
+        quality = self._quality_rows(request, queryset)
+        source_model = queryset.model._meta.concrete_model
+        source_opts = source_model._meta
+        source_permission = f"{source_opts.app_label}.{{}}_{source_opts.model_name}"
+        can_view_source = request.user.has_perm(source_permission.format("view")) or (
+            request.user.has_perm(source_permission.format("change"))
+        )
+        quality_links = {
+            row["id"]: reverse(
+                f"admin:{source_opts.app_label}_{source_opts.model_name}_change",
+                args=[row["id"]],
+                current_app=self.admin_site.name,
+            )
+            for row in quality
+        } if can_view_source else {}
+
         rate_labels = {key: label for key, label, num, den in self.rate_definitions}
         section_keys = ["sec1_completeness_ratio", "sec2_completeness_ratio", "sec3_completeness_ratio",
                         "sec4_completeness_ratio", "all4_sections_completeness_ratio"]
@@ -10464,6 +10492,12 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
             self._table("facility", "Facility summary", [("province", "Province"), ("district", "District"),
                 ("facility", "Facility"), ("hfcode", "HF code")] + summary_columns, facilities),
         ]
+        for table in tables:
+            if table["key"] == "quality":
+                table["source_links"] = [quality_links.get(row["id"]) for row in quality]
+                table["show_source_links"] = bool(quality_links)
+                table["display_rows"] = list(zip(table["rows"], table["source_links"]))
+                break
         count_series = [("files_selected", "Selected files"), ("all4_sections_complete", "All four sections complete")]
         charts = [
             self._chart("progress", "Section and full-checklist completeness by baseline / progress", progress, "baseline",
