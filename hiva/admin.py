@@ -2908,8 +2908,55 @@ class AimPPHDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
 # ============================================================
 # WHO Childbirth Checklist Monthly
 # ============================================================
+class WhoChildbirthChecklistMonthlyForm(forms.ModelForm):
+    class Meta:
+        model = WhoChildbirthChecklistMonthly
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        for field, label in (
+            ("shamsi_year_fk", "Afghanistan year"),
+            ("shamsi_month_fk", "Afghanistan month"),
+        ):
+            if field not in self.errors and not cleaned_data.get(field):
+                self.add_error(field, f"Select the {label} for this report.")
+
+        facility = cleaned_data.get("facility_name")
+        year = cleaned_data.get("shamsi_year_fk")
+        month = cleaned_data.get("shamsi_month_fk")
+        if not (facility and year and month):
+            return cleaned_data
+
+        model = self._meta.model
+        database = router.db_for_write(model, instance=self.instance)
+        reports = model._base_manager.using(database).filter(
+            facility_name_id=facility.pk,
+        )
+        if self.instance.pk is not None:
+            reports = reports.exclude(pk=self.instance.pk)
+
+        matching_year = Q(shamsi_year_fk_id=year.pk) | Q(
+            shamsi_year_fk__isnull=True, shamsi_year=str(year)
+        )
+        matching_month = Q(shamsi_month_fk_id=month.pk) | Q(
+            shamsi_month_fk__isnull=True, shamsi_month=str(month)
+        )
+        legacy_key = Q(shamsi_year=str(year), shamsi_month=str(month))
+        if reports.filter((matching_year & matching_month) | legacy_key).exists():
+            self.add_error(
+                "shamsi_month_fk",
+                "A checklist already exists for this facility and Shamsi "
+                "reporting month. Open the existing report to update its figures.",
+            )
+
+        return cleaned_data
+
+
 @admin.register(WhoChildbirthChecklistMonthly)
 class WhoChildbirthChecklistMonthlyAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
+    form = WhoChildbirthChecklistMonthlyForm
     save_on_top = True
     list_per_page = 10
 
