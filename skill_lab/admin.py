@@ -826,10 +826,13 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
 
         date_from = request.GET.get("date_from", "").strip()
         date_to = request.GET.get("date_to", "").strip()
-        province_id = request.GET.get("province", "").strip()
-        facility_id = request.GET.get("facility", "").strip()
-        session_type = request.GET.get("session_type", "").strip()
-        lab_round = request.GET.get("lab_round", "").strip()
+        # Multi-select filters use repeated query-string values, e.g. province=1&province=2.
+        province_ids = [v for v in request.GET.getlist("province") if v.isdigit()]
+        facility_ids = [v for v in request.GET.getlist("facility") if v.isdigit()]
+        session_type_ids = [v for v in request.GET.getlist("session_type") if v]
+        lab_round_ids = [v for v in request.GET.getlist("lab_round") if v]
+        thematic_area_ids = [v for v in request.GET.getlist("thematic_area") if v.isdigit()]
+        topic_ids = [v for v in request.GET.getlist("topic") if v.isdigit()]
 
         if date_from:
             sessions_qs = sessions_qs.filter(session_date__gte=date_from)
@@ -839,27 +842,48 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             sessions_qs = sessions_qs.filter(session_date__lte=date_to)
             participants_qs = participants_qs.filter(**{f"{date_lookup}__lte": date_to})
 
-        if province_id:
+        if province_ids:
             sessions_qs = sessions_qs.filter(
-                skill_lab__facility__districtfk__provincefk_id=province_id
+                skill_lab__facility__districtfk__provincefk_id__in=province_ids
             )
-            participants_qs = participants_qs.filter(**{province_id_lookup: province_id})
+            participants_qs = participants_qs.filter(**{f"{province_id_lookup}__in": province_ids})
 
-        if facility_id:
-            sessions_qs = sessions_qs.filter(skill_lab__facility_id=facility_id)
-            participants_qs = participants_qs.filter(**{facility_id_lookup: facility_id})
+        if facility_ids:
+            sessions_qs = sessions_qs.filter(skill_lab__facility_id__in=facility_ids)
+            participants_qs = participants_qs.filter(**{f"{facility_id_lookup}__in": facility_ids})
 
-        if session_type:
-            sessions_qs = sessions_qs.filter(session_type=session_type)
+        if session_type_ids:
+            sessions_qs = sessions_qs.filter(session_type__in=session_type_ids)
             participants_qs = participants_qs.filter(
-                **{f"{session_prefix}session_type": session_type}
+                **{f"{session_prefix}session_type__in": session_type_ids}
             )
 
-        if lab_round:
-            sessions_qs = sessions_qs.filter(lab_round=lab_round)
+        if lab_round_ids:
+            sessions_qs = sessions_qs.filter(lab_round__in=lab_round_ids)
             participants_qs = participants_qs.filter(
-                **{f"{session_prefix}lab_round": lab_round}
+                **{f"{session_prefix}lab_round__in": lab_round_ids}
             )
+
+        # Keep option lists aligned with the current geography, date, and session filters.
+        # Topic options narrow to the selected thematic areas, while still allowing multiple selections.
+        thematic_option_rows = list(
+            participants_qs.order_by().values(
+                thematic_id=F("thematic_area_id"), thematic_name=F("thematic_area__name")
+            ).exclude(thematic_id__isnull=True).distinct().order_by("thematic_name")
+        )
+        topic_option_qs = participants_qs
+        if thematic_area_ids:
+            topic_option_qs = topic_option_qs.filter(thematic_area_id__in=thematic_area_ids)
+        topic_option_rows = list(
+            topic_option_qs.order_by().values(
+                option_topic_id=F("topic_id"), topic_name=F("topic__name")
+            ).exclude(topic_id__isnull=True).distinct().order_by("topic_name")
+        )
+
+        if thematic_area_ids:
+            participants_qs = participants_qs.filter(thematic_area_id__in=thematic_area_ids)
+        if topic_ids:
+            participants_qs = participants_qs.filter(topic_id__in=topic_ids)
 
         option_sessions = SkillLabSession.objects.select_related(
             "skill_lab__facility__districtfk__provincefk"
@@ -879,6 +903,11 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             .distinct()
             .order_by("province")
         )
+
+        if province_ids:
+            option_sessions = option_sessions.filter(
+                skill_lab__facility__districtfk__provincefk_id__in=province_ids
+            )
 
         facility_options = list(
             option_sessions.values(
@@ -904,6 +933,7 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             total_ls=self._bool_sum("ls"),
             total_mc=self._bool_sum("mc"),
             distinct_topics=Count("topic", distinct=True),
+            distinct_thematic_areas=Count("thematic_area", distinct=True),
             distinct_facilities=Count(facility_id_lookup, distinct=True),
             distinct_sessions=Count(session_fk, distinct=True),
         )
@@ -1435,16 +1465,26 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "filters": {
                     "date_from": date_from,
                     "date_to": date_to,
-                    "province": province_id,
-                    "facility": facility_id,
-                    "session_type": session_type,
-                    "lab_round": lab_round,
+                    "province": province_ids,
+                    "facility": facility_ids,
+                    "session_type": session_type_ids,
+                    "lab_round": lab_round_ids,
+                    "thematic_area": thematic_area_ids,
+                    "topic": topic_ids,
                 },
                 "export_query": export_query.urlencode(),
                 "province_options": province_options,
                 "facility_options": facility_options,
                 "session_type_options": session_type_options,
                 "lab_round_options": lab_round_options,
+                "thematic_area_options": thematic_option_rows,
+                "topic_options": topic_option_rows,
+                "selected_thematic_area_ids": thematic_area_ids,
+                "selected_topic_ids": topic_ids,
+                "selected_province_ids": province_ids,
+                "selected_facility_ids": facility_ids,
+                "selected_session_type_ids": session_type_ids,
+                "selected_lab_round_ids": lab_round_ids,
                 "kpis": kpis,
                 "province_rows": province_rows,
                 "facility_rows": facility_rows,

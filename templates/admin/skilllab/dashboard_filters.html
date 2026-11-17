@@ -1,0 +1,32 @@
+{# Include this block near the top of admin/skilllab/dashboard.html, above the KPI cards. #}
+<style>
+  .sl-filter-panel{background:#fff;border:1px solid #d8e4dc;border-top:4px solid #16804a;border-radius:10px;padding:18px;margin:0 0 20px;box-shadow:0 2px 8px rgba(25,70,45,.06)}
+  .sl-filter-heading{margin:0 0 14px;color:#145b38;font-size:17px;font-weight:700}
+  .sl-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:14px}
+  .sl-filter-field label{display:block;font-size:12px;font-weight:700;color:#34443a;margin:0 0 6px}
+  .sl-filter-field input,.sl-filter-field select{width:100%;min-height:40px;border:1px solid #cbd8cf;border-radius:6px;padding:8px;background:#fff;color:#24352b;box-sizing:border-box}
+  .sl-filter-field select[multiple]{height:104px;padding:6px}
+  .sl-filter-help{font-size:11px;color:#64746a;margin-top:4px}
+  .sl-filter-actions{display:flex;gap:9px;align-items:center;margin-top:15px}
+  .sl-filter-actions button,.sl-filter-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 14px;border-radius:6px;font-weight:700;text-decoration:none;cursor:pointer}
+  .sl-filter-actions button{border:0;background:#16804a;color:white}
+  .sl-filter-actions a{border:1px solid #cbd8cf;background:#f7faf8;color:#31513d}
+  @media(max-width:900px){.sl-filter-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}}
+  @media(max-width:560px){.sl-filter-panel{padding:13px}.sl-filter-grid{grid-template-columns:1fr}.sl-filter-actions{flex-wrap:wrap}}
+</style>
+<section class="sl-filter-panel" aria-label="Skill Lab dashboard filters">
+  <h2 class="sl-filter-heading">Dashboard filters</h2>
+  <form method="get" id="skilllab-dashboard-filters">
+    <div class="sl-filter-grid">
+      <div class="sl-filter-field"><label for="sl-date-from">Date from</label><input id="sl-date-from" type="date" name="date_from" value="{{ filters.date_from }}"></div>
+      <div class="sl-filter-field"><label for="sl-date-to">Date to</label><input id="sl-date-to" type="date" name="date_to" value="{{ filters.date_to }}"></div>
+      <div class="sl-filter-field"><label for="sl-province">Province</label><select id="sl-province" name="province"><option value="">All available provinces</option>{% for row in province_options %}<option value="{{ row.province_id }}" {% if filters.province|stringformat:'s' == row.province_id|stringformat:'s' %}selected{% endif %}>{{ row.province }}</option>{% endfor %}</select></div>
+      <div class="sl-filter-field"><label for="sl-facility">Facility</label><select id="sl-facility" name="facility"><option value="">All available facilities</option>{% for row in facility_options %}<option value="{{ row.facility_id }}" {% if filters.facility|stringformat:'s' == row.facility_id|stringformat:'s' %}selected{% endif %}>{{ row.facility }}</option>{% endfor %}</select></div>
+      <div class="sl-filter-field"><label for="sl-session-type">Session type</label><select id="sl-session-type" name="session_type"><option value="">All session types</option>{% for value,label in session_type_options %}<option value="{{ value }}" {% if filters.session_type == value|stringformat:'s' %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="sl-filter-field"><label for="sl-round">Lab round</label><select id="sl-round" name="lab_round"><option value="">All rounds</option>{% for value in lab_round_options %}<option value="{{ value }}" {% if filters.lab_round == value|stringformat:'s' %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></div>
+      <div class="sl-filter-field"><label for="sl-thematic">Thematic areas</label><select id="sl-thematic" name="thematic_area" multiple>{% for row in thematic_area_options %}<option value="{{ row.thematic_id }}" {% if row.thematic_id|stringformat:'s' in selected_thematic_area_ids %}selected{% endif %}>{{ row.thematic_name }}</option>{% endfor %}</select><div class="sl-filter-help">Select one or more; use Ctrl (Windows) or Command (Mac) for multiple choices.</div></div>
+      <div class="sl-filter-field"><label for="sl-topic">Topics</label><select id="sl-topic" name="topic" multiple>{% for row in topic_options %}<option value="{{ row.option_topic_id }}" {% if row.option_topic_id|stringformat:'s' in selected_topic_ids %}selected{% endif %}>{{ row.topic_name }}</option>{% endfor %}</select><div class="sl-filter-help">Topics shown match the selected thematic areas and available dashboard records.</div></div>
+    </div>
+    <div class="sl-filter-actions"><button type="submit">Apply filters</button><a href="{{ request.path }}">Clear filters</a></div>
+  </form>
+</section>
