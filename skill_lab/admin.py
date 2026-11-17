@@ -1,16 +1,15 @@
 from django.contrib import admin, messages
 from django import forms
 from django.core.exceptions import FieldError
-from django.db.models import Count
 from django.http import JsonResponse
 from django.urls import path
 from django.utils.html import format_html
 from django.http import HttpResponse, JsonResponse
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from django.db.models import Count
 from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F
 from django.db.models.functions import TruncMonth
+from datetime import timedelta
 from django.template.response import TemplateResponse
 from django.http import HttpResponse
 from django.utils import timezone
@@ -1161,6 +1160,88 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             r["total"] = r["ls"] + r["mc"]
             r["mc_minus_ls"] = r["mc"] - r["ls"]
 
+        # Weekly activity summary. Group in Python rather than using a conditional
+        # ORM date expression; this keeps the Sunday-Thursday grouping compatible
+        # with Django 5.1 and the project's database backend.
+        weekly_buckets = {}
+        weekly_values = participants_qs.values_list(
+            f"{session_fk}__session_date",
+            f"{session_fk}_id",
+            "mentee_name_id",
+            "thematic_area_id",
+            "thematic_area__name",
+            "topic_id",
+            "topic__name",
+            "ls",
+            "mc",
+        )
+
+        for (session_day, session_id, mentee_id, thematic_id, thematic_name,
+             topic_id, topic_name, has_ls, has_mc) in weekly_values.iterator():
+            if not session_day:
+                continue
+            if hasattr(session_day, "date"):
+                session_day = session_day.date()
+
+            # Python weekday(): Monday=0 ... Sunday=6.
+            weekday = session_day.weekday()
+            if weekday not in (6, 0, 1, 2, 3):  # Sunday through Thursday only
+                continue
+
+            days_since_sunday = (weekday + 1) % 7
+            week_start = session_day - timedelta(days=days_since_sunday)
+            bucket = weekly_buckets.setdefault(week_start, {
+                "sessions": set(),
+                "participants": set(),
+                "thematic_areas": set(),
+                "topics": set(),
+                "thematic_area_names": set(),
+                "topic_names": set(),
+                "ls": 0,
+                "mc": 0,
+            })
+            if session_id is not None:
+                bucket["sessions"].add(session_id)
+            if mentee_id is not None:
+                bucket["participants"].add(mentee_id)
+            if thematic_id is not None:
+                bucket["thematic_areas"].add(thematic_id)
+            if thematic_name:
+                bucket["thematic_area_names"].add(str(thematic_name))
+            if topic_id is not None:
+                bucket["topics"].add(topic_id)
+            if topic_name:
+                bucket["topic_names"].add(str(topic_name))
+            bucket["ls"] += int(bool(has_ls))
+            bucket["mc"] += int(bool(has_mc))
+
+        weekly_activity_rows = []
+        for week_start, bucket in sorted(weekly_buckets.items()):
+            weekly_activity_rows.append({
+                "week_start": week_start,
+                "week_end": week_start + timedelta(days=4),
+                "week_label": (
+                    f"{week_start:%d %b} – "
+                    f"{(week_start + timedelta(days=4)):%d %b %Y}"
+                ),
+                "sessions": len(bucket["sessions"]),
+                "participants": len(bucket["participants"]),
+                "thematic_area_count": len(bucket["thematic_areas"]),
+                "topic_count": len(bucket["topics"]),
+                "thematic_area_names": sorted(bucket["thematic_area_names"]),
+                "topic_names": sorted(bucket["topic_names"]),
+                "ls": bucket["ls"],
+                "mc": bucket["mc"],
+            })
+
+        weekly_chart_max = max(
+            [max(row["sessions"], row["ls"], row["mc"]) for row in weekly_activity_rows] or [1]
+        )
+        for row in weekly_activity_rows:
+            row["sessions_width"] = round(row["sessions"] / weekly_chart_max * 100, 1)
+            row["ls_width"] = round(row["ls"] / weekly_chart_max * 100, 1)
+            row["mc_width"] = round(row["mc"] / weekly_chart_max * 100, 1)
+
         # Top 10 facility drivers by absolute difference between LS and MC
         top_facility_drivers_chart = sorted(
             facility_rows,
@@ -1491,6 +1572,7 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "facility_driver_rows": facility_driver_rows,
                 "trend_rows": trend_rows,
                 "monthly_total_rows": monthly_total_rows,
+                "weekly_activity_rows": weekly_activity_rows,
                 "first_session_rows": first_session_rows,
                 "story_candidates": story_candidates,
                 "bamyan_row": bamyan_row,
@@ -1615,6 +1697,21 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
         ws6.append(["Topic", "Explanation"])
         ws6.append(["LS and MC interpretation", data["methodology_note"]])
         ws6.append(["Bamyan explanation", data["bamyan_narrative"]])
+
+        ws_weekly = wb.create_sheet("Weekly_Activity")
+        ws_weekly.append([
+            "Week", "Sessions", "Learning Sessions (LS)",
+            "Model Competency (MC)", "Distinct Participants",
+            "Distinct Thematic Areas", "Thematic Area Names",
+            "Distinct Topics", "Topic Names",
+        ])
+        for row in data.get("weekly_activity_rows", []):
+            ws_weekly.append([
+                row.get("week_label"), row.get("sessions"), row.get("ls"),
+                row.get("mc"), row.get("participants"),
+                row.get("thematic_area_count"), "; ".join(row.get("thematic_area_names", [])),
+                row.get("topic_count"), "; ".join(row.get("topic_names", [])),
+            ])
 
         ws7 = wb.create_sheet("Participant_Profile")
         ws7.append([
