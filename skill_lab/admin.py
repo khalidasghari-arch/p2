@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F
 from django.db.models.functions import TruncMonth
-from datetime import timedelta
+from datetime import date as date_type, timedelta
 from django.template.response import TemplateResponse
 from django.http import HttpResponse
 from django.utils import timezone
@@ -1162,13 +1162,10 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
 
         # Weekly activity summary by Sunday-Thursday workweek.
         weekly_buckets = {}
-        weekly_province_buckets = {}
         weekly_values = participants_qs.values_list(
             f"{session_fk}__session_date",
             f"{session_fk}_id",
             f"{session_fk}__skill_lab_id",
-            f"{session_fk}__skill_lab__facility__districtfk__provincefk_id",
-            f"{session_fk}__skill_lab__facility__districtfk__provincefk__name",
             "mentee_name_id",
             "thematic_area_id",
             "thematic_area__name",
@@ -1178,9 +1175,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             "mc",
         )
 
-        for (session_day, session_id, skill_lab_id, province_id_for_row, province_name,
-             mentee_id, thematic_id, thematic_name, topic_id, topic_name,
-             has_ls, has_mc) in weekly_values.iterator():
+        for (session_day, session_id, skill_lab_id, mentee_id, thematic_id,
+             thematic_name, topic_id, topic_name, has_ls, has_mc) in weekly_values.iterator():
             if not session_day:
                 continue
             if hasattr(session_day, "date"):
@@ -1198,36 +1194,26 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "topics": set(), "thematic_area_names": set(), "topic_names": set(),
                 "skill_labs": set(), "ls": 0, "mc": 0,
             })
-            province_bucket = weekly_province_buckets.setdefault(
-                (str(province_name or "Unknown"), week_start), {
-                    "province_id": province_id_for_row,
-                    "sessions": set(), "participants": set(), "thematic_areas": set(),
-                    "topics": set(), "skill_labs": set(), "ls": 0, "mc": 0,
-                }
-            )
-
-            for target in (bucket, province_bucket):
-                if session_id is not None:
-                    target["sessions"].add(session_id)
-                if skill_lab_id is not None:
-                    target["skill_labs"].add(skill_lab_id)
-                if mentee_id is not None:
-                    target["participants"].add(mentee_id)
-                if thematic_id is not None:
-                    target["thematic_areas"].add(thematic_id)
-                if topic_id is not None:
-                    target["topics"].add(topic_id)
-                target["ls"] += int(bool(has_ls))
-                target["mc"] += int(bool(has_mc))
+            if session_id is not None:
+                bucket["sessions"].add(session_id)
+            if skill_lab_id is not None:
+                bucket["skill_labs"].add(skill_lab_id)
+            if mentee_id is not None:
+                bucket["participants"].add(mentee_id)
+            if thematic_id is not None:
+                bucket["thematic_areas"].add(thematic_id)
             if thematic_name:
                 bucket["thematic_area_names"].add(str(thematic_name))
+            if topic_id is not None:
+                bucket["topics"].add(topic_id)
             if topic_name:
                 bucket["topic_names"].add(str(topic_name))
+            bucket["ls"] += int(bool(has_ls))
+            bucket["mc"] += int(bool(has_mc))
 
-        # SkillLab has no establishment-date field in the supplied admin/model
-        # configuration. Use the first recorded session as a transparent proxy
-        # for the week a lab became operational. Do not apply dashboard date-range
-        # filters here; earlier activity is needed to calculate cumulative totals.
+        # Use the first recorded session as the establishment-date proxy. This
+        # query is scoped by the selected provinces/facilities, but deliberately
+        # ignores the display date range so cumulative labs include earlier history.
         lab_history_qs = SkillLabSession.objects.all()
         if province and not request.user.is_superuser:
             lab_history_qs = lab_history_qs.filter(
@@ -1252,7 +1238,6 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
         )
 
         lab_events = []
-        lab_event_counts = {}
         for item in lab_first_sessions:
             first_day = item.get("first_session_date")
             if not first_day:
@@ -1260,29 +1245,22 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             if hasattr(first_day, "date"):
                 first_day = first_day.date()
             weekday = first_day.weekday()
-            if weekday in (4, 5):  # weekend starts count at the following Sunday
+            if weekday in (4, 5):  # Friday/Saturday starts count from the next Sunday
                 operational_week = first_day + timedelta(days=(6 - weekday))
             else:
                 operational_week = first_day - timedelta(days=(weekday + 1) % 7)
-            province_name = str(item.get("skill_lab__facility__districtfk__provincefk__name") or "Unknown")
-            event = {
+            lab_events.append({
                 "lab_id": item.get("skill_lab_id"),
-                "province": province_name,
+                "province": str(item.get("skill_lab__facility__districtfk__provincefk__name") or "Unknown"),
                 "province_id": item.get("skill_lab__facility__districtfk__provincefk_id"),
+                "first_session_date": first_day,
                 "week_start": operational_week,
-            }
-            lab_events.append(event)
-            lab_event_counts[(province_name, operational_week)] = lab_event_counts.get(
-                (province_name, operational_week), 0
-            ) + 1
+            })
 
         weekly_activity_rows = []
         for week_start, bucket in sorted(weekly_buckets.items()):
             week_end = week_start + timedelta(days=4)
             active_events = [event for event in lab_events if event["week_start"] <= week_end]
-            province_counts = {}
-            for event in active_events:
-                province_counts[event["province"]] = province_counts.get(event["province"], 0) + 1
             weekly_activity_rows.append({
                 "week_start": week_start,
                 "week_end": week_end,
@@ -1295,37 +1273,113 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "topic_names": sorted(bucket["topic_names"]),
                 "ls": bucket["ls"],
                 "mc": bucket["mc"],
-                "skill_labs_in_activity": len(bucket["skill_labs"]),
                 "skill_labs_added": sum(
                     1 for event in lab_events if event["week_start"] == week_start
                 ),
                 "skill_labs_active": len(active_events),
-                "skill_labs_by_province": province_counts,
             })
 
-        # Province-week detail contains the workweek activity and cumulative
-        # operational labs, including provinces with multiple Skill Labs.
-        province_week_keys = set(weekly_province_buckets) | set(lab_event_counts)
-        weekly_province_activity_rows = []
-        for province_name, week_start in sorted(province_week_keys):
-            bucket = weekly_province_buckets.get((province_name, week_start), {})
-            week_end = week_start + timedelta(days=4)
-            province_events = [
-                event for event in lab_events
-                if event["province"] == province_name and event["week_start"] <= week_end
-            ]
-            weekly_province_activity_rows.append({
+        # Monthly province detail saves interface space while retaining the
+        # overall weekly activity chart. Monthly distinct totals are calculated
+        # directly for each province; the total row below uses period-wide distincts.
+        monthly_province_rows = list(
+            participants_qs.annotate(activity_month=TruncMonth(date_lookup))
+            .values("activity_month", province=F(province_name_lookup))
+            .annotate(
+                sessions=Count(session_fk, distinct=True),
+                participants=Count("mentee_name", distinct=True),
+                thematic_area_count=Count("thematic_area", distinct=True),
+                topic_count=Count("topic", distinct=True),
+                ls=self._bool_sum("ls"),
+                mc=self._bool_sum("mc"),
+            )
+            .exclude(activity_month__isnull=True)
+            .order_by("province", "activity_month")
+        )
+
+        province_month_map = {}
+        for row in monthly_province_rows:
+            month = row["activity_month"]
+            if hasattr(month, "date"):
+                month = month.date()
+            month_start = month.replace(day=1)
+            province_name = str(row.get("province") or "Unknown")
+            province_month_map[(province_name, month_start)] = {
                 "province": province_name,
-                "week_label": f"{week_start:%d %b} – {week_end:%d %b %Y}",
-                "skill_labs_added": lab_event_counts.get((province_name, week_start), 0),
-                "skill_labs_active": len(province_events),
-                "sessions": len(bucket.get("sessions", set())),
-                "participants": len(bucket.get("participants", set())),
-                "thematic_area_count": len(bucket.get("thematic_areas", set())),
-                "topic_count": len(bucket.get("topics", set())),
-                "ls": bucket.get("ls", 0),
-                "mc": bucket.get("mc", 0),
+                "month_start": month_start,
+                "month_label": month_start.strftime("%b %Y"),
+                "sessions": int(row.get("sessions") or 0),
+                "participants": int(row.get("participants") or 0),
+                "thematic_area_count": int(row.get("thematic_area_count") or 0),
+                "topic_count": int(row.get("topic_count") or 0),
+                "ls": int(row.get("ls") or 0),
+                "mc": int(row.get("mc") or 0),
+            }
+
+        date_from_bound = date_type.fromisoformat(date_from) if date_from else None
+        date_to_bound = date_type.fromisoformat(date_to) if date_to else None
+
+        for event in lab_events:
+            if date_from_bound and event["first_session_date"] < date_from_bound:
+                continue
+            if date_to_bound and event["first_session_date"] > date_to_bound:
+                continue
+            month_start = event["first_session_date"].replace(day=1)
+            province_name = event["province"]
+            province_month_map.setdefault((province_name, month_start), {
+                "province": province_name,
+                "month_start": month_start,
+                "month_label": month_start.strftime("%b %Y"),
+                "sessions": 0,
+                "participants": 0,
+                "thematic_area_count": 0,
+                "topic_count": 0,
+                "ls": 0,
+                "mc": 0,
             })
+
+        province_monthly_activity_rows = []
+        for (province_name, month_start), row in sorted(province_month_map.items()):
+            month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            row["skill_labs_added"] = sum(
+                1 for event in lab_events
+                if event["province"] == province_name
+                and event["first_session_date"].year == month_start.year
+                and event["first_session_date"].month == month_start.month
+                and (not date_from_bound or event["first_session_date"] >= date_from_bound)
+                and (not date_to_bound or event["first_session_date"] <= date_to_bound)
+            )
+            as_of_date = min(month_end, date_to_bound) if date_to_bound else month_end
+            row["skill_labs_active"] = sum(
+                1 for event in lab_events
+                if event["province"] == province_name
+                and event["first_session_date"] <= as_of_date
+            )
+            province_monthly_activity_rows.append(row)
+
+        latest_month = max((row["month_start"] for row in province_monthly_activity_rows), default=None)
+        if latest_month:
+            latest_month_end = (latest_month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            if date_to_bound:
+                latest_month_end = min(latest_month_end, date_to_bound)
+            cumulative_labs_total = sum(
+                1 for event in lab_events if event["first_session_date"] <= latest_month_end
+            )
+        else:
+            cumulative_labs_total = 0
+
+        province_monthly_totals = {
+            "province": "TOTAL",
+            "month_label": "Selected period",
+            "skill_labs_added": sum(row["skill_labs_added"] for row in province_monthly_activity_rows),
+            "skill_labs_active": cumulative_labs_total,
+            "sessions": kpis.get("distinct_sessions", 0),
+            "participants": kpis.get("distinct_participants", 0),
+            "thematic_area_count": kpis.get("distinct_thematic_areas", 0),
+            "topic_count": kpis.get("distinct_topics", 0),
+            "ls": kpis.get("total_ls", 0),
+            "mc": kpis.get("total_mc", 0),
+        }
 
         weekly_chart_max = max(
             [max(row["sessions"], row["ls"], row["mc"]) for row in weekly_activity_rows] or [1]
@@ -1666,7 +1720,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "trend_rows": trend_rows,
                 "monthly_total_rows": monthly_total_rows,
                 "weekly_activity_rows": weekly_activity_rows,
-                "weekly_province_activity_rows": weekly_province_activity_rows,
+                "province_monthly_activity_rows": province_monthly_activity_rows,
+                "province_monthly_totals": province_monthly_totals,
                 "first_session_rows": first_session_rows,
                 "story_candidates": story_candidates,
                 "bamyan_row": bamyan_row,
@@ -1797,8 +1852,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             "Week", "Sessions", "Learning Sessions (LS)",
             "Model Competency (MC)", "Distinct Participants",
             "Distinct Thematic Areas", "Thematic Area Names",
-            "Distinct Topics", "Topic Names", "Skill Labs Added This Week",
-            "Cumulative Skill Labs Operational (First Session Proxy)",
+            "Distinct Topics", "Topic Names", "MNH Skill Labs Added This Week",
+            "Cumulative MNH Skill Labs Operational (First Session Proxy)",
         ])
         for row in data.get("weekly_activity_rows", []):
             ws_weekly.append([
@@ -1809,19 +1864,26 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 row.get("skill_labs_added"), row.get("skill_labs_active"),
             ])
 
-        ws_weekly_province = wb.create_sheet("Weekly_Province_Expansion")
-        ws_weekly_province.append([
-            "Province", "Week", "Skill Labs Added", "Cumulative Skill Labs Operational",
+        ws_monthly_province = wb.create_sheet("Monthly_Province_Expansion")
+        ws_monthly_province.append([
+            "Province", "Month", "MNH Skill Labs Added", "Cumulative MNH Skill Labs Operational",
             "Sessions", "LS", "MC", "Distinct Participants",
             "Distinct Thematic Areas", "Distinct Topics",
         ])
-        for row in data.get("weekly_province_activity_rows", []):
-            ws_weekly_province.append([
-                row.get("province"), row.get("week_label"), row.get("skill_labs_added"),
+        for row in data.get("province_monthly_activity_rows", []):
+            ws_monthly_province.append([
+                row.get("province"), row.get("month_label"), row.get("skill_labs_added"),
                 row.get("skill_labs_active"), row.get("sessions"), row.get("ls"),
                 row.get("mc"), row.get("participants"), row.get("thematic_area_count"),
                 row.get("topic_count"),
             ])
+        totals = data.get("province_monthly_totals", {})
+        ws_monthly_province.append([
+            totals.get("province"), totals.get("month_label"), totals.get("skill_labs_added"),
+            totals.get("skill_labs_active"), totals.get("sessions"), totals.get("ls"),
+            totals.get("mc"), totals.get("participants"), totals.get("thematic_area_count"),
+            totals.get("topic_count"),
+        ])
 
         ws7 = wb.create_sheet("Participant_Profile")
         ws7.append([
