@@ -793,8 +793,8 @@ class Qicdataset(models.Model):
     updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     class Meta:
-        verbose_name = "QIC"
-        verbose_name_plural = "QIC"
+        verbose_name = "QUALITY IMPROVEMENT COMMITTEE (QIC)"
+        verbose_name_plural = "QUALITY IMPROVEMENT COMMITTEE (QIC)"
         ordering = ["-created_at", "qicfacility"]
 
     def __str__(self):

@@ -7828,18 +7828,49 @@ class HQIPContentDashboardAdmin(
 # Other Admins (keep simple / safe)
 # ============================================================
 class QICMonthFilter(admin.SimpleListFilter):
-    title = _('QI Committee Date (Month + Year)')
-    parameter_name = 'qic_month'
+    title = _("QI Reporting Month + Year")
+    parameter_name = "qic_month"
 
     def lookups(self, request, model_admin):
-        dates = (Qicdataset.objects.exclude(qiccommdate__isnull=True).dates('qiccommdate', 'month'))
-        return [(d.strftime("%Y-%m"), d.strftime("%B %Y")) for d in dates]
+        # Use the admin queryset to respect any existing access restrictions.
+        periods = (
+            model_admin.get_queryset(request)
+            .exclude(yearqic__isnull=True)
+            .exclude(monthqic__isnull=True)
+            .exclude(monthqic="")
+            .order_by("yearqic", "monthqic")
+            .values_list("yearqic", "monthqic")
+            .distinct()
+        )
+
+        month_field = model_admin.model._meta.get_field("monthqic")
+        month_labels = dict(month_field.flatchoices)
+
+        # Sort numerically so October follows September, not January.
+        periods = sorted(
+            periods,
+            key=lambda period: (
+                period[0],
+                int(period[1]) if period[1].isdigit() else 0,
+            ),
+            reverse=True,
+        )
+
+        return [
+            (f"{year}-{month}", f"{month_labels.get(month, month)} {year}")
+            for year, month in periods
+        ]
 
     def queryset(self, request, queryset):
-        if self.value():
-            year, month = self.value().split('-')
-            return queryset.filter(qiccommdate__year=year, qiccommdate__month=month)
-        return queryset
+        value = self.value()
+        if not value:
+            return queryset
+
+        year, _, month = value.partition("-")
+        if not year.isdigit() or not month or len(month) > 2:
+            return queryset.none()
+
+        return queryset.filter(yearqic=int(year), monthqic=month)
     
 @admin.register(QICommittee)
 class QICommitteeAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
