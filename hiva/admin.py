@@ -113,6 +113,8 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from decimal import Decimal
 from .models import HQIPProgressDashboard
 from .hqip_progress import progress_context, export_progress
+from calendar import month_name
+from django.utils.translation import gettext_lazy as _
 
 # ============================================================
 # Admin Branding
@@ -7828,11 +7830,10 @@ class HQIPContentDashboardAdmin(
 # Other Admins (keep simple / safe)
 # ============================================================
 class QICMonthFilter(admin.SimpleListFilter):
-    title = _("QI Reporting Month + Year")
+    title = _("Reporting Month + Year")
     parameter_name = "qic_month"
 
     def lookups(self, request, model_admin):
-        # Use the admin queryset to respect any existing access restrictions.
         periods = (
             model_admin.get_queryset(request)
             .exclude(yearqic__isnull=True)
@@ -7843,22 +7844,15 @@ class QICMonthFilter(admin.SimpleListFilter):
             .distinct()
         )
 
-        month_field = model_admin.model._meta.get_field("monthqic")
-        month_labels = dict(month_field.flatchoices)
-
-        # Sort numerically so October follows September, not January.
-        periods = sorted(
-            periods,
-            key=lambda period: (
-                period[0],
-                int(period[1]) if period[1].isdigit() else 0,
-            ),
-            reverse=True,
-        )
+        valid_periods = [
+            (year, int(month), month)
+            for year, month in periods
+            if month.isascii() and month.isdecimal() and 1 <= int(month) <= 12
+        ]
 
         return [
-            (f"{year}-{month}", f"{month_labels.get(month, month)} {year}")
-            for year, month in periods
+            (f"{year}-{stored_month}", f"{month_name[month_number]} {year}")
+            for year, month_number, stored_month in sorted(valid_periods)
         ]
 
     def queryset(self, request, queryset):
@@ -7867,7 +7861,11 @@ class QICMonthFilter(admin.SimpleListFilter):
             return queryset
 
         year, _, month = value.partition("-")
-        if not year.isdigit() or not month or len(month) > 2:
+        if not (
+            year.isascii() and year.isdecimal() and len(year) == 4
+            and month.isascii() and month.isdecimal() and len(month) <= 2
+            and 1 <= int(month) <= 12
+        ):
             return queryset.none()
 
         return queryset.filter(yearqic=int(year), monthqic=month)
@@ -7956,21 +7954,10 @@ class MyModelqicdataset(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         "shura_status",
     ]
 
-    list_filter = [
-        "qicfacility__districtfk__provincefk",
-        "qicfacility",
+    list_filter = (
+        ("qicfacility__districtfk__provincefk", admin.RelatedOnlyFieldListFilter),
         QICMonthFilter,
-        "qictoravail_bool",
-        "qiclastmonth_bool",
-        "qicmmavial_bool",
-        "qicpipavail_bool",
-        "qicngoinvolved_bool",
-        "qicpeertopeeravail_bool",
-        "qicmetwithhealthshura_bool",
-        "qicmeeting_quorum_met",
-        "qicfollowup_required",
-        "qicvalidated_by_supervisor",
-    ]
+    )
 
     search_fields = [
         "qicfacility__name",
