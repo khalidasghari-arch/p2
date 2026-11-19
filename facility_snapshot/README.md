@@ -4,7 +4,7 @@ This is an additive, read-only Django app scaffold based on the supplied model f
 
 The snapshot uses a responsive full-width layout. On desktop, section navigation stays on the right; on smaller screens it moves above the content. Every table column has a clickable A–Z/Z–A sort control, including the complete-record column. Link underlines and green link text are removed for a cleaner interface.
 
-HQIP summary tables show thematic-area scores side by side for every assessment type in the database, an overall pooled total, and a separate thematic-area table for each round. Additional round-by-round tables summarize sections, standards, and the verification-criteria league table. The percentage calculation follows `HQIPContentDashboardAdmin`: Yes ÷ (Yes + No) × 100, using score IDs 1, 2, and 3 for Yes, No, and N/A. N/A, missing, and unrecognized responses are excluded from the denominator; totals pool the Yes and No counts rather than averaging percentages.
+HQIP summary tables follow `HQIPAssessmentDashboardAdmin`: Standard % = Yes ÷ (Yes + No) × 100; Section % = mean of its scored Standard percentages; Thematic Area % = mean of its scored Section percentages; Overall HQIP % = mean of scored Thematic Area percentages. The code uses score IDs 1, 2, and 3 for Yes, No, and N/A. N/A, missing, and unrecognized responses are excluded from the Standard denominator. Each round is calculated separately; Grand Total across rounds is the mean of available round results for the corresponding row.
 
 ## Install
 

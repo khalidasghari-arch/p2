@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -225,7 +225,7 @@ def _hqip_sections(facility):
 
 
 def _hqip_score_tables(facility):
-    """Use the existing HQIP admin formula for round-aware summary tables."""
+    """Match HQIPAssessmentDashboard's standard → section → area rollup."""
     YES_ID, NO_ID, NA_ID = 1, 2, 3
     headers = HQIPAssessmentHeader.objects.filter(facilityfk=facility).select_related(
         "assessmenttype"
@@ -251,118 +251,144 @@ def _hqip_score_tables(facility):
         "criteriafk",
     ).order_by("header__assessmentdate", "header__assessmenttype__name", "id")
 
-    specs = [
-        ("area", "HQIP thematic-area comparison — all rounds", ["Thematic area"]),
-        ("section", "HQIP section scores by round", ["Thematic area", "Section"]),
-        ("standard", "HQIP standard scores by round", ["Thematic area", "Section", "Standard"]),
-        ("criterion", "HQIP verification-criteria league table", ["Thematic area", "Section", "Standard", "Verification criterion"]),
-    ]
-    grouped = {level: {} for level, _title, _labels in specs}
-    round_area_groups = {round_name: {} for round_name in rounds}
-
+    # The admin first computes Yes/(Yes+No) for each standard, then averages
+    # scored standards into sections and scored sections into thematic areas.
+    standard_counts = {}
     for line in lines:
         header = line.header
         criterion = line.criteriafk
         standard = criterion.standardfk
         section = standard.sectionfk
         area = section.areafk
-        area_name = str(area) if area else "Area not linked"
-        section_name = str(section) if section else "Section not linked"
-        standard_name = str(standard) if standard else "Standard not linked"
-        criterion_name = str(criterion) if criterion else "Criterion not linked"
+        area_name = str(area)
+        section_name = str(section)
+        standard_name = str(standard)
+        criterion_name = str(criterion)
         round_name = header.assessmenttype.name
-        area_identity = (area.pk, area_name)
-        section_identity = (section.pk, section_name)
-        standard_identity = (standard.pk, standard_name)
-        criterion_identity = (criterion.pk, criterion_name)
-        dimensions = {
-            "area": area_identity,
-            "section": area_identity + section_identity,
-            "standard": area_identity + section_identity + standard_identity,
-            "criterion": area_identity + section_identity + standard_identity + criterion_identity,
-        }
+        standard_key = (round_name, area.pk, area_name, section.pk, section_name, standard.pk, standard_name)
+        counts = standard_counts.setdefault(standard_key, {"yes": 0, "no": 0, "na": 0, "missing": 0})
         score_id = line.scorefk_id
-        for level, key in dimensions.items():
-            bucket = grouped[level].setdefault(key, {}).setdefault(round_name, [0, 0, 0, 0])
-            if score_id == YES_ID:
-                bucket[0] += 1
-            elif score_id == NO_ID:
-                bucket[1] += 1
-            elif score_id == NA_ID:
-                bucket[2] += 1
-            else:
-                bucket[3] += 1  # N/A variants, blank, and unrecognized values do not enter the denominator.
-        bucket = round_area_groups[round_name].setdefault(area_identity, [0, 0, 0, 0])
         if score_id == YES_ID:
-            bucket[0] += 1
+            counts["yes"] += 1
         elif score_id == NO_ID:
-            bucket[1] += 1
+            counts["no"] += 1
         elif score_id == NA_ID:
-            bucket[2] += 1
+            counts["na"] += 1
         else:
-            bucket[3] += 1
+            counts["missing"] += 1
 
-    def percentage(counts):
-        if not counts:
-            return None
-        applicable = counts[0] + counts[1]
-        return (counts[0] / applicable * 100) if applicable else None
+    def round2(value):
+        return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    def percent(yes, no):
+        applicable = yes + no
+        return round2(Decimal(yes) / Decimal(applicable) * Decimal("100")) if applicable else None
+
+    def mean(values):
+        valid = [Decimal(str(value)) for value in values if value is not None]
+        return round2(sum(valid) / Decimal(len(valid))) if valid else None
 
     def fmt(value):
-        return "—" if value is None else f"{value:.0f}%"
+        return "—" if value is None else f"{value:.2f}%"
 
-    def matrix_table(title, level, labels):
-        entries = grouped[level]
-        if not entries:
-            return {
-                "title": title,
-                "columns": labels + rounds + ["Grand Total"],
-                "rows": [], "empty": True,
-                "note": "No HQIP criteria matching the admin dashboard's area hierarchy were found.",
-            }
+    # Compute one percentage for each scored standard, then roll up its parent
+    # section and area by the same unweighted means as HQIPAssessmentDashboard.
+    std_rows = {}
+    for key, counts in standard_counts.items():
+        round_name, area_id, area_name, section_id, section_name, standard_id, standard_name = key
+        std_rows[(round_name, area_id, area_name, section_id, section_name, standard_id, standard_name)] = {
+            **counts,
+            "percent": percent(counts["yes"], counts["no"]),
+        }
+
+    section_values = {}
+    for key, row in std_rows.items():
+        round_name, area_id, area_name, section_id, section_name, _std_id, _std_name = key
+        section_values.setdefault((round_name, area_id, area_name, section_id, section_name), []).append(row["percent"])
+    section_rows = {key: mean(values) for key, values in section_values.items()}
+
+    area_values = {}
+    for key, value in section_rows.items():
+        round_name, area_id, area_name, _section_id, _section_name = key
+        area_values.setdefault((round_name, area_id, area_name), []).append(value)
+    area_rows = {key: mean(values) for key, values in area_values.items()}
+
+    def build_matrix(title, dimension, labels, values_by_key):
+        dimensions = {}
+        for key, value in values_by_key.items():
+            round_name = key[0]
+            dimension_key = key[1:]
+            dimensions.setdefault(dimension_key, {})[round_name] = value
+        if not dimensions:
+            return {"title": title, "columns": labels + rounds + ["Grand Total"], "rows": [],
+                    "empty": True, "note": "No matching scored HQIP records were found."}
         rows = []
-        round_totals = {round_name: [0, 0, 0, 0] for round_name in rounds}
-        overall = [0, 0, 0, 0]
-        for key in sorted(entries, key=lambda item: tuple(str(part).casefold() for part in item[1::2])):
-            round_values = entries[key]
-            cells = list(key[1::2])
-            combined = [0, 0, 0, 0]
-            for round_name in rounds:
-                counts = round_values.get(round_name, [0, 0, 0, 0])
-                cells.append(fmt(percentage(counts)))
-                combined = [a + b for a, b in zip(combined, counts)]
-                round_totals[round_name] = [a + b for a, b in zip(round_totals[round_name], counts)]
-            overall = [a + b for a, b in zip(overall, combined)]
-            cells.append(fmt(percentage(combined)))
-            rows.append({"cells": cells, "details": []})
-        rows.append({
-            "cells": ["Grand Total"] + [""] * (len(labels) - 1)
-                     + [fmt(percentage(round_totals[name])) for name in rounds]
-                     + [fmt(percentage(overall))],
-            "details": [],
-        })
+        for key, round_scores in sorted(dimensions.items(), key=lambda item: tuple(str(v).casefold() for v in item[0][1::2])):
+            scores = [round_scores.get(round_name) for round_name in rounds]
+            rows.append({"cells": list(key[1::2]) + [fmt(score) for score in scores] + [fmt(mean(scores))], "details": []})
+        if dimension == "area":
+            overall_by_round = {
+                round_name: mean(
+                    value for (row_round, _area_id, _area_name), value in values_by_key.items()
+                    if row_round == round_name
+                )
+                for round_name in rounds
+            }
+            rows.append({
+                "cells": ["Grand Total"]
+                         + [fmt(overall_by_round[round_name]) for round_name in rounds]
+                         + [fmt(mean(overall_by_round.values()))],
+                "details": [],
+            })
         return {
             "title": title,
             "columns": labels + rounds + ["Grand Total"],
             "rows": rows,
             "empty": False,
-            "note": "Matches the HQIP admin calculation: Yes ÷ (Yes + No) × 100. N/A, missing, and unrecognized scores are excluded from the denominator. Grand Total pools Yes and No criterion counts across rounds; it does not average percentages.",
+            "note": "Uses the HQIPAssessmentDashboard hierarchy: Standard = Yes ÷ (Yes + No); Section = mean of its scored standards; Thematic Area = mean of its scored sections. N/A and missing responses are excluded from standard denominators. Grand Total is the mean of available round results for that row.",
         }
 
-    tables = [matrix_table(title, level, labels) for level, title, labels in specs]
+    tables = [
+        build_matrix("HQIP thematic-area comparison — all rounds", "area", ["Thematic area"], area_rows),
+        build_matrix("HQIP section scores by round", "section", ["Thematic area", "Section"], section_rows),
+        build_matrix("HQIP standard scores by round", "standard", ["Thematic area", "Section", "Standard"],
+                     {key: row["percent"] for key, row in std_rows.items()}),
+    ]
+
+    # Criterion league table uses the direct Yes/(Yes+No) result per criterion.
+    criterion_counts = {}
+    for line in lines:
+        criterion, standard = line.criteriafk, line.criteriafk.standardfk
+        section, area = standard.sectionfk, standard.sectionfk.areafk
+        round_name = line.header.assessmenttype.name
+        key = (round_name, area.pk, str(area), section.pk, str(section), standard.pk, str(standard), criterion.pk, str(criterion))
+        counts = criterion_counts.setdefault(key, [0, 0])
+        if line.scorefk_id == YES_ID:
+            counts[0] += 1
+        elif line.scorefk_id == NO_ID:
+            counts[1] += 1
+    criterion_scores = {key: percent(counts[0], counts[1]) for key, counts in criterion_counts.items()}
+    tables.append(build_matrix(
+        "HQIP verification-criteria league table",
+        "criterion",
+        ["Thematic area", "Section", "Standard", "Verification criterion"],
+        criterion_scores,
+    ))
+
     for round_name in rounds:
-        area_groups = round_area_groups[round_name]
-        rows = [{"cells": [area_key[1], fmt(percentage(counts))], "details": []}
-                for area_key, counts in sorted(area_groups.items(), key=lambda item: item[0][1].casefold())]
-        round_total = [sum(counts[index] for counts in area_groups.values()) for index in range(4)]
+        scores = {key[1:]: value for key, value in area_rows.items() if key[0] == round_name}
+        rows = [{"cells": [area_name, fmt(value)], "details": []}
+                for (_area_id, area_name), value in sorted(scores.items(), key=lambda item: item[0][1].casefold())]
+        # The periodic dashboard's overall HQIP result is the mean of scored thematic-area results.
+        overall = mean(scores.values())
         if rows:
-            rows.append({"cells": ["Grand Total", fmt(percentage(round_total))], "details": []})
+            rows.append({"cells": ["Overall HQIP", fmt(overall)], "details": []})
         tables.append({
             "title": f"HQIP thematic-area results — {round_name}",
             "columns": ["Thematic area", "HQIP %"],
             "rows": rows,
-            "empty": not bool(area_groups),
-            "note": f"Round-specific results for {round_name}. Uses the same Yes ÷ (Yes + No) × 100 formula as the HQIP admin dashboard.",
+            "empty": not bool(scores),
+            "note": f"Round-specific results for {round_name}; uses the admin dashboard's hierarchical area rollup and overall mean of scored thematic areas.",
         })
     return tables
 
