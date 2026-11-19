@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Avg, Count, Max, Min, Q
+from django.db.models import Avg, Count, F, Max, Min, Q
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, render
 
@@ -224,6 +224,149 @@ def _hqip_sections(facility):
     }
 
 
+def _hqip_score_tables(facility):
+    """Use the existing HQIP admin formula for round-aware summary tables."""
+    YES_ID, NO_ID, NA_ID = 1, 2, 3
+    headers = HQIPAssessmentHeader.objects.filter(facilityfk=facility).select_related(
+        "assessmenttype"
+    )
+    round_dates = {}
+    for header in headers:
+        label = header.assessmenttype.name
+        round_dates[label] = min(round_dates.get(label, header.assessmentdate), header.assessmentdate)
+    rounds = sorted(round_dates, key=lambda label: (round_dates[label], label.casefold()))
+    if not rounds:
+        return []
+
+    # Match HQIPContentDashboardAdmin: classify by the criterion's area and
+    # ignore records whose criterion hierarchy does not match the header area.
+    lines = HQIPAssessment.objects.filter(
+        header__facilityfk=facility,
+        criteriafk__standardfk__sectionfk__areafk_id=F("header__areafk_id"),
+    ).select_related(
+        "header__assessmenttype",
+        "criteriafk__standardfk__sectionfk__areafk",
+        "criteriafk__standardfk__sectionfk",
+        "criteriafk__standardfk",
+        "criteriafk",
+    ).order_by("header__assessmentdate", "header__assessmenttype__name", "id")
+
+    specs = [
+        ("area", "HQIP thematic-area comparison — all rounds", ["Thematic area"]),
+        ("section", "HQIP section scores by round", ["Thematic area", "Section"]),
+        ("standard", "HQIP standard scores by round", ["Thematic area", "Section", "Standard"]),
+        ("criterion", "HQIP verification-criteria league table", ["Thematic area", "Section", "Standard", "Verification criterion"]),
+    ]
+    grouped = {level: {} for level, _title, _labels in specs}
+    round_area_groups = {round_name: {} for round_name in rounds}
+
+    for line in lines:
+        header = line.header
+        criterion = line.criteriafk
+        standard = criterion.standardfk
+        section = standard.sectionfk
+        area = section.areafk
+        area_name = str(area) if area else "Area not linked"
+        section_name = str(section) if section else "Section not linked"
+        standard_name = str(standard) if standard else "Standard not linked"
+        criterion_name = str(criterion) if criterion else "Criterion not linked"
+        round_name = header.assessmenttype.name
+        area_identity = (area.pk, area_name)
+        section_identity = (section.pk, section_name)
+        standard_identity = (standard.pk, standard_name)
+        criterion_identity = (criterion.pk, criterion_name)
+        dimensions = {
+            "area": area_identity,
+            "section": area_identity + section_identity,
+            "standard": area_identity + section_identity + standard_identity,
+            "criterion": area_identity + section_identity + standard_identity + criterion_identity,
+        }
+        score_id = line.scorefk_id
+        for level, key in dimensions.items():
+            bucket = grouped[level].setdefault(key, {}).setdefault(round_name, [0, 0, 0, 0])
+            if score_id == YES_ID:
+                bucket[0] += 1
+            elif score_id == NO_ID:
+                bucket[1] += 1
+            elif score_id == NA_ID:
+                bucket[2] += 1
+            else:
+                bucket[3] += 1  # N/A variants, blank, and unrecognized values do not enter the denominator.
+        bucket = round_area_groups[round_name].setdefault(area_identity, [0, 0, 0, 0])
+        if score_id == YES_ID:
+            bucket[0] += 1
+        elif score_id == NO_ID:
+            bucket[1] += 1
+        elif score_id == NA_ID:
+            bucket[2] += 1
+        else:
+            bucket[3] += 1
+
+    def percentage(counts):
+        if not counts:
+            return None
+        applicable = counts[0] + counts[1]
+        return (counts[0] / applicable * 100) if applicable else None
+
+    def fmt(value):
+        return "—" if value is None else f"{value:.0f}%"
+
+    def matrix_table(title, level, labels):
+        entries = grouped[level]
+        if not entries:
+            return {
+                "title": title,
+                "columns": labels + rounds + ["Grand Total"],
+                "rows": [], "empty": True,
+                "note": "No HQIP criteria matching the admin dashboard's area hierarchy were found.",
+            }
+        rows = []
+        round_totals = {round_name: [0, 0, 0, 0] for round_name in rounds}
+        overall = [0, 0, 0, 0]
+        for key in sorted(entries, key=lambda item: tuple(str(part).casefold() for part in item[1::2])):
+            round_values = entries[key]
+            cells = list(key[1::2])
+            combined = [0, 0, 0, 0]
+            for round_name in rounds:
+                counts = round_values.get(round_name, [0, 0, 0, 0])
+                cells.append(fmt(percentage(counts)))
+                combined = [a + b for a, b in zip(combined, counts)]
+                round_totals[round_name] = [a + b for a, b in zip(round_totals[round_name], counts)]
+            overall = [a + b for a, b in zip(overall, combined)]
+            cells.append(fmt(percentage(combined)))
+            rows.append({"cells": cells, "details": []})
+        rows.append({
+            "cells": ["Grand Total"] + [""] * (len(labels) - 1)
+                     + [fmt(percentage(round_totals[name])) for name in rounds]
+                     + [fmt(percentage(overall))],
+            "details": [],
+        })
+        return {
+            "title": title,
+            "columns": labels + rounds + ["Grand Total"],
+            "rows": rows,
+            "empty": False,
+            "note": "Matches the HQIP admin calculation: Yes ÷ (Yes + No) × 100. N/A, missing, and unrecognized scores are excluded from the denominator. Grand Total pools Yes and No criterion counts across rounds; it does not average percentages.",
+        }
+
+    tables = [matrix_table(title, level, labels) for level, title, labels in specs]
+    for round_name in rounds:
+        area_groups = round_area_groups[round_name]
+        rows = [{"cells": [area_key[1], fmt(percentage(counts))], "details": []}
+                for area_key, counts in sorted(area_groups.items(), key=lambda item: item[0][1].casefold())]
+        round_total = [sum(counts[index] for counts in area_groups.values()) for index in range(4)]
+        if rows:
+            rows.append({"cells": ["Grand Total", fmt(percentage(round_total))], "details": []})
+        tables.append({
+            "title": f"HQIP thematic-area results — {round_name}",
+            "columns": ["Thematic area", "HQIP %"],
+            "rows": rows,
+            "empty": not bool(area_groups),
+            "note": f"Round-specific results for {round_name}. Uses the same Yes ÷ (Yes + No) × 100 formula as the HQIP admin dashboard.",
+        })
+    return tables
+
+
 def _mentorship_table(facility):
     visits = list(
         Mentorshipvisit.objects.filter(facilityfk=facility)
@@ -409,6 +552,7 @@ def facility_snapshot(request, facility_id):
     _check_facility_access(request.user, facility)
 
     hqip = _hqip_sections(facility)
+    hqip_score_tables = _hqip_score_tables(facility)
     qic = Qicdataset.objects.filter(qicfacility=facility).order_by("-qiccommdate", "-id")
     mpdsr = Mpdsr.objects.filter(facilityname=facility).order_by("-yearmpdsr", "-monthmpdsr", "-id")
     pee = aimpee.objects.filter(aimfacilityname=facility).order_by("-gre_year", "-gre_month", "-id")
@@ -441,6 +585,7 @@ def facility_snapshot(request, facility_id):
     ganc = _ganc_summary(facility)
 
     tables = [
+        *hqip_score_tables,
         hqip["history"],
         hqip["gaps"],
         _table("HQIP criterion score records — all rounds", HQIPAssessment.objects.filter(
