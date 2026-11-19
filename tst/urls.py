@@ -19,9 +19,10 @@ urlpatterns = [
     # path('hiva/', include('hiva.urls')),  # Add this line
     # path('', include('authentication.urls')),  # Add this line
     # path('dashboard/', include('dashboard.urls')),  # 🔗 dashboard URLs
+    path("facility-snapshot/", include("facility_snapshot.urls")),
     path("api/qqm/", include("qqm.api.urls")),
     path("api/skilllab/dashboard/", include("skill_lab.api.urls")),
-    path("ganc-dashboard/", include("gancgpnc.dashboard_urls"),
+    path("ganc-dashboard/", include("gancgpnc.dashboard_urls"), 
 ),
 ]
 

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Facility snapshot — {{ facility.name }}</title>
+  <style>
+    :root{--green:#176b4b;--green-dark:#0f5138;--mint:#e9f4ee;--ink:#17342a;--muted:#65766f;--line:#dce7e1;--paper:#fff;--bg:#f4f7f5;--amber:#fff4dc;--amber-ink:#785508}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial,Helvetica,sans-serif}
+    .page{max-width:1500px;margin:0 auto;padding:22px}
+    .hero{background:linear-gradient(115deg,var(--green-dark),var(--green));color:white;border-radius:14px;padding:22px 26px;box-shadow:0 5px 18px #183e2b20}
+    .hero h1{font-size:25px;margin:0 0 7px}.location{opacity:.92}.meta{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.pill{padding:5px 10px;border:1px solid #ffffff55;border-radius:18px;background:#ffffff12;font-size:12px}
+    .cards{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin:16px 0}.card{background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:14px 16px}.card strong{display:block;font-size:22px;color:var(--green-dark)}.card span{color:var(--muted);font-size:12px}
+    .notice{padding:12px 15px;margin:12px 0;border-radius:9px;background:var(--amber);color:var(--amber-ink);border:1px solid #f0dda8}
+    .section{margin:14px 0;background:var(--paper);border:1px solid var(--line);border-radius:11px;overflow:hidden}.section h2{margin:0;padding:14px 17px;background:var(--mint);font-size:16px;color:var(--green-dark)}.note{margin:0;padding:10px 17px 0;color:var(--muted);font-size:12px}.table-wrap{overflow-x:auto;padding:10px 14px 14px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#4f665c;background:#f8fbf9;white-space:nowrap}td{font-size:13px}tr:last-child td{border-bottom:0}.empty{padding:14px 10px;color:var(--muted)}
+    .section-links{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.section-links a{color:var(--green-dark);text-decoration:none;background:white;border:1px solid var(--line);padding:7px 10px;border-radius:8px;font-size:12px}.footer{padding:14px 2px;color:var(--muted);font-size:12px}
+    @media(max-width:800px){.page{padding:12px}.hero{padding:18px}.hero h1{font-size:21px}.cards{grid-template-columns:repeat(2,minmax(120px,1fr))}.card strong{font-size:19px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <a href="{% url 'facility_snapshot:list' %}" style="color:#fff;opacity:.9;text-decoration:none;font-size:12px">← All facilities</a>
+      <h1>{{ facility.name }}</h1>
+      <div class="location">{{ facility.districtfk.name }}, {{ facility.districtfk.provincefk.name }} · {{ facility.facilitytypefk.name }}</div>
+      <div class="meta">
+        <span class="pill">Facility ID: {{ facility.pk }}</span>
+        <span class="pill">HF code: {{ facility.hfcode|default:"Not entered" }}</span>
+        <span class="pill">Selection phase: {{ facility.selectionphase|default:"Not entered" }}</span>
+        <span class="pill">AIM: {{ facility.aim|yesno:"Yes,No,Not recorded" }}</span>
+        <span class="pill">Safe Surgery: {{ facility.safesurgery|yesno:"Yes,No,Not recorded" }}</span>
+        <span class="pill">Skill Lab: {{ facility.skilllab|yesno:"Yes,No,Not recorded" }}</span>
+      </div>
+    </header>
+
+    <div class="cards">
+      <div class="card"><strong>{{ latest_hqip_date|default:"—" }}</strong><span>Latest HQIP assessment date</span></div>
+      <div class="card"><strong>{{ mentorship_visit_count }}</strong><span>Mentorship visits recorded</span></div>
+      <div class="card"><strong>{{ skill_lab_count }}</strong><span>MNH Skill Labs registered</span></div>
+      <div class="card"><strong>{{ hmis_summary_count }}</strong><span>HMIS monthly rows found by candidate code</span></div>
+    </div>
+
+    {% if hmis_linked %}
+      <div class="notice">Candidate HMIS match: <strong>HMIS hfid = Facility hfcode ({{ hmis_code }})</strong>, and this HF code appears once in the facility master. Confirm that the import pipeline uses the same code system before using the comparison for reporting.</div>
+    {% elif hmis_duplicate_code %}
+      <div class="notice">HMIS is not linked because HF code <strong>{{ hmis_code }}</strong> is assigned to more than one facility record.</div>
+    {% else %}
+      <div class="notice">HMIS cannot be linked to this facility yet because its HF code is missing or zero.</div>
+    {% endif %}
+
+    <div class="notice">RCA/PIP limitation: the available models record whether RCA was conducted and whether a PIP is available or updated, but do not store cause statements and individual PIP actions linked to failed criteria. The failed criteria below are assessment findings, not automatically generated root causes.</div>
+
+    <nav class="section-links" aria-label="Snapshot sections">
+      {% for table in tables %}<a href="#section-{{ forloop.counter }}">{{ table.title }}</a>{% endfor %}
+    </nav>
+
+    {% for table in tables %}
+      <section class="section" id="section-{{ forloop.counter }}">
+        <h2>{{ table.title }}</h2>
+        {% if table.note %}<p class="note">{{ table.note }}</p>{% endif %}
+        <div class="table-wrap">
+          {% if table.empty %}
+            <div class="empty">No records found for this facility.</div>
+          {% else %}
+            <table>
+              <thead><tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in table.rows %}<tr>{% for cell in row %}<td>{{ cell|linebreaksbr }}</td>{% endfor %}</tr>{% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+    <div class="footer">Read-only facility snapshot. Data completeness, reporting periods, and indicator definitions should be checked before interpreting differences as changes in performance.</div>
+  </main>
+</body>
+</html>

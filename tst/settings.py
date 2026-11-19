@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'hiva',
     'km_dashboard',
+    'facility_snapshot.apps.FacilitySnapshotConfig',
     'mentee_comparison.apps.MenteeComparisonConfig',
     'skilllab_review.apps.SkillLabReviewConfig',
     'mentorship.apps.MentorshipConfig',
