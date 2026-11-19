@@ -12,10 +12,10 @@
     .hero h1{font-size:25px;margin:0 0 7px}.location{opacity:.92}.meta{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.pill{padding:5px 10px;border:1px solid #ffffff55;border-radius:18px;background:#ffffff12;font-size:12px}
     .cards{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin:16px 0}.card{background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:14px 16px}.card strong{display:block;font-size:22px;color:var(--green-dark)}.card span{color:var(--muted);font-size:12px}
     .notice{padding:12px 15px;margin:12px 0;border-radius:9px;background:var(--amber);color:var(--amber-ink);border:1px solid #f0dda8}
-    .layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;grid-template-areas:"sections nav";align-items:start;gap:18px}.sections{grid-area:sections;min-width:0}.section{scroll-margin-top:14px;margin:0 0 14px;background:var(--paper);border:1px solid var(--line);border-radius:11px;overflow:hidden}.section h2{margin:0;padding:14px 17px;background:var(--mint);font-size:16px;color:var(--green-dark)}.note{margin:0;padding:10px 17px 0;color:var(--muted);font-size:12px}.table-wrap{overflow-x:auto;padding:10px 14px 14px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#4f665c;background:#f8fbf9;white-space:nowrap}td{font-size:13px}tbody tr:nth-child(even){background:#fbfdfb}tbody tr:hover{background:#f0f6f2}tr:last-child td{border-bottom:0}.empty{padding:14px 10px;color:var(--muted)}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;grid-template-areas:"sections nav";align-items:start;gap:18px}.sections{grid-area:sections;min-width:0}.dataset-group{scroll-margin-top:14px;margin:0 0 12px;background:var(--paper);border:1px solid var(--line);border-radius:11px;overflow:hidden;box-shadow:0 2px 7px #183e2b0a}.dataset-group>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;padding:15px 17px;background:var(--mint);font-size:16px;font-weight:700;color:var(--green-dark)}.dataset-group>summary::-webkit-details-marker{display:none}.dataset-group>summary::before{content:'＋';display:inline-grid;place-items:center;width:24px;height:24px;border:1px solid #c8dbd0;border-radius:50%;background:#fff;font-size:14px;flex:0 0 auto}.dataset-group[open]>summary::before{content:'−'}.dataset-group>summary .group-name{margin-right:auto}.group-count{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}.dataset-content{padding:10px 12px 2px}.section{scroll-margin-top:14px;margin:0 0 12px;background:var(--paper);border:1px solid var(--line);border-radius:9px;overflow:hidden}.section h2{margin:0;padding:12px 15px;background:#f8fbf9;font-size:14px;color:var(--ink)}.note{margin:0;padding:10px 15px 0;color:var(--muted);font-size:12px}.table-wrap{overflow-x:auto;padding:10px 12px 12px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#4f665c;background:#f8fbf9;white-space:nowrap}td{font-size:13px}tbody tr:nth-child(even){background:#fbfdfb}tbody tr:hover{background:#f0f6f2}tr:last-child td{border-bottom:0}.empty{padding:14px 10px;color:var(--muted)}
     details.record{min-width:120px}details.record summary{cursor:pointer;color:var(--green-dark);font-weight:700;font-size:12px;white-space:nowrap}dl.fields{display:grid;grid-template-columns:minmax(145px,220px) minmax(180px,1fr);gap:3px 12px;margin:10px 0 3px;min-width:480px}dl.fields dt{font-size:11px;color:var(--muted);font-weight:700}dl.fields dd{font-size:12px;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-    a{color:inherit;text-decoration:none!important}a:hover{text-decoration:none!important}.section-links{grid-area:nav;position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;display:flex;flex-direction:column;gap:6px;padding:10px;background:#edf3ef;border:1px solid var(--line);border-radius:12px}.section-links a{display:block;color:var(--ink);background:white;border:1px solid var(--line);padding:9px 10px;border-radius:8px;font-size:12px;line-height:1.35;transition:background .15s,border-color .15s}.section-links a:hover,.section-links a:focus-visible{background:var(--mint);border-color:#aac8b7;outline:none}.footer{padding:14px 2px;color:var(--muted);font-size:12px}.sort-button{display:inline-flex;align-items:center;gap:8px;border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:700;letter-spacing:inherit;text-transform:inherit;cursor:pointer}.sort-button:hover{color:var(--ink)}.sort-icon{font-size:13px;color:#65766f}.sort-button:focus-visible{outline:2px solid #64766d;outline-offset:3px;border-radius:3px}
-    @media(max-width:1000px){.layout{grid-template-columns:1fr;grid-template-areas:"nav" "sections"}.section-links{position:relative;top:auto;max-height:230px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+    a{color:inherit;text-decoration:none!important}a:hover{text-decoration:none!important}.section-links{grid-area:nav;position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;display:flex;flex-direction:column;gap:6px;padding:10px;background:#edf3ef;border:1px solid var(--line);border-radius:12px}.nav-heading{padding:3px 4px 6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.section-links a{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--ink);background:white;border:1px solid var(--line);padding:9px 10px;border-radius:8px;font-size:12px;line-height:1.35;transition:background .15s,border-color .15s}.section-links a span{font-size:10px;color:var(--muted);white-space:nowrap}.section-links a:hover,.section-links a:focus-visible{background:var(--mint);border-color:#aac8b7;outline:none}.footer{padding:14px 2px;color:var(--muted);font-size:12px}.sort-button{display:inline-flex;align-items:center;gap:8px;border:0;padding:0;background:transparent;color:inherit;font:inherit;font-weight:700;letter-spacing:inherit;text-transform:inherit;cursor:pointer}.sort-button:hover{color:var(--ink)}.sort-icon{font-size:13px;color:#65766f}.sort-button:focus-visible{outline:2px solid #64766d;outline-offset:3px;border-radius:3px}
+    @media(max-width:1000px){.layout{grid-template-columns:1fr;grid-template-areas:"nav" "sections"}.section-links{position:relative;top:auto;max-height:230px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nav-heading{grid-column:1/-1}}
     @media(max-width:600px){.page{padding:10px}.hero{padding:16px}.hero h1{font-size:20px;overflow-wrap:anywhere}.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.card{padding:11px}.card strong{font-size:17px}.section-links{grid-template-columns:1fr;max-height:210px}.section h2{font-size:15px;padding:12px}.table-wrap{padding:8px}.notice{font-size:12px}.location{font-size:12px}}
   </style>
 </head>
@@ -54,12 +54,17 @@
     <!-- <div class="notice">RCA/PIP limitation: the available models record whether RCA was conducted and whether a PIP is available or updated, but do not store cause statements and individual PIP actions linked to failed criteria. The failed criteria below are assessment findings, not automatically generated root causes.</div> -->
 
     <div class="layout">
-      <nav class="section-links" aria-label="Snapshot sections">
-        {% for table in tables %}<a href="#section-{{ forloop.counter }}">{{ table.title }}</a>{% endfor %}
+      <nav class="section-links" aria-label="Facility datasets">
+        <div class="nav-heading">Facility datasets</div>
+        {% for group in dataset_groups %}<a href="#{{ group.id }}" data-open-dataset="{{ group.id }}">{{ group.title }}<span>{{ group.table_count }} views</span></a>{% endfor %}
       </nav>
       <div class="sections">
-      {% for table in tables %}
-      <section class="section" id="section-{{ forloop.counter }}">
+      {% for group in dataset_groups %}
+      <details class="dataset-group" id="{{ group.id }}">
+        <summary><span class="group-name">{{ group.title }}</span><span class="group-count">{{ group.table_count }} data views</span></summary>
+        <div class="dataset-content">
+      {% for table in group.tables %}
+      <section class="section" id="section-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">
         <h2>{{ table.title }}</h2>
         {% if table.note %}<p class="note">{{ table.note }}</p>{% endif %}
         <div class="table-wrap">
@@ -87,13 +92,22 @@
         </div>
       </section>
       {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
       </div>
     </div>
-    <div class="footer">Read-only facility snapshot. Tables include every matching saved facility-level record; expand “Complete record” to see all saved fields, including linked record names and IDs. HQIP rounds are loaded from the records in the database, with no fixed round limit. G-ANC/G-PNC patient-level clinical values are summarized by field to protect individual records. Data completeness, reporting periods, and indicator definitions should be checked before interpreting differences as changes in performance.</div>
+    <div class="footer">Read-only facility snapshot. Dataset panels are collapsed until selected; expand a panel to view its tables. Expand “Complete record” for saved fields, including linked record names and IDs. HQIP rounds load dynamically with no fixed round limit. G-ANC/G-PNC patient-level clinical values are summarized by field to protect individual records. Data completeness, reporting periods, and indicator definitions should be checked before interpreting differences as changes in performance.</div>
   </main>
   <script>
     (() => {
       const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+      document.querySelectorAll('.section-links a[data-open-dataset]').forEach((link) => {
+        link.addEventListener('click', () => {
+          const panel = document.getElementById(link.dataset.openDataset);
+          if (panel) panel.open = true;
+        });
+      });
       document.querySelectorAll('table.sortable').forEach((table) => {
         table.querySelectorAll('thead th').forEach((header, columnIndex) => {
           const button = header.querySelector('button.sort-button');

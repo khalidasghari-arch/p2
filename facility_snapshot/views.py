@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, datetime, time
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -91,7 +92,11 @@ def _display(value):
         return "Yes" if value else "No"
     if isinstance(value, Decimal):
         return f"{value:,.0f}" if value == value.to_integral_value() else f"{value:,.2f}"
-    if hasattr(value, "strftime"):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, time):
+        return value.isoformat(timespec="auto")
+    if isinstance(value, date):
         return value.strftime("%Y-%m-%d")
     return str(value)
 
@@ -569,6 +574,33 @@ def _ganc_field_coverage(facility):
     }
 
 
+def _group_dataset_tables(tables):
+    """Collect related tables under collapsible dataset headings."""
+    datasets = [
+        ("hqip", "HQIP assessments", lambda title: title.startswith("HQIP") or title.startswith("Failed criteria")),
+        ("qic_pip", "Quality improvement (QIC/PIP)", lambda title: title.startswith("QI committee") or title.startswith("QIC and PIP")),
+        ("mpdsr", "MPDSR", lambda title: title.startswith("MPDSR")),
+        ("aim", "AIM-PEE and AIM-PPH", lambda title: title.startswith("AIM-PEE") or title.startswith("AIM-PPH")),
+        ("childbirth_checklist", "WHO childbirth checklist", lambda title: title.startswith("WHO childbirth checklist")),
+        ("safe_surgery", "Safe Surgery", lambda title: title.startswith("Safe Surgery")),
+        ("mentorship", "Clinical mentorship", lambda title: title.startswith("Clinical mentorship") or title.startswith("Mentorship learning")),
+        ("skill_lab", "MNH Skill Lab", lambda title: title.startswith("MNH Skill Lab")),
+        ("ganc_gpnc", "G-ANC / G-PNC", lambda title: title.startswith("G-ANC")),
+        ("hmis", "HMIS", lambda title: title.startswith("HMIS")),
+    ]
+    grouped = []
+    for slug, label, matches in datasets:
+        matching_tables = [table for table in tables if matches(table["title"])]
+        if matching_tables:
+            grouped.append({
+                "id": f"dataset-{slug}",
+                "title": label,
+                "tables": matching_tables,
+                "table_count": len(matching_tables),
+            })
+    return grouped
+
+
 @login_required
 def facility_snapshot(request, facility_id):
     facility = get_object_or_404(
@@ -741,6 +773,7 @@ def facility_snapshot(request, facility_id):
     context = {
         "facility": facility,
         "tables": tables,
+        "dataset_groups": _group_dataset_tables(tables),
         "latest_hqip_date": next(iter(HQIPAssessmentHeader.objects.filter(facilityfk=facility).order_by("-assessmentdate").values_list("assessmentdate", flat=True)), None),
         "hqip_round_count": HQIPAssessmentHeader.objects.filter(facilityfk=facility).values(
             "assessmentdate", "assessmenttype_id"
