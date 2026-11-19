@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Max, Min, Q
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, render
 
@@ -19,8 +19,10 @@ from gancgpnc.models import (
 )
 from hiva.models import (
     Facility,
+    HQIPAssessment,
     HQIPAssessmentHeader,
     Mpdsr,
+    QICommittee,
     Qicdataset,
     aimpee,
     aimpph,
@@ -103,17 +105,50 @@ def _resolve(obj, path):
     return _display(value)
 
 
-def _table(title, queryset, columns, limit=12, note=""):
-    """Build a small, read-only table from a queryset and field paths."""
-    objects = list(queryset[:limit])
+def _record_details(obj):
+    """Return every saved field, including related identifiers, for a record."""
+    details = []
+    for field in obj._meta.concrete_fields:
+        value = getattr(obj, field.name, None)
+        if field.is_relation and field.many_to_one:
+            related_id = getattr(obj, field.attname, None)
+            rendered = _display(value)
+            if related_id is not None:
+                rendered = f"{rendered} (ID: {related_id})"
+            value = rendered
+        details.append({
+            "label": str(field.verbose_name or field.name).replace("_", " ").title(),
+            "value": _display(value),
+        })
+    for field in obj._meta.many_to_many:
+        related_values = getattr(obj, field.name).all()
+        value = ", ".join(str(item) for item in related_values) or "—"
+        details.append({
+            "label": str(field.verbose_name or field.name).replace("_", " ").title(),
+            "value": value,
+        })
+    return details
+
+
+def _table(title, queryset, columns, note=""):
+    """Build an untruncated table with expandable complete model fields."""
+    relation_names = [
+        field.name for field in queryset.model._meta.concrete_fields
+        if field.is_relation and field.many_to_one and field.name != queryset.model._meta.pk.name
+    ]
+    if relation_names:
+        queryset = queryset.select_related(*relation_names)
+    objects = list(queryset)
     return {
         "title": title,
         "columns": [label for label, _path in columns],
-        "rows": [[_resolve(obj, path) for _label, path in columns] for obj in objects],
+        "rows": [{
+            "cells": [_resolve(obj, path) for _label, path in columns],
+            "details": _record_details(obj),
+        } for obj in objects],
         "empty": not objects,
         "note": note,
         "shown": len(objects),
-        "limited": len(objects) == limit,
     }
 
 
@@ -127,7 +162,7 @@ def _hqip_sections(facility):
     history_rows = []
     latest_gaps = []
 
-    for index, header in enumerate(headers[:20]):
+    for header in headers:
         lines = list(header.lines.all())
         score_names = [
             (line.scorefk.name if line.scorefk_id and line.scorefk else "").strip().casefold()
@@ -136,7 +171,8 @@ def _hqip_sections(facility):
         yes_count = sum(name in {"yes", "met", "fully met"} for name in score_names)
         no_count = sum(name in {"no", "not met", "not available"} for name in score_names)
         na_count = sum(name in {"na", "n/a", "not applicable"} for name in score_names)
-        history_rows.append([
+        history_rows.append({
+            "cells": [
             _display(header.assessmentdate),
             _display(header.assessmenttype),
             _display(header.areafk),
@@ -144,39 +180,46 @@ def _hqip_sections(facility):
             str(yes_count),
             str(no_count),
             str(na_count),
-        ])
+            ],
+            "details": _record_details(header),
+        })
 
-        if index == 0:
-            for line in lines:
-                if not line.scorefk_id or not line.scorefk:
-                    continue
-                score_name = line.scorefk.name.strip().casefold()
-                if score_name in {"no", "not met", "not available"}:
-                    criterion = line.criteriafk
-                    standard = getattr(criterion, "standardfk", None)
-                    section = getattr(standard, "sectionfk", None) if standard else None
-                    area = getattr(section, "areafk", None) if section else None
-                    latest_gaps.append([
+        for line in lines:
+            if not line.scorefk_id or not line.scorefk:
+                continue
+            score_name = line.scorefk.name.strip().casefold()
+            if score_name in {"no", "not met", "not available"}:
+                criterion = line.criteriafk
+                standard = getattr(criterion, "standardfk", None)
+                section = getattr(standard, "sectionfk", None) if standard else None
+                area = getattr(section, "areafk", None) if section else None
+                latest_gaps.append({
+                    "cells": [
+                        _display(header.assessmentdate),
+                        _display(header.assessmenttype),
                         _display(area or header.areafk),
                         _display(section),
                         _display(standard),
                         _display(criterion),
-                    ])
+                        _display(line.scorefk),
+                    ],
+                    "details": _record_details(line) + _record_details(header),
+                })
 
     return {
         "history": {
-            "title": "HQIP assessment history",
+            "title": "HQIP assessment history — all rounds",
             "columns": ["Assessment date", "Round/type", "Thematic area", "Criteria", "Yes", "No", "N/A"],
             "rows": history_rows,
             "empty": not history_rows,
-            "note": "Counts are shown from the recorded criteria scores; this table does not apply a separate weighted HQIP formula.",
+            "note": "All assessment headers are included, with no three-round limit. Counts come from recorded criteria scores; this table does not apply a separate weighted HQIP formula.",
         },
         "gaps": {
-            "title": "Failed criteria in the latest assessment record",
-            "columns": ["Thematic area", "Section", "Standard", "Verification criterion"],
+            "title": "Failed criteria — all assessment rounds",
+            "columns": ["Assessment date", "Round/type", "Thematic area", "Section", "Standard", "Verification criterion", "Recorded score"],
             "rows": latest_gaps,
             "empty": not latest_gaps,
-            "note": "The latest record is selected by assessment start date. Confirm same-day records when a round has multiple thematic-area headers.",
+            "note": "Every criterion recorded as No/not met is listed with its assessment round and date. This preserves failed criteria from earlier rounds for comparison.",
         },
     }
 
@@ -184,7 +227,8 @@ def _hqip_sections(facility):
 def _mentorship_table(facility):
     visits = list(
         Mentorshipvisit.objects.filter(facilityfk=facility)
-        .order_by("-visitdate", "-id")[:12]
+        .select_related("facilityfk")
+        .order_by("-visitdate", "-id")
     )
     detail_counts = {
         row["mentorshipvistfk_id"]: row
@@ -202,29 +246,32 @@ def _mentorship_table(facility):
     rows = []
     for visit in visits:
         counts = detail_counts.get(visit.pk, {})
-        rows.append([
-            _display(visit.visitdate),
-            _display(visit.mentorshipstarttime),
-            _display(visit.mentorshipendtime),
-            str(counts.get("mentee_count", 0)),
-            str(counts.get("ls_count", 0)),
-            str(counts.get("pc_count", 0)),
-            str(counts.get("mc_count", 0)),
-        ])
+        rows.append({
+            "cells": [
+                _display(visit.visitdate),
+                _display(visit.mentorshipstarttime),
+                _display(visit.mentorshipendtime),
+                str(counts.get("mentee_count", 0)),
+                str(counts.get("ls_count", 0)),
+                str(counts.get("pc_count", 0)),
+                str(counts.get("mc_count", 0)),
+            ],
+            "details": _record_details(visit),
+        })
     return {
         "title": "Clinical mentorship visits",
         "columns": ["Visit date", "Start", "End", "Distinct mentees", "LS", "PC", "MC"],
         "rows": rows,
         "empty": not rows,
-        "note": "Counts come from visit detail records. Mentee profile facility is retained separately and may differ from the facility where the visit was recorded.",
+        "note": "All recorded visits are included. Counts come from visit detail records. Mentee profile facility is retained separately and may differ from the facility where the visit was recorded. Expand a row to see every stored visit field.",
     }
 
 
 def _skill_lab_table(facility):
     sessions = list(
         SkillLabSession.objects.filter(skill_lab__facility=facility)
-        .select_related("skill_lab")
-        .order_by("-session_date", "-id")[:12]
+        .select_related("skill_lab", "mentor_name", "mentor_org")
+        .order_by("-session_date", "-id")
     )
     participant_counts = {
         row["session_id"]: row
@@ -241,21 +288,24 @@ def _skill_lab_table(facility):
     rows = []
     for session in sessions:
         counts = participant_counts.get(session.pk, {})
-        rows.append([
-            _display(session.session_date),
-            _display(session.skill_lab),
-            _display(session.session_type),
-            _display(session.completed_session),
-            str(counts.get("participants", 0)),
-            str(counts.get("ls_count", 0)),
-            str(counts.get("mc_count", 0)),
-        ])
+        rows.append({
+            "cells": [
+                _display(session.session_date),
+                _display(session.skill_lab),
+                _display(session.session_type),
+                _display(session.completed_session),
+                str(counts.get("participants", 0)),
+                str(counts.get("ls_count", 0)),
+                str(counts.get("mc_count", 0)),
+            ],
+            "details": _record_details(session),
+        })
     return {
         "title": "MNH Skill Lab sessions",
         "columns": ["Session date", "Skill Lab", "Session type", "Completed", "Distinct participants", "LS", "MC"],
         "rows": rows,
         "empty": not rows,
-        "note": "Participant counts are distinct mentees per session. A mentee's assigned facility may differ from the Skill Lab facility.",
+        "note": "All recorded Skill Lab sessions are included. Participant counts are distinct mentees per session. A mentee's assigned facility may differ from the Skill Lab facility. Expand a row to see every stored session field.",
     }
 
 
@@ -274,10 +324,79 @@ def _ganc_summary(facility):
     return {
         "title": "G-ANC / G-PNC activity",
         "columns": ["Measure", "Count"],
-        "rows": [["Cohorts", str(cohorts.count())], ["Enrolled women", str(enrollments.count())]]
-                + [[label, str(count)] for label, count in sessions.items()],
+        "rows": [{"cells": ["Cohorts", str(cohorts.count())], "details": []},
+                 {"cells": ["Enrolled women", str(enrollments.count())], "details": []}]
+                + [{"cells": [label, str(count)], "details": []} for label, count in sessions.items()],
         "empty": False,
-        "note": "Session and delivery records are linked through enrollment to the facility's cohort.",
+        "note": "All cohort, enrollment, session, and delivery records contribute to these counts. Person-level ANC/PNC clinical records are summarized separately in the field-coverage table. Session and delivery records are linked through enrollment to the facility's cohort.",
+    }
+
+
+def _ganc_field_coverage(facility):
+    """Summarize every scalar field without exposing patient-level rows."""
+    sources = [
+        ("G-ANC session 1", Gancfirstsession, {"registerid__cohortname__facility": facility}),
+        ("G-ANC session 2", Gancsecondsession, {"registerid__cohortname__facility": facility}),
+        ("G-ANC session 3", Gancthirdsession, {"registerid__cohortname__facility": facility}),
+        ("G-ANC session 4", Gancfouthsession, {"registerid__cohortname__facility": facility}),
+        ("Delivery", Gancdelivery, {"registerid__cohortname__facility": facility}),
+        ("Group PNC session 1", GroupPncfirstSession, {"registerid__cohortname__facility": facility}),
+        ("Group PNC session 2", GroupPncsecondSession, {"registerid__cohortname__facility": facility}),
+    ]
+    rows = []
+    numeric_types = {
+        "IntegerField", "PositiveIntegerField", "SmallIntegerField",
+        "PositiveSmallIntegerField", "BigIntegerField", "DecimalField", "FloatField",
+    }
+    for source_name, model, filters in sources:
+        queryset = model.objects.filter(**filters)
+        total = queryset.count()
+        for field in model._meta.concrete_fields:
+            if field.primary_key or field.is_relation:
+                continue
+            kind = field.get_internal_type()
+            field_label = str(field.verbose_name or field.name).replace("_", " ").title()
+            if kind == "BooleanField":
+                yes = queryset.filter(**{field.name: True}).count()
+                no = queryset.filter(**{field.name: False}).count()
+                missing = total - yes - no
+                summary = f"Yes: {yes}; No: {no}; not recorded: {missing}"
+            elif kind in numeric_types:
+                stats = queryset.aggregate(
+                    recorded=Count(field.name),
+                    minimum=Min(field.name),
+                    mean=Avg(field.name),
+                    maximum=Max(field.name),
+                )
+                summary = (
+                    f"Recorded: {stats['recorded']}/{total}; min: {_display(stats['minimum'])}; "
+                    f"mean: {_display(stats['mean'])}; max: {_display(stats['maximum'])}"
+                )
+            elif kind in {"DateField", "DateTimeField"}:
+                dates = queryset.aggregate(first=Min(field.name), last=Max(field.name))
+                summary = f"First: {_display(dates['first'])}; last: {_display(dates['last'])}"
+            elif field.choices:
+                labels = dict(field.flatchoices)
+                distribution = queryset.values(field.name).annotate(records=Count("pk")).order_by(field.name)
+                summary = "; ".join(
+                    f"{labels.get(item[field.name], item[field.name] or 'Not recorded')}: {item['records']}"
+                    for item in distribution
+                ) or "No records"
+            else:
+                present = queryset.exclude(**{f"{field.name}__isnull": True})
+                if kind in {"CharField", "TextField"}:
+                    present = present.exclude(**{field.name: ""})
+                summary = f"Entered: {present.count()}/{total}; values remain in the protected source module"
+            rows.append({
+                "cells": [source_name, field_label, str(total), summary],
+                "details": [],
+            })
+    return {
+        "title": "G-ANC/G-PNC clinical indicator field coverage",
+        "columns": ["Source model", "Stored field", "Records", "Complete facility-level summary"],
+        "rows": rows,
+        "empty": not rows,
+        "note": "Every non-relational field in the ANC/PNC session and delivery models is represented. Boolean and numeric values are summarized across all records. Person-level names, contact details, free-text remarks, and individual clinical records stay in their source module.",
     }
 
 
@@ -324,6 +443,27 @@ def facility_snapshot(request, facility_id):
     tables = [
         hqip["history"],
         hqip["gaps"],
+        _table("HQIP criterion score records — all rounds", HQIPAssessment.objects.filter(
+            header__facilityfk=facility
+        ).select_related(
+            "header__assessmenttype", "header__areafk", "criteriafk", "scorefk"
+        ).order_by(
+            "-header__assessmentdate", "header__assessmenttype__name", "header__areafk__name", "criteriafk__id"
+        ), [
+            ("Assessment date", "header__assessmentdate"),
+            ("Round/type", "header__assessmenttype__name"),
+            ("Thematic area", "header__areafk__name"),
+            ("Verification criterion", "criteriafk__name"),
+            ("Score", "scorefk__name"),
+        ], note="All criterion-level score records across every assessment round are included. Expand a row to view every stored field."),
+        _table("QI committee membership", QICommittee.objects.filter(facility=facility).select_related(
+            "facility_staff"
+        ).order_by("facility_staff__first_name", "id"), [
+            ("Committee member", "facility_staff__first_name"),
+            ("Father name", "facility_staff__father_name"),
+            ("Role", "role"),
+            ("Record status", "record_status"),
+        ], note="All membership records are included. Expand a row to view every stored field."),
         _table("QIC and PIP monitoring", qic, [
             ("Meeting date", "qiccommdate"),
             ("QIC score (%)", "qicpercentscore"),
@@ -372,6 +512,7 @@ def facility_snapshot(request, facility_id):
         mentorship,
         skills,
         ganc,
+        _ganc_field_coverage(facility),
     ]
 
     hmis_note = (
@@ -391,13 +532,48 @@ def facility_snapshot(request, facility_id):
         _table("HMIS indicator facts", hmis_facts, [
             ("Period", "periodcode"), ("Indicator code", "indicator_code"),
             ("Indicator", "indicator_name"), ("Value", "value"),
-        ], limit=30, note=hmis_note),
+        ], note=hmis_note),
+        _table("G-ANC/G-PNC cohort records", Gancohort.objects.filter(facility=facility).order_by("cohortnumber", "id"), [
+            ("Cohort", "cohortname"), ("Cohort number", "cohortnumber"),
+            ("Status", "cohortstatus"), ("Checklist", "cohortchecklist"),
+            ("Target size", "target_size"),
+        ], note="All cohort records are included. Expand a row to view every stored cohort field."),
+        _table("Mentorship learning and competency records", Mentorshipdetails.objects.filter(
+            mentorshipvistfk__facilityfk=facility
+        ).select_related(
+            "mentorshipvistfk", "menteename", "thematicname", "topicname", "mentor"
+        ).order_by(
+            "-mentorshipvistfk__visitdate", "mentorshipvistfk_id", "id"
+        ), [
+            ("Visit date", "mentorshipvistfk__visitdate"),
+            ("Mentee", "menteename"),
+            ("Thematic area", "thematicname"),
+            ("Topic", "topicname"),
+            ("Mentor", "mentor"),
+            ("LS", "ls"), ("PC", "pc"), ("MC", "mc"),
+        ], note="All mentorship detail records for facility visits are included. Expand a row to see every stored detail field."),
+        _table("MNH Skill Lab participant records", SkillLabParticipantRecord.objects.filter(
+            session__skill_lab__facility=facility
+        ).select_related(
+            "session__skill_lab", "mentee_name", "thematic_area", "topic"
+        ).order_by("-session__session_date", "session_id", "id"), [
+            ("Session date", "session__session_date"),
+            ("Skill Lab", "session__skill_lab__name"),
+            ("Participant", "mentee_name"),
+            ("Thematic area", "thematic_area"),
+            ("Topic", "topic"),
+            ("LS", "ls"), ("MC", "mc"),
+            ("Competency status", "competency_status"),
+        ], note="All Skill Lab participant records are included. Expand a row to see every stored participant field."),
     ])
 
     context = {
         "facility": facility,
         "tables": tables,
         "latest_hqip_date": next(iter(HQIPAssessmentHeader.objects.filter(facilityfk=facility).order_by("-assessmentdate").values_list("assessmentdate", flat=True)), None),
+        "hqip_round_count": HQIPAssessmentHeader.objects.filter(facilityfk=facility).values(
+            "assessmentdate", "assessmenttype_id"
+        ).distinct().count(),
         "skill_lab_count": skill_labs.count(),
         "mentorship_visit_count": Mentorshipvisit.objects.filter(facilityfk=facility).count(),
         "hmis_code": code_value,

@@ -13,6 +13,7 @@
     .cards{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin:16px 0}.card{background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:14px 16px}.card strong{display:block;font-size:22px;color:var(--green-dark)}.card span{color:var(--muted);font-size:12px}
     .notice{padding:12px 15px;margin:12px 0;border-radius:9px;background:var(--amber);color:var(--amber-ink);border:1px solid #f0dda8}
     .section{margin:14px 0;background:var(--paper);border:1px solid var(--line);border-radius:11px;overflow:hidden}.section h2{margin:0;padding:14px 17px;background:var(--mint);font-size:16px;color:var(--green-dark)}.note{margin:0;padding:10px 17px 0;color:var(--muted);font-size:12px}.table-wrap{overflow-x:auto;padding:10px 14px 14px}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#4f665c;background:#f8fbf9;white-space:nowrap}td{font-size:13px}tr:last-child td{border-bottom:0}.empty{padding:14px 10px;color:var(--muted)}
+    details.record{min-width:120px}details.record summary{cursor:pointer;color:var(--green-dark);font-weight:700;font-size:12px;white-space:nowrap}dl.fields{display:grid;grid-template-columns:minmax(145px,220px) minmax(180px,1fr);gap:3px 12px;margin:10px 0 3px;min-width:480px}dl.fields dt{font-size:11px;color:var(--muted);font-weight:700}dl.fields dd{font-size:12px;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
     .section-links{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.section-links a{color:var(--green-dark);text-decoration:none;background:white;border:1px solid var(--line);padding:7px 10px;border-radius:8px;font-size:12px}.footer{padding:14px 2px;color:var(--muted);font-size:12px}
     @media(max-width:800px){.page{padding:12px}.hero{padding:18px}.hero h1{font-size:21px}.cards{grid-template-columns:repeat(2,minmax(120px,1fr))}.card strong{font-size:19px}}
   </style>
@@ -35,6 +36,7 @@
 
     <div class="cards">
       <div class="card"><strong>{{ latest_hqip_date|default:"—" }}</strong><span>Latest HQIP assessment date</span></div>
+      <div class="card"><strong>{{ hqip_round_count }}</strong><span>HQIP round instances represented</span></div>
       <div class="card"><strong>{{ mentorship_visit_count }}</strong><span>Mentorship visits recorded</span></div>
       <div class="card"><strong>{{ skill_lab_count }}</strong><span>MNH Skill Labs registered</span></div>
       <div class="card"><strong>{{ hmis_summary_count }}</strong><span>HMIS monthly rows found by candidate code</span></div>
@@ -63,16 +65,27 @@
             <div class="empty">No records found for this facility.</div>
           {% else %}
             <table>
-              <thead><tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+              <thead><tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}<th>Complete record</th></tr></thead>
               <tbody>
-                {% for row in table.rows %}<tr>{% for cell in row %}<td>{{ cell|linebreaksbr }}</td>{% endfor %}</tr>{% endfor %}
+                {% for row in table.rows %}
+                  <tr>
+                    {% for cell in row.cells %}<td>{{ cell|linebreaksbr }}</td>{% endfor %}
+                    <td>
+                      {% if row.details %}
+                        <details class="record"><summary>View all saved fields ({{ row.details|length }})</summary><dl class="fields">
+                          {% for field in row.details %}<dt>{{ field.label }}</dt><dd>{{ field.value|linebreaksbr }}</dd>{% endfor %}
+                        </dl></details>
+                      {% else %}—{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
               </tbody>
             </table>
           {% endif %}
         </div>
       </section>
     {% endfor %}
-    <div class="footer">Read-only facility snapshot. Data completeness, reporting periods, and indicator definitions should be checked before interpreting differences as changes in performance.</div>
+    <div class="footer">Read-only facility snapshot. Tables include every matching saved facility-level record; expand “Complete record” to see all saved fields, including linked record names and IDs. HQIP rounds are loaded from the records in the database, with no fixed round limit. G-ANC/G-PNC patient-level clinical values are summarized by field to protect individual records. Data completeness, reporting periods, and indicator definitions should be checked before interpreting differences as changes in performance.</div>
   </main>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # Facility Performance Snapshot add-on
 
-This is an additive, read-only Django app scaffold based on the supplied model files. It creates one facility page that brings together HQIP, QIC/PIP monitoring, MPDSR, AIM-PEE, AIM-PPH, the WHO childbirth checklist, Safe Surgery, mentorship, MNH Skill Lab, G-ANC/G-PNC, and HMIS records.
+This is an additive, read-only Django app scaffold based on the supplied model files. It creates one facility page that brings together HQIP, QIC/PIP monitoring, MPDSR, AIM-PEE, AIM-PPH, the WHO childbirth checklist, Safe Surgery, mentorship, MNH Skill Lab, G-ANC/G-PNC, and HMIS records. Matching facility-level records are not capped to a recent-row sample; HQIP assessment rounds are loaded dynamically with no three-round limit. Each record has an expandable list of its saved fields, including related-record names and IDs. G-ANC/G-PNC patient-level clinical values are summarized by field instead of exposing individual rows.
 
 ## Install
 
@@ -26,6 +26,7 @@ No migrations are required by this snapshot app.
 - The existing models do not include individual RCA cause records or criterion-linked PIP action records. The page therefore shows failed criteria and the available QIC/PIP status fields without inventing causes or actions.
 - Mentees have their own facility assignment in addition to the facility recorded on mentorship visits and Skill Lab sessions. The page attributes activity to the event facility and displays this caveat.
 - The HQIP history displays counts of Yes/No/N/A criteria. It does not calculate a weighted official HQIP score.
+- G-ANC/G-PNC shows facility-level cohort and activity counts plus a field-coverage summary across the clinical session and delivery models; individual maternal/newborn clinical records and patient identifiers remain in their existing source module.
 
 ## Access control
 
