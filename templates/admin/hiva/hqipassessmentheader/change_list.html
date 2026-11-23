@@ -69,20 +69,11 @@
       padding:6px 10px;
       cursor:pointer;
     }
-    .hqip-ui-btn:hover{ background:#f9fafb; }
-  </style>
-{% endblock %}
 
-{# ================================
-  OBJECT TOOLS (keep your button)
-================================ #}
-{% block object-tools-items %}
-  <li>
-    <a href="{{ hqip_dashboard_url }}" class="button">
-      HQIP Dashboard
-    </a>
-  </li>
-  {{ block.super }}
+    .hqip-ui-btn:hover{
+      background:#f9fafb;
+    }
+  </style>
 {% endblock %}
 
 {# ================================
@@ -127,9 +118,18 @@
       const KEY = "hqip_grid_prefs";
 
       function apply(p){
-        document.documentElement.style.setProperty("--hqip-font-size", (p.font || 13) + "px");
-        document.documentElement.style.setProperty("--hqip-row-pad", (p.pad || 8) + "px");
-        document.documentElement.style.setProperty("--hqip-wrap", p.wrap ? "normal" : "nowrap");
+        document.documentElement.style.setProperty(
+          "--hqip-font-size",
+          (p.font || 13) + "px"
+        );
+        document.documentElement.style.setProperty(
+          "--hqip-row-pad",
+          (p.pad || 8) + "px"
+        );
+        document.documentElement.style.setProperty(
+          "--hqip-wrap",
+          p.wrap ? "normal" : "nowrap"
+        );
 
         font.value = p.font || 13;
         pad.value  = p.pad || 8;
@@ -140,8 +140,11 @@
       }
 
       function load(){
-        try { return JSON.parse(localStorage.getItem(KEY)) || {}; }
-        catch(e){ return {}; }
+        try {
+          return JSON.parse(localStorage.getItem(KEY)) || {};
+        } catch(e) {
+          return {};
+        }
       }
 
       function save(p){
