@@ -1,3 +1,4 @@
+from .dashboard_ls_matrix import build_ls_matrix, append_ls_matrix_sheet
 import re
 from .models import MentorshipEmailRecipient
 from django.contrib import admin
@@ -829,7 +830,7 @@ MentorshipDashboardMixin, admin.ModelAdmin):
     
 @admin.register(MentorshipDashboard)
 class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
-    change_list_template = "admin/mentorship/dashboard.html"
+    change_list_template = "admin/mentorship/dashboard_with_ls_matrix.html"
     # ------------------------------------------------------------
     # Dashboard permissions
     # ------------------------------------------------------------
@@ -950,6 +951,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
             visits_qs,
             details_qs,
         )
+        ls_matrix = build_ls_matrix(details_qs)
         extensions = build_dashboard_extensions(
             request, details_qs, option_details_qs, filters, _prov_id(request)
         )
@@ -1456,6 +1458,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         export_query["export"] = "1"
         return {
             **extensions,
+            "ls_matrix": ls_matrix,
             "filters": filters,
             "export_query": export_query.urlencode(),
             "province_options": province_options,
@@ -1630,6 +1633,7 @@ class MentorshipDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ])
         append_extension_sheets(wb, data)
         format_dashboard_workbook(wb, data)
+        append_ls_matrix_sheet(wb, data["ls_matrix"])
         timestamp = timezone.localtime(timezone.now()).strftime("%Y%m%d_%H%M%S")
         filename = f"Mentorship_Dashboard_{timestamp}.xlsx"
         response = HttpResponse(
