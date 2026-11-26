@@ -7,7 +7,7 @@ from django.utils.html import format_html
 from django.http import HttpResponse, JsonResponse
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F
+from django.db.models import Count, Sum, Case, When, Value, IntegerField, Min, F, Q
 from django.db.models.functions import TruncMonth
 from datetime import date as date_type, timedelta
 from django.template.response import TemplateResponse
@@ -1029,6 +1029,90 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             "grand_total": sum(thematic_ls_column_totals),
         }
 
+        # Distinct mentee-ID counts by province and thematic area. A checked
+        # MC record counts as competent unless its competency status explicitly
+        # indicates not-started, in-progress, or needs-repeat, matching the
+        # dashboard's existing topic-graduation logic.
+        competent_mc_filter = Q(mc=True) & ~Q(
+            competency_status__in=["NOT_STARTED", "IN_PROGRESS", "NEEDS_REPEAT"]
+        )
+        province_thematic_mentee_values = list(
+            participants_qs.order_by().values(
+                "thematic_area_id",
+                province=F(province_name_lookup),
+                thematic_area_name=F("thematic_area__name"),
+            )
+            .annotate(
+                ls_mentees=Count("mentee_name", distinct=True, filter=Q(ls=True)),
+                mc_competent_mentees=Count(
+                    "mentee_name", distinct=True, filter=competent_mc_filter
+                ),
+            )
+            .order_by("province", "thematic_area_name")
+        )
+        province_mentee_totals = list(
+            participants_qs.order_by().values(
+                province=F(province_name_lookup),
+            )
+            .annotate(
+                ls_mentees=Count("mentee_name", distinct=True, filter=Q(ls=True)),
+                mc_competent_mentees=Count(
+                    "mentee_name", distinct=True, filter=competent_mc_filter
+                ),
+            )
+            .order_by("province")
+        )
+        province_mentee_totals_by_name = {
+            str(row.get("province") or "Unknown"): row
+            for row in province_mentee_totals
+        }
+        province_thematic_mentees_by_name = {}
+        for row in province_thematic_mentee_values:
+            province_name = str(row.get("province") or "Unknown")
+            area_name = str(row.get("thematic_area_name") or "Unassigned thematic area").strip()
+            province_thematic_mentees_by_name.setdefault(province_name, {})[area_name] = row
+
+        thematic_order = {name.casefold(): index for index, name in enumerate(preferred_thematic_order)}
+        province_thematic_mentee_rows = []
+        for province_name in sorted(province_mentee_totals_by_name):
+            area_rows = province_thematic_mentees_by_name.get(province_name, {})
+            for area_name in sorted(
+                area_rows,
+                key=lambda name: (
+                    thematic_order.get(name.casefold(), len(preferred_thematic_order)),
+                    name.casefold(),
+                ),
+            ):
+                row = area_rows[area_name]
+                province_thematic_mentee_rows.append({
+                    "province": province_name,
+                    "thematic_area": area_name,
+                    "ls_mentees": int(row.get("ls_mentees") or 0),
+                    "mc_competent_mentees": int(row.get("mc_competent_mentees") or 0),
+                    "row_type": "area",
+                })
+            totals = province_mentee_totals_by_name[province_name]
+            province_thematic_mentee_rows.append({
+                "province": province_name,
+                "thematic_area": "Province total (distinct mentees)",
+                "ls_mentees": int(totals.get("ls_mentees") or 0),
+                "mc_competent_mentees": int(totals.get("mc_competent_mentees") or 0),
+                "row_type": "subtotal",
+            })
+        selected_mentee_totals = participants_qs.aggregate(
+            ls_mentees=Count("mentee_name", distinct=True, filter=Q(ls=True)),
+            mc_competent_mentees=Count(
+                "mentee_name", distinct=True, filter=competent_mc_filter
+            ),
+        )
+        province_thematic_mentee_rows.append({
+            "province": "Grand Total",
+            "thematic_area": "Distinct mentees across selected filters",
+            "ls_mentees": int(selected_mentee_totals.get("ls_mentees") or 0),
+            "mc_competent_mentees": int(selected_mentee_totals.get("mc_competent_mentees") or 0),
+            "row_type": "grand_total",
+        })
+
         max_value = max(
             [max(int(r["ls"] or 0), int(r["mc"] or 0)) for r in province_rows] or [1]
         )
@@ -1789,6 +1873,7 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "thematic_ls_columns": thematic_ls_columns,
                 "thematic_ls_matrix": thematic_ls_matrix,
                 "thematic_ls_totals": thematic_ls_totals,
+                "province_thematic_mentee_rows": province_thematic_mentee_rows,
                 "facility_rows": facility_rows,
                 "facility_driver_rows": facility_driver_rows,
                 "trend_rows": trend_rows,
@@ -1873,6 +1958,17 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             "Grand Total LS", *thematic_totals.get("cells", []),
             thematic_totals.get("grand_total", 0),
         ])
+
+        ws_thematic_mentees = wb.create_sheet("Province_Thematic_Mentees")
+        ws_thematic_mentees.append([
+            "Province", "Thematic Area", "Distinct Mentees Received LS",
+            "Distinct Mentees Competent in MC",
+        ])
+        for row in data.get("province_thematic_mentee_rows", []):
+            ws_thematic_mentees.append([
+                row.get("province"), row.get("thematic_area"),
+                row.get("ls_mentees"), row.get("mc_competent_mentees"),
+            ])
 
         ws2 = wb.create_sheet("Facility_Detail")
         ws2.append([
