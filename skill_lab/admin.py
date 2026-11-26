@@ -867,7 +867,9 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
         # Topic options narrow to the selected thematic areas, while still allowing multiple selections.
         thematic_option_rows = list(
             participants_qs.order_by().values(
-                thematic_id=F("thematic_area_id"), thematic_name=F("thematic_area__name")
+                thematic_id=F("thematic_area_id"),
+                thematic_name=F("thematic_area__name"),
+                thematic_shortname=F("thematic_area__shortname"),
             ).exclude(thematic_id__isnull=True).distinct().order_by("thematic_name")
         )
         topic_option_qs = participants_qs
@@ -1003,6 +1005,24 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 name.casefold(),
             )
         )
+        thematic_shortname_by_name = {
+            str(row.get("thematic_name") or "").strip(): str(row.get("thematic_shortname") or "").strip()
+            for row in thematic_option_rows
+            if str(row.get("thematic_name") or "").strip()
+        }
+        thematic_ls_headers = []
+        for area_name in thematic_ls_columns:
+            shortname = thematic_shortname_by_name.get(area_name, "").strip().strip("() ")
+            if shortname:
+                header_label = f"({shortname})"
+            elif area_name == "Unassigned thematic area":
+                header_label = "Unassigned"
+            else:
+                header_label = area_name
+            thematic_ls_headers.append({
+                "name": area_name,
+                "label": header_label,
+            })
         thematic_ls_matrix_by_province = {}
         for row in thematic_ls_values:
             province_name = str(row.get("province") or "Unknown")
@@ -1918,6 +1938,7 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "kpis": kpis,
                 "province_rows": province_rows,
                 "thematic_ls_columns": thematic_ls_columns,
+                "thematic_ls_headers": thematic_ls_headers,
                 "province_thematic_indicator_rows": province_thematic_indicator_rows,
                 "thematic_indicator_totals": thematic_indicator_totals,
                 "facility_rows": facility_rows,
@@ -1993,7 +2014,9 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             ])
 
         ws_thematic_ls = wb.create_sheet("Province_Thematic_LS")
-        thematic_columns = data.get("thematic_ls_columns", [])
+        thematic_columns = [
+            header.get("label") for header in data.get("thematic_ls_headers", [])
+        ]
         ws_thematic_ls.append(["Province", "Indicator", *thematic_columns, "Grand Total"])
         for province_group in data.get("province_thematic_indicator_rows", []):
             for index, indicator in enumerate(province_group.get("indicators", [])):
