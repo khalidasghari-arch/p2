@@ -958,6 +958,77 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             .order_by("province")
         )
 
+        # Learning-session instances pivoted by province and thematic area.
+        # LS is recorded at the participant-topic-session level, so sum the
+        # LS flags within each province-area group rather than counting people
+        # or distinct SkillLabSession objects.
+        thematic_ls_values = list(
+            participants_qs.order_by().values(
+                "thematic_area_id",
+                province=F(province_name_lookup),
+                thematic_area_name=F("thematic_area__name"),
+            )
+            .annotate(ls=self._bool_sum("ls"))
+            .order_by("province", "thematic_area_name")
+        )
+        thematic_ls_columns = sorted({
+            str(row.get("thematic_name") or "").strip()
+            for row in thematic_option_rows
+            if str(row.get("thematic_name") or "").strip()
+        })
+        if any(
+            not str(row.get("thematic_area_name") or "").strip()
+            and int(row.get("ls") or 0) > 0
+            for row in thematic_ls_values
+        ):
+            thematic_ls_columns.append("Unassigned thematic area")
+        preferred_thematic_order = [
+            "advance equipment",
+            "antenatal care (anc)",
+            "family planning (fp)",
+            "infection prevention (ip)",
+            "management of obstetric complications (moc)",
+            "maternal and child health (mch) handbook",
+            "normal labor and delivery (ld) and immediate essential newborn care (nc)",
+            "postnatal care (pnc)",
+            "quality improvement program (qi)",
+            "sick newborn care (snc)",
+        ]
+        thematic_order_lookup = {
+            name.casefold(): index for index, name in enumerate(preferred_thematic_order)
+        }
+        thematic_ls_columns.sort(
+            key=lambda name: (
+                thematic_order_lookup.get(name.casefold(), len(preferred_thematic_order)),
+                name.casefold(),
+            )
+        )
+        thematic_ls_matrix_by_province = {}
+        for row in thematic_ls_values:
+            province_name = str(row.get("province") or "Unknown")
+            area_name = str(row.get("thematic_area_name") or "Unassigned thematic area").strip()
+            province_matrix = thematic_ls_matrix_by_province.setdefault(
+                province_name, {}
+            )
+            province_matrix[area_name] = int(row.get("ls") or 0)
+
+        thematic_ls_matrix = []
+        thematic_ls_column_totals = [0] * len(thematic_ls_columns)
+        for province_name in sorted(thematic_ls_matrix_by_province):
+            province_matrix = thematic_ls_matrix_by_province[province_name]
+            cells = [int(province_matrix.get(area_name, 0)) for area_name in thematic_ls_columns]
+            for index, count in enumerate(cells):
+                thematic_ls_column_totals[index] += count
+            thematic_ls_matrix.append({
+                "province": province_name,
+                "cells": cells,
+                "grand_total": sum(cells),
+            })
+        thematic_ls_totals = {
+            "cells": thematic_ls_column_totals,
+            "grand_total": sum(thematic_ls_column_totals),
+        }
+
         max_value = max(
             [max(int(r["ls"] or 0), int(r["mc"] or 0)) for r in province_rows] or [1]
         )
@@ -1715,6 +1786,9 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "selected_lab_round_ids": lab_round_ids,
                 "kpis": kpis,
                 "province_rows": province_rows,
+                "thematic_ls_columns": thematic_ls_columns,
+                "thematic_ls_matrix": thematic_ls_matrix,
+                "thematic_ls_totals": thematic_ls_totals,
                 "facility_rows": facility_rows,
                 "facility_driver_rows": facility_driver_rows,
                 "trend_rows": trend_rows,
@@ -1786,6 +1860,19 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 r.get("facilities"), r.get("topics"), r.get("ls"),
                 r.get("mc"), r.get("mc_minus_ls"), r.get("interpretation"),
             ])
+
+        ws_thematic_ls = wb.create_sheet("Province_Thematic_LS")
+        thematic_columns = data.get("thematic_ls_columns", [])
+        ws_thematic_ls.append(["Province", *thematic_columns, "Grand Total LS"])
+        for row in data.get("thematic_ls_matrix", []):
+            ws_thematic_ls.append([
+                row.get("province"), *row.get("cells", []), row.get("grand_total", 0)
+            ])
+        thematic_totals = data.get("thematic_ls_totals", {})
+        ws_thematic_ls.append([
+            "Grand Total LS", *thematic_totals.get("cells", []),
+            thematic_totals.get("grand_total", 0),
+        ])
 
         ws2 = wb.create_sheet("Facility_Detail")
         ws2.append([
