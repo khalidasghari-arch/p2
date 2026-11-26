@@ -1012,23 +1012,6 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             )
             province_matrix[area_name] = int(row.get("ls") or 0)
 
-        thematic_ls_matrix = []
-        thematic_ls_column_totals = [0] * len(thematic_ls_columns)
-        for province_name in sorted(thematic_ls_matrix_by_province):
-            province_matrix = thematic_ls_matrix_by_province[province_name]
-            cells = [int(province_matrix.get(area_name, 0)) for area_name in thematic_ls_columns]
-            for index, count in enumerate(cells):
-                thematic_ls_column_totals[index] += count
-            thematic_ls_matrix.append({
-                "province": province_name,
-                "cells": cells,
-                "grand_total": sum(cells),
-            })
-        thematic_ls_totals = {
-            "cells": thematic_ls_column_totals,
-            "grand_total": sum(thematic_ls_column_totals),
-        }
-
         # Distinct mentee-ID counts by province and thematic area. A checked
         # MC record counts as competent unless its competency status explicitly
         # indicates not-started, in-progress, or needs-repeat, matching the
@@ -1050,6 +1033,21 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             )
             .order_by("province", "thematic_area_name")
         )
+        if any(
+            not str(row.get("thematic_area_name") or "").strip()
+            and (
+                int(row.get("ls_mentees") or 0) > 0
+                or int(row.get("mc_competent_mentees") or 0) > 0
+            )
+            for row in province_thematic_mentee_values
+        ) and "Unassigned thematic area" not in thematic_ls_columns:
+            thematic_ls_columns.append("Unassigned thematic area")
+            thematic_ls_columns.sort(
+                key=lambda name: (
+                    thematic_order_lookup.get(name.casefold(), len(preferred_thematic_order)),
+                    name.casefold(),
+                )
+            )
         province_mentee_totals = list(
             participants_qs.order_by().values(
                 province=F(province_name_lookup),
@@ -1072,46 +1070,95 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
             area_name = str(row.get("thematic_area_name") or "Unassigned thematic area").strip()
             province_thematic_mentees_by_name.setdefault(province_name, {})[area_name] = row
 
-        thematic_order = {name.casefold(): index for index, name in enumerate(preferred_thematic_order)}
-        province_thematic_mentee_rows = []
-        for province_name in sorted(province_mentee_totals_by_name):
-            area_rows = province_thematic_mentees_by_name.get(province_name, {})
-            for area_name in sorted(
-                area_rows,
-                key=lambda name: (
-                    thematic_order.get(name.casefold(), len(preferred_thematic_order)),
-                    name.casefold(),
-                ),
-            ):
-                row = area_rows[area_name]
-                province_thematic_mentee_rows.append({
-                    "province": province_name,
-                    "thematic_area": area_name,
-                    "ls_mentees": int(row.get("ls_mentees") or 0),
-                    "mc_competent_mentees": int(row.get("mc_competent_mentees") or 0),
-                    "row_type": "area",
-                })
-            totals = province_mentee_totals_by_name[province_name]
-            province_thematic_mentee_rows.append({
-                "province": province_name,
-                "thematic_area": "Province total (distinct mentees)",
-                "ls_mentees": int(totals.get("ls_mentees") or 0),
-                "mc_competent_mentees": int(totals.get("mc_competent_mentees") or 0),
-                "row_type": "subtotal",
-            })
         selected_mentee_totals = participants_qs.aggregate(
             ls_mentees=Count("mentee_name", distinct=True, filter=Q(ls=True)),
             mc_competent_mentees=Count(
                 "mentee_name", distinct=True, filter=competent_mc_filter
             ),
         )
-        province_thematic_mentee_rows.append({
-            "province": "Grand Total",
-            "thematic_area": "Distinct mentees across selected filters",
-            "ls_mentees": int(selected_mentee_totals.get("ls_mentees") or 0),
-            "mc_competent_mentees": int(selected_mentee_totals.get("mc_competent_mentees") or 0),
-            "row_type": "grand_total",
-        })
+        thematic_global_values = list(
+            participants_qs.order_by().values(
+                "thematic_area_id",
+                thematic_area_name=F("thematic_area__name"),
+            )
+            .annotate(
+                ls_entries=self._bool_sum("ls"),
+                ls_mentees=Count("mentee_name", distinct=True, filter=Q(ls=True)),
+                mc_competent_mentees=Count(
+                    "mentee_name", distinct=True, filter=competent_mc_filter
+                ),
+            )
+        )
+        thematic_global_by_name = {
+            str(row.get("thematic_area_name") or "Unassigned thematic area").strip(): row
+            for row in thematic_global_values
+        }
+
+        # One grouped table: three indicator rows under each province, with
+        # thematic-area columns matching the existing LS pivot structure.
+        province_thematic_indicator_rows = []
+        province_names = sorted(
+            set(thematic_ls_matrix_by_province) | set(province_mentee_totals_by_name)
+        )
+        for province_name in province_names:
+            ls_by_area = thematic_ls_matrix_by_province.get(province_name, {})
+            mentees_by_area = province_thematic_mentees_by_name.get(province_name, {})
+            province_totals = province_mentee_totals_by_name.get(province_name, {})
+            ls_cells = [int(ls_by_area.get(area_name, 0)) for area_name in thematic_ls_columns]
+            ls_mentee_cells = [
+                int((mentees_by_area.get(area_name) or {}).get("ls_mentees") or 0)
+                for area_name in thematic_ls_columns
+            ]
+            mc_mentee_cells = [
+                int((mentees_by_area.get(area_name) or {}).get("mc_competent_mentees") or 0)
+                for area_name in thematic_ls_columns
+            ]
+            province_thematic_indicator_rows.append({
+                "province": province_name,
+                "indicators": [
+                    {"label": "LS entries", "cells": ls_cells, "grand_total": sum(ls_cells)},
+                    {
+                        "label": "Distinct mentees receiving LS",
+                        "cells": ls_mentee_cells,
+                        "grand_total": int(province_totals.get("ls_mentees") or 0),
+                    },
+                    {
+                        "label": "Distinct mentees competent in MC",
+                        "cells": mc_mentee_cells,
+                        "grand_total": int(province_totals.get("mc_competent_mentees") or 0),
+                    },
+                ],
+            })
+
+        thematic_indicator_totals = [
+            {
+                "label": "Grand Total — LS entries",
+                "cells": [
+                    int((thematic_global_by_name.get(area_name) or {}).get("ls_entries") or 0)
+                    for area_name in thematic_ls_columns
+                ],
+                "grand_total": sum(
+                    int((thematic_global_by_name.get(area_name) or {}).get("ls_entries") or 0)
+                    for area_name in thematic_ls_columns
+                ),
+            },
+            {
+                "label": "Grand Total — distinct mentees receiving LS",
+                "cells": [
+                    int((thematic_global_by_name.get(area_name) or {}).get("ls_mentees") or 0)
+                    for area_name in thematic_ls_columns
+                ],
+                "grand_total": int(selected_mentee_totals.get("ls_mentees") or 0),
+            },
+            {
+                "label": "Grand Total — distinct mentees competent in MC",
+                "cells": [
+                    int((thematic_global_by_name.get(area_name) or {}).get("mc_competent_mentees") or 0)
+                    for area_name in thematic_ls_columns
+                ],
+                "grand_total": int(selected_mentee_totals.get("mc_competent_mentees") or 0),
+            },
+        ]
 
         max_value = max(
             [max(int(r["ls"] or 0), int(r["mc"] or 0)) for r in province_rows] or [1]
@@ -1871,9 +1918,8 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
                 "kpis": kpis,
                 "province_rows": province_rows,
                 "thematic_ls_columns": thematic_ls_columns,
-                "thematic_ls_matrix": thematic_ls_matrix,
-                "thematic_ls_totals": thematic_ls_totals,
-                "province_thematic_mentee_rows": province_thematic_mentee_rows,
+                "province_thematic_indicator_rows": province_thematic_indicator_rows,
+                "thematic_indicator_totals": thematic_indicator_totals,
                 "facility_rows": facility_rows,
                 "facility_driver_rows": facility_driver_rows,
                 "trend_rows": trend_rows,
@@ -1948,26 +1994,18 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
 
         ws_thematic_ls = wb.create_sheet("Province_Thematic_LS")
         thematic_columns = data.get("thematic_ls_columns", [])
-        ws_thematic_ls.append(["Province", *thematic_columns, "Grand Total LS"])
-        for row in data.get("thematic_ls_matrix", []):
+        ws_thematic_ls.append(["Province", "Indicator", *thematic_columns, "Grand Total"])
+        for province_group in data.get("province_thematic_indicator_rows", []):
+            for index, indicator in enumerate(province_group.get("indicators", [])):
+                ws_thematic_ls.append([
+                    province_group.get("province") if index == 0 else "",
+                    indicator.get("label"), *indicator.get("cells", []),
+                    indicator.get("grand_total", 0),
+                ])
+        for indicator in data.get("thematic_indicator_totals", []):
             ws_thematic_ls.append([
-                row.get("province"), *row.get("cells", []), row.get("grand_total", 0)
-            ])
-        thematic_totals = data.get("thematic_ls_totals", {})
-        ws_thematic_ls.append([
-            "Grand Total LS", *thematic_totals.get("cells", []),
-            thematic_totals.get("grand_total", 0),
-        ])
-
-        ws_thematic_mentees = wb.create_sheet("Province_Thematic_Mentees")
-        ws_thematic_mentees.append([
-            "Province", "Thematic Area", "Distinct Mentees Received LS",
-            "Distinct Mentees Competent in MC",
-        ])
-        for row in data.get("province_thematic_mentee_rows", []):
-            ws_thematic_mentees.append([
-                row.get("province"), row.get("thematic_area"),
-                row.get("ls_mentees"), row.get("mc_competent_mentees"),
+                indicator.get("label"), "", *indicator.get("cells", []),
+                indicator.get("grand_total", 0),
             ])
 
         ws2 = wb.create_sheet("Facility_Detail")
