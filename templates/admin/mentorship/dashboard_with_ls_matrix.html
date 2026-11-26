@@ -15,16 +15,25 @@
 #province-ls-matrix .matrix-total {font-weight:bold;}
 </style>
 <details id="province-ls-matrix" open>
-<summary>Learning Sessions (LS) by Province and Thematic Area</summary>
+<summary>Mentorship by Province and Thematic Area</summary>
 <div class="matrix-body">
-<p>Sum of recorded LS entries under the selected dashboard filters. Repeated learning sessions for the same mentee and topic are included. Province comes from the facility recorded on the visit. PC and MC are excluded. Antenatal Care (ANC) includes LS recorded under ANC, Perinatal Mental Health (PMH), and Maternal and Child Health (MCH) Handbook.</p>
+<p>Selected dashboard filters apply to all three indicators. LS entries count repeated sessions. Mentee rows count distinct mentee IDs. PC or MC means at least one recorded competency; it does not mean all topics are completed or that prior LS was verified. Province comes from the visit facility. ANC includes ANC, PMH and MCH Handbook.</p>
+<p><strong>Distinct totals are deduplicated, not added:</strong> a mentee in two thematic areas counts in each area but only once in the province total. The overall total also deduplicates mentees across provinces. Missing mentee IDs are excluded from mentee counts but their LS entries remain included.</p>
 {% if ls_matrix.rows %}
 <div class="matrix-scroll" tabindex="0" aria-label="Scrollable province and thematic area LS totals">
 <table>
 <caption style="text-align:left;padding:0 0 12px">Total learning sessions: <strong>{{ ls_matrix.grand_total }}</strong>. Thematic columns follow the available filtered records. Zero means no LS entries in that combination.</caption>
-<thead><tr><th scope="col">Province</th>{% for name in ls_matrix.columns %}<th scope="col">{{ name }}</th>{% endfor %}<th scope="col">Grand Total</th></tr></thead>
-<tbody>{% for row in ls_matrix.rows %}<tr><th scope="row">{{ row.province }}</th>{% for count in row.values %}<td>{{ count }}</td>{% endfor %}<td class="matrix-total">{{ row.total }}</td></tr>{% endfor %}</tbody>
-<tfoot><tr><th scope="row">Grand Total</th>{% for total in ls_matrix.totals %}<td>{{ total }}</td>{% endfor %}<td>{{ ls_matrix.grand_total }}</td></tr></tfoot>
+<thead><tr><th scope="col">Province</th><th scope="col">Indicator</th>{% for name in ls_matrix.columns %}<th scope="col">{{ name }}</th>{% endfor %}<th scope="col">Grand Total</th></tr></thead>
+<tbody>{% for row in ls_matrix.rows %}
+<tr><th scope="rowgroup" rowspan="3">{{ row.province }}</th><th scope="row">LS entries</th>{% for count in row.values %}<td>{{ count }}</td>{% endfor %}<td class="matrix-total">{{ row.total }}</td></tr>
+<tr><th scope="row">Distinct mentees receiving LS</th>{% for count in row.ls_mentees_values %}<td>{{ count }}</td>{% endfor %}<td class="matrix-total">{{ row.ls_mentees_total }}</td></tr>
+<tr><th scope="row">Distinct mentees with PC or MC</th>{% for count in row.competent_mentees_values %}<td>{{ count }}</td>{% endfor %}<td class="matrix-total">{{ row.competent_mentees_total }}</td></tr>
+{% endfor %}</tbody>
+<tfoot>
+<tr><th rowspan="3" scope="rowgroup">Grand Total</th><th scope="row">LS entries</th>{% for count in ls_matrix.totals %}<td>{{ count }}</td>{% endfor %}<td>{{ ls_matrix.grand_total }}</td></tr>
+<tr><th scope="row">Distinct mentees receiving LS</th>{% for count in ls_matrix.ls_mentees_totals %}<td>{{ count }}</td>{% endfor %}<td>{{ ls_matrix.ls_mentees_grand_total }}</td></tr>
+<tr><th scope="row">Distinct mentees with PC or MC</th>{% for count in ls_matrix.competent_mentees_totals %}<td>{{ count }}</td>{% endfor %}<td>{{ ls_matrix.competent_mentees_grand_total }}</td></tr>
+</tfoot>
 </table></div>
 {% else %}<p>No mentorship detail records match the selected filters.</p>{% endif %}
 </div></details>
