@@ -9787,16 +9787,20 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         ('abx_proph_rate', 'Antibiotic prophylaxis rate (15–60 minutes prior to incision) – Cefazolin or other cephalosporin according to availability (%)', 'abx_proph_num', 'total_cs'),
         ('skin_prep_rate', 'Rate of incision site skin preparation (%)', 'skin_prep_num', 'total_cs'),
     )
+    
     filter_definitions = (
         ("province", "Province", "aimfacilityname__districtfk__provincefk_id"),
         ("facility", "Facility", "aimfacilityname_id"),
-        ("gre_year", "Gregorian Year", "gre_year"),
-        ("gre_month", "Gregorian Month", "gre_month"),
-        ("shamsiyear", "Shamsi Year", "shamsiyear"),
-        ("shamsimonth", "Shamsi Month", "shamsimonth"),
+        ("gregorian_year_month", "Gregorian Year–Month", None),
+        ("shamsi_year_month", "Shamsi Year–Month", None),
         ("bl_progress", "Baseline / Progress", "bl_progress"),
         ("period", "Period", "period"),
     )
+
+    period_filter_fields = {
+        "gregorian_year_month": ("gre_year", "gre_month"),
+        "shamsi_year_month": ("shamsiyear", "shamsimonth"),
+    }
     methodology_note = (
         "Dashboard counts sum recorded values for the selected facility-month reports; "
         "draft, submitted and approved records are included. Rates follow the existing "
@@ -9856,11 +9860,12 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         return {"aimfacilityname__districtfk__provincefk": user_province(request)}
 
     def _base_queryset(self, request):
-        # Use the existing mixin so staff without a province receive no records.
+        # Safe Surgery uses aimfacilityname and stores calendar labels directly.
         return self.get_queryset(request).select_related(
-            "aimfacilityname", "aimfacilityname__districtfk",
+            "aimfacilityname",
+            "aimfacilityname__districtfk",
             "aimfacilityname__districtfk__provincefk",
-        )
+        ).order_by()
 
     def _display(self, value):
         if value is None:
@@ -9885,25 +9890,102 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
         }
 
     def _filters_and_options(self, request, base_qs):
-        # Collect each dropdown BEFORE applying its own selection; later choices
-        # never hide alternatives in earlier dropdowns. All options come from data.
+        import json
+
         queryset = base_qs
-        filters, dropdowns = {}, []
+        filters = {}
+        dropdowns = []
+
         for name, label, path in self.filter_definitions:
-            requested = dict.fromkeys(request.GET.getlist(name))
+            requested = list(dict.fromkeys(
+                value.strip()
+                for value in request.GET.getlist(name)
+                if value and value.strip()
+            ))
+
             is_location = name in ("province", "facility")
+            period_fields = self.period_filter_fields.get(name)
+
             if is_location:
-                label_path = ("aimfacilityname__districtfk__provincefk__name"
-                              if name == "province" else "aimfacilityname__name")
-                choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
-                           queryset.exclude(**{path + "__isnull": True}).order_by(label_path, path)
-                           .values_list(path, label_path).distinct()]
+                if name == "province":
+                    label_path = "aimfacilityname__districtfk__provincefk__name"
+                else:
+                    label_path = "aimfacilityname__name"
+
+                rows = (
+                    queryset
+                    .exclude(**{path + "__isnull": True})
+                    .order_by(label_path, path)
+                    .values_list(path, label_path)
+                    .distinct()
+                )
+                choices = [
+                    {"value": str(pk), "label": display_name or str(pk)}
+                    for pk, display_name in rows
+                ]
+
+            elif period_fields:
+                year_field, month_field = period_fields
+                pairs = (
+                    queryset
+                    .exclude(**{year_field: ""})
+                    .exclude(**{month_field: ""})
+                    .order_by()
+                    .values_list(year_field, month_field)
+                    .distinct()
+                )
+
+                def period_sort_key(pair):
+                    year_value, month_value = str(pair[0]), str(pair[1])
+                    if year_value.isdecimal():
+                        return (0, int(year_value), month_value.casefold())
+                    return (1, year_value.casefold(), month_value.casefold())
+
+                pairs = sorted(
+                    [
+                        (str(year_value), str(month_value))
+                        for year_value, month_value in pairs
+                        if year_value not in (None, "")
+                        and month_value not in (None, "")
+                    ],
+                    key=period_sort_key,
+                )
+                choices = [
+                    {
+                        "value": json.dumps(
+                            [year_value, month_value],
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                        "label": f"{year_value} — {month_value}",
+                    }
+                    for year_value, month_value in pairs
+                ]
+
             else:
-                choices = [{"value": item, "label": item} for item in
-                           queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
-                           .order_by(path).values_list(path, flat=True).distinct()]
-            labels = {choice["value"]: choice["label"] for choice in choices}
-            selected = [value for value in requested if value in labels]
+                values = (
+                    queryset
+                    .exclude(**{path + "__isnull": True})
+                    .exclude(**{path: ""})
+                    .order_by(path)
+                    .values_list(path, flat=True)
+                    .distinct()
+                )
+                choices = [
+                    {"value": str(value), "label": str(value)}
+                    for value in values
+                    if value not in (None, "")
+                ]
+
+            labels_by_value = {
+                choice["value"]: choice["label"]
+                for choice in choices
+            }
+            selected = [
+                value for value in requested
+                if value in labels_by_value
+            ]
+
             for choice in choices:
                 choice["selected"] = choice["value"] in selected
 
@@ -9912,11 +9994,37 @@ class SafeSurgeryDashboardAdmin(ProvinceRestrictedAdminMixin, admin.ModelAdmin):
                 "label": label,
                 "choices": choices,
                 "selected_count": len(selected),
+                "multiple": True,
+                "value": selected,
             })
-            filters[name] = ", ".join(labels[value] for value in selected)
-            if selected:
-                values = [int(value) for value in selected] if is_location else selected
-                queryset = queryset.filter(**{path + "__in": values})
+            filters[name] = ", ".join(
+                labels_by_value[value] for value in selected
+            )
+
+            if not selected:
+                continue
+
+            if is_location:
+                queryset = queryset.filter(
+                    **{path + "__in": [int(value) for value in selected]}
+                )
+            elif period_fields:
+                year_field, month_field = period_fields
+                selected_pairs = {
+                    tuple(json.loads(value))
+                    for value in selected
+                }
+                pair_filter = Q()
+                for year_value, month_value in selected_pairs:
+                    pair_filter |= Q(**{
+                        year_field: year_value,
+                        month_field: month_value,
+                    })
+                queryset = queryset.filter(pair_filter)
+            else:
+                queryset = queryset.filter(**{
+                    path + "__in": selected
+                })
 
         return queryset, filters, dropdowns
 
@@ -10216,15 +10324,18 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
         ('all4_sections_completeness_ratio', 'All four sections complete (%)', 'all4_sections_complete', 'files_selected'),
     )
     filter_definitions = (
-        ('province', 'Province', 'facility_name__districtfk__provincefk_id'),
-        ('facility', 'Facility', 'facility_name_id'),
-        ('gre_year', 'Gregorian Year', '_dash_gre_year'),
-        ('gre_month', 'Gregorian Month', '_dash_gre_month'),
-        ('shamsiyear', 'Shamsi Year', '_dash_shamsi_year'),
-        ('shamsimonth', 'Shamsi Month', '_dash_shamsi_month'),
-        ('bl_progress', 'Baseline / Progress', '_dash_bl_progress'),
-        ('period', 'Period', '_dash_period'),
+        ("province", "Province", "facility_name__districtfk__provincefk_id"),
+        ("facility", "Facility", "facility_name_id"),
+        ("gregorian_year_month", "Gregorian Year–Month", None),
+        ("shamsi_year_month", "Shamsi Year–Month", None),
+        ("bl_progress", "Baseline / Progress", "_dash_bl_progress"),
+        ("period", "Period", "_dash_period"),
     )
+
+    period_filter_fields = {
+        "gregorian_year_month": ("_dash_gre_year", "_dash_gre_month"),
+        "shamsi_year_month": ("_dash_shamsi_year", "_dash_shamsi_month"),
+    }
     methodology_note = (
         'Counts are summed across selected facility-month reports. Checklist sections 1–4 and full-checklist '
         'completeness use selected files as the denominator. Partograph use uses selected admissions recorded '
@@ -10317,25 +10428,102 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
         }
 
     def _filters_and_options(self, request, base_qs):
-        # Collect each dropdown BEFORE applying its own selection; later choices
-        # never hide alternatives in earlier dropdowns. All options come from data.
+        import json
+
         queryset = base_qs
-        filters, dropdowns = {}, []
+        filters = {}
+        dropdowns = []
+
         for name, label, path in self.filter_definitions:
-            requested = dict.fromkeys(request.GET.getlist(name))
+            requested = list(dict.fromkeys(
+                value.strip()
+                for value in request.GET.getlist(name)
+                if value and value.strip()
+            ))
+
             is_location = name in ("province", "facility")
+            period_fields = self.period_filter_fields.get(name)
+
             if is_location:
-                label_path = ("facility_name__districtfk__provincefk__name"
-                              if name == "province" else "facility_name__name")
-                choices = [{"value": str(pk), "label": title or str(pk)} for pk, title in
-                           queryset.exclude(**{path + "__isnull": True}).order_by(label_path, path)
-                           .values_list(path, label_path).distinct()]
+                if name == "province":
+                    label_path = "facility_name__districtfk__provincefk__name"
+                else:
+                    label_path = "facility_name__name"
+
+                rows = (
+                    queryset
+                    .exclude(**{path + "__isnull": True})
+                    .order_by(label_path, path)
+                    .values_list(path, label_path)
+                    .distinct()
+                )
+                choices = [
+                    {"value": str(pk), "label": display_name or str(pk)}
+                    for pk, display_name in rows
+                ]
+
+            elif period_fields:
+                year_field, month_field = period_fields
+                pairs = (
+                    queryset
+                    .exclude(**{year_field: ""})
+                    .exclude(**{month_field: ""})
+                    .order_by()
+                    .values_list(year_field, month_field)
+                    .distinct()
+                )
+
+                def period_sort_key(pair):
+                    year_value, month_value = str(pair[0]), str(pair[1])
+                    if year_value.isdecimal():
+                        return (0, int(year_value), month_value.casefold())
+                    return (1, year_value.casefold(), month_value.casefold())
+
+                pairs = sorted(
+                    [
+                        (str(year_value), str(month_value))
+                        for year_value, month_value in pairs
+                        if year_value not in (None, "")
+                        and month_value not in (None, "")
+                    ],
+                    key=period_sort_key,
+                )
+                choices = [
+                    {
+                        "value": json.dumps(
+                            [year_value, month_value],
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                        "label": f"{year_value} — {month_value}",
+                    }
+                    for year_value, month_value in pairs
+                ]
+
             else:
-                choices = [{"value": item, "label": item} for item in
-                           queryset.exclude(**{path + "__isnull": True}).exclude(**{path: ""})
-                           .order_by(path).values_list(path, flat=True).distinct()]
-            labels = {choice["value"]: choice["label"] for choice in choices}
-            selected = [value for value in requested if value in labels]
+                values = (
+                    queryset
+                    .exclude(**{path + "__isnull": True})
+                    .exclude(**{path: ""})
+                    .order_by(path)
+                    .values_list(path, flat=True)
+                    .distinct()
+                )
+                choices = [
+                    {"value": str(value), "label": str(value)}
+                    for value in values
+                    if value not in (None, "")
+                ]
+
+            labels_by_value = {
+                choice["value"]: choice["label"]
+                for choice in choices
+            }
+            selected = [
+                value for value in requested
+                if value in labels_by_value
+            ]
+
             for choice in choices:
                 choice["selected"] = choice["value"] in selected
 
@@ -10344,11 +10532,37 @@ class WhoChildbirthChecklistDashboardAdmin(ProvinceRestrictedAdminMixin, admin.M
                 "label": label,
                 "choices": choices,
                 "selected_count": len(selected),
+                "multiple": True,
+                "value": selected,
             })
-            filters[name] = ", ".join(labels[value] for value in selected)
-            if selected:
-                values = [int(value) for value in selected] if is_location else selected
-                queryset = queryset.filter(**{path + "__in": values})
+            filters[name] = ", ".join(
+                labels_by_value[value] for value in selected
+            )
+
+            if not selected:
+                continue
+
+            if is_location:
+                queryset = queryset.filter(
+                    **{path + "__in": [int(value) for value in selected]}
+                )
+            elif period_fields:
+                year_field, month_field = period_fields
+                selected_pairs = {
+                    tuple(json.loads(value))
+                    for value in selected
+                }
+                pair_filter = Q()
+                for year_value, month_value in selected_pairs:
+                    pair_filter |= Q(**{
+                        year_field: year_value,
+                        month_field: month_value,
+                    })
+                queryset = queryset.filter(pair_filter)
+            else:
+                queryset = queryset.filter(**{
+                    path + "__in": selected
+                })
 
         return queryset, filters, dropdowns
 
