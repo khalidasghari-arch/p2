@@ -4,7 +4,7 @@ from django.db.models import Count, Q
 
 def build_ls_matrix(details):
     province_path = 'mentorshipvistfk__facilityfk__districtfk__provincefk'
-    # Clear model ordering before grouping; aggregate by IDs, never by name alone.
+    # Group source records by IDs, then combine the requested reporting areas.
     groups = list(details.order_by().values(
         province_path, province_path + '__name',
         'thematicname_id', 'thematicname__name',
@@ -16,8 +16,18 @@ def build_ls_matrix(details):
         province_id = group[province_path]
         thematic_id = group['thematicname_id']
         provinces[province_id] = group[province_path + '__name'] or 'Province not entered'
-        thematics[thematic_id] = group['thematicname__name'] or 'Thematic area not entered'
-        counts[(province_id, thematic_id)] = group['ls_total']
+        name = group['thematicname__name'] or 'Thematic area not entered'
+        normalized = ' '.join(name.split()).casefold()
+        if normalized in {
+            'antenatal care (anc)',
+            'perinatal mental health (pmh)',
+            'maternal and child health (mch) handbook',
+        }:
+            thematic_id = -1  # Reporting-only ANC group; no database records change.
+            name = 'Antenatal Care (ANC)'
+        thematics[thematic_id] = name
+        key = (province_id, thematic_id)
+        counts[key] = counts.get(key, 0) + group['ls_total']
     columns = sorted(thematics, key=lambda pk: (thematics[pk].casefold(), pk or 0))
     rows = []
     totals = [0] * len(columns)
