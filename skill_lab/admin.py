@@ -1014,7 +1014,7 @@ class SkillLabDashboardAdmin(SkillLabAdminMediaMixin, ProvinceRestrictedAdminMix
         for area_name in thematic_ls_columns:
             shortname = thematic_shortname_by_name.get(area_name, "").strip().strip("() ")
             if shortname:
-                header_label = f"({shortname})"
+                header_label = shortname
             elif area_name == "Unassigned thematic area":
                 header_label = "Unassigned"
             else:
